@@ -13,16 +13,17 @@ import (
 	"amdl/internal/domain"
 )
 
-// AppleLibraryQuery selects a page of one kind of the cached Apple library.
-// Sort is "added", "name" or "artist"; Q filters by a substring of the name,
-// artist or album name (case-insensitive for ASCII letters).
+// AppleLibraryQuery selects a page of one kind of one account's cached Apple
+// library. Sort is "added", "name" or "artist"; Q filters by a substring of
+// the name, artist or album name (case-insensitive for ASCII letters).
 type AppleLibraryQuery struct {
-	Kind   string
-	Sort   string
-	Desc   bool
-	Q      string
-	Limit  int
-	Offset int
+	AccountID string
+	Kind      string
+	Sort      string
+	Desc      bool
+	Q         string
+	Limit     int
+	Offset    int
 }
 
 // AppleLibraryUpsert reports what UpsertAppleLibraryItems changed.
@@ -71,10 +72,11 @@ func appleLibraryFingerprint(it domain.AppleLibraryItem) string {
 	return hex.EncodeToString(h.Sum(nil)[:12])
 }
 
-// UpsertAppleLibraryItems writes items of one kind in one transaction, marking
-// each as seen by runID. setOrder writes each item's AddOrder; otherwise an
-// existing row keeps its order and a new row takes the item's.
-func (s *Store) UpsertAppleLibraryItems(ctx context.Context, kind string, items []domain.AppleLibraryItem, runID string, setOrder bool) (AppleLibraryUpsert, error) {
+// UpsertAppleLibraryItems writes items of one kind of an account's library in
+// one transaction, marking each as seen by runID. setOrder writes each item's
+// AddOrder; otherwise an existing row keeps its order and a new row takes the
+// item's.
+func (s *Store) UpsertAppleLibraryItems(ctx context.Context, accountID, kind string, items []domain.AppleLibraryItem, runID string, setOrder bool) (AppleLibraryUpsert, error) {
 	var out AppleLibraryUpsert
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -85,7 +87,7 @@ func (s *Store) UpsertAppleLibraryItems(ctx context.Context, kind string, items 
 	for _, it := range items {
 		fp := appleLibraryFingerprint(it)
 		var oldFP string
-		err := tx.QueryRowContext(ctx, `SELECT fingerprint FROM apple_library_items WHERE kind=? AND item_id=?`, kind, it.ID).Scan(&oldFP)
+		err := tx.QueryRowContext(ctx, `SELECT fingerprint FROM apple_library_items WHERE account_id=? AND kind=? AND item_id=?`, accountID, kind, it.ID).Scan(&oldFP)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			out.Added++
@@ -98,9 +100,9 @@ func (s *Store) UpsertAppleLibraryItems(ctx context.Context, kind string, items 
 		if setOrder {
 			orderUpdate = `excluded.add_order`
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO apple_library_items (`+appleLibraryColumns+`,fingerprint,seen_run,updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-			ON CONFLICT(kind,item_id) DO UPDATE SET catalog_id=excluded.catalog_id, url=excluded.url, name=excluded.name,
+		if _, err := tx.ExecContext(ctx, `INSERT INTO apple_library_items (account_id,`+appleLibraryColumns+`,fingerprint,seen_run,updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			ON CONFLICT(account_id,kind,item_id) DO UPDATE SET catalog_id=excluded.catalog_id, url=excluded.url, name=excluded.name,
 				artist_name=excluded.artist_name, album_name=excluded.album_name, artwork_url=excluded.artwork_url,
 				description=excluded.description, genre=excluded.genre, release_date=excluded.release_date,
 				track_count=excluded.track_count, duration_ms=excluded.duration_ms, track_number=excluded.track_number,
@@ -108,7 +110,7 @@ func (s *Store) UpsertAppleLibraryItems(ctx context.Context, kind string, items 
 				version_hash=excluded.version_hash, playlist_kind=excluded.playlist_kind, add_order=`+orderUpdate+`,
 				fingerprint=excluded.fingerprint, seen_run=excluded.seen_run,
 				updated_at=CASE WHEN fingerprint=excluded.fingerprint THEN updated_at ELSE excluded.updated_at END`,
-			kind, it.ID, it.CatalogID, it.URL, it.Name, it.ArtistName, it.AlbumName, it.ArtworkURL, it.Description,
+			accountID, kind, it.ID, it.CatalogID, it.URL, it.Name, it.ArtistName, it.AlbumName, it.ArtworkURL, it.Description,
 			it.Genre, it.ReleaseDate, it.TrackCount, it.DurationMS, it.TrackNumber, it.DiscNumber, it.DateAdded,
 			it.LastModified, it.VersionHash, it.PlaylistKind, it.AddOrder, fp, runID, stamp); err != nil {
 			return out, err
@@ -117,22 +119,23 @@ func (s *Store) UpsertAppleLibraryItems(ctx context.Context, kind string, items 
 	return out, tx.Commit()
 }
 
-// DeleteAppleLibraryUnseen removes the rows of kind that runID did not see,
-// with the track lists of removed playlists, and reports how many rows went.
-// The sync calls it only after a complete, consistent read of the kind.
-func (s *Store) DeleteAppleLibraryUnseen(ctx context.Context, kind, runID string) (int64, error) {
+// DeleteAppleLibraryUnseen removes the rows of an account's kind that runID
+// did not see, with the track lists of removed playlists, and reports how
+// many rows went. The sync calls it only after a complete, consistent read of
+// the kind.
+func (s *Store) DeleteAppleLibraryUnseen(ctx context.Context, accountID, kind, runID string) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if kind == "playlists" {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM apple_library_playlist_tracks WHERE playlist_id IN
-			(SELECT item_id FROM apple_library_items WHERE kind='playlists' AND seen_run<>?)`, runID); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM apple_library_playlist_tracks WHERE account_id=? AND playlist_id IN
+			(SELECT item_id FROM apple_library_items WHERE account_id=? AND kind='playlists' AND seen_run<>?)`, accountID, accountID, runID); err != nil {
 			return 0, err
 		}
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM apple_library_items WHERE kind=? AND seen_run<>?`, kind, runID)
+	res, err := tx.ExecContext(ctx, `DELETE FROM apple_library_items WHERE account_id=? AND kind=? AND seen_run<>?`, accountID, kind, runID)
 	if err != nil {
 		return 0, err
 	}
@@ -143,23 +146,23 @@ func (s *Store) DeleteAppleLibraryUnseen(ctx context.Context, kind, runID string
 	return n, tx.Commit()
 }
 
-// AppleLibraryKnownIDs reports which of ids are cached for kind.
-func (s *Store) AppleLibraryKnownIDs(ctx context.Context, kind string, ids []string) (map[string]bool, error) {
-	return s.appleLibraryLookup(ctx, `SELECT item_id FROM apple_library_items WHERE kind=? AND item_id IN `, kind, ids)
+// AppleLibraryKnownIDs reports which of ids are cached for an account's kind.
+func (s *Store) AppleLibraryKnownIDs(ctx context.Context, accountID, kind string, ids []string) (map[string]bool, error) {
+	return s.appleLibraryLookup(ctx, `SELECT item_id FROM apple_library_items WHERE account_id=? AND kind=? AND item_id IN `, accountID, kind, ids)
 }
 
-// AppleLibraryMembership reports which of the catalog ids are in the cached
-// library of kind.
-func (s *Store) AppleLibraryMembership(ctx context.Context, kind string, catalogIDs []string) (map[string]bool, error) {
-	return s.appleLibraryLookup(ctx, `SELECT catalog_id FROM apple_library_items WHERE kind=? AND catalog_id IN `, kind, catalogIDs)
+// AppleLibraryMembership reports which of the catalog ids are in an
+// account's cached library of kind.
+func (s *Store) AppleLibraryMembership(ctx context.Context, accountID, kind string, catalogIDs []string) (map[string]bool, error) {
+	return s.appleLibraryLookup(ctx, `SELECT catalog_id FROM apple_library_items WHERE account_id=? AND kind=? AND catalog_id IN `, accountID, kind, catalogIDs)
 }
 
-func (s *Store) appleLibraryLookup(ctx context.Context, query, kind string, ids []string) (map[string]bool, error) {
+func (s *Store) appleLibraryLookup(ctx context.Context, query, accountID, kind string, ids []string) (map[string]bool, error) {
 	out := make(map[string]bool, len(ids))
 	for start := 0; start < len(ids); start += 500 {
 		chunk := ids[start:min(start+500, len(ids))]
-		args := make([]any, 0, len(chunk)+1)
-		args = append(args, kind)
+		args := make([]any, 0, len(chunk)+2)
+		args = append(args, accountID, kind)
 		for _, id := range chunk {
 			args = append(args, id)
 		}
@@ -182,16 +185,17 @@ func (s *Store) appleLibraryLookup(ctx context.Context, query, kind string, ids 
 	return out, nil
 }
 
-// AppleLibraryMaxOrder returns the highest add_order of kind, 0 when empty.
-func (s *Store) AppleLibraryMaxOrder(ctx context.Context, kind string) (int64, error) {
+// AppleLibraryMaxOrder returns the highest add_order of an account's kind, 0
+// when empty.
+func (s *Store) AppleLibraryMaxOrder(ctx context.Context, accountID, kind string) (int64, error) {
 	var n sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT MAX(add_order) FROM apple_library_items WHERE kind=?`, kind).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT MAX(add_order) FROM apple_library_items WHERE account_id=? AND kind=?`, accountID, kind).Scan(&n)
 	return n.Int64, err
 }
 
-// AppleLibraryCounts returns the number of cached rows per kind.
-func (s *Store) AppleLibraryCounts(ctx context.Context) (map[string]int, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT kind, COUNT(*) FROM apple_library_items GROUP BY kind`)
+// AppleLibraryCounts returns the number of an account's cached rows per kind.
+func (s *Store) AppleLibraryCounts(ctx context.Context, accountID string) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT kind, COUNT(*) FROM apple_library_items WHERE account_id=? GROUP BY kind`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -211,8 +215,8 @@ func (s *Store) AppleLibraryCounts(ctx context.Context) (map[string]int, error) 
 // ListAppleLibrary returns one page of a kind and the number of rows matching
 // the query.
 func (s *Store) ListAppleLibrary(ctx context.Context, q AppleLibraryQuery) ([]domain.AppleLibraryItem, int, error) {
-	where := `kind=?`
-	args := []any{q.Kind}
+	where := `account_id=? AND kind=?`
+	args := []any{q.AccountID, q.Kind}
 	if q.Q != "" {
 		pattern := "%" + escapeLike(q.Q) + "%"
 		where += ` AND (name LIKE ? ESCAPE '\' OR artist_name LIKE ? ESCAPE '\' OR album_name LIKE ? ESCAPE '\')`
@@ -254,11 +258,11 @@ func (s *Store) ListAppleLibrary(ctx context.Context, q AppleLibraryQuery) ([]do
 	return items, total, rows.Err()
 }
 
-// AppleLibraryPlaylistStates returns every cached playlist's track-list
-// bookkeeping.
-func (s *Store) AppleLibraryPlaylistStates(ctx context.Context) ([]AppleLibraryPlaylistState, error) {
+// AppleLibraryPlaylistStates returns the track-list bookkeeping of every
+// playlist cached for an account.
+func (s *Store) AppleLibraryPlaylistStates(ctx context.Context, accountID string) ([]AppleLibraryPlaylistState, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT item_id, last_modified||'|'||version_hash, tracks_version, tracks_read_at
-		FROM apple_library_items WHERE kind='playlists' ORDER BY item_id`)
+		FROM apple_library_items WHERE account_id=? AND kind='playlists' ORDER BY item_id`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -280,34 +284,34 @@ func AppleLibraryPlaylistVersion(it domain.AppleLibraryItem) string {
 	return it.LastModified + "|" + it.VersionHash
 }
 
-// ReplaceAppleLibraryPlaylistTracks swaps a cached playlist's whole track list
-// and records the playlist version it was read at. It does nothing when the
-// playlist is no longer cached.
-func (s *Store) ReplaceAppleLibraryPlaylistTracks(ctx context.Context, playlistID, version string, tracks []domain.AppleLibraryTrack) error {
+// ReplaceAppleLibraryPlaylistTracks swaps the whole track list of a playlist
+// cached for an account and records the playlist version it was read at. It
+// does nothing when the playlist is no longer cached.
+func (s *Store) ReplaceAppleLibraryPlaylistTracks(ctx context.Context, accountID, playlistID, version string, tracks []domain.AppleLibraryTrack) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	res, err := tx.ExecContext(ctx, `UPDATE apple_library_items SET tracks_version=?, tracks_read_at=? WHERE kind='playlists' AND item_id=?`,
-		version, formatTime(now()), playlistID)
+	res, err := tx.ExecContext(ctx, `UPDATE apple_library_items SET tracks_version=?, tracks_read_at=? WHERE account_id=? AND kind='playlists' AND item_id=?`,
+		version, formatTime(now()), accountID, playlistID)
 	if err != nil {
 		return err
 	}
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM apple_library_playlist_tracks WHERE playlist_id=?`, playlistID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM apple_library_playlist_tracks WHERE account_id=? AND playlist_id=?`, accountID, playlistID); err != nil {
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `INSERT INTO apple_library_playlist_tracks
-		(playlist_id,position,song_id,catalog_id,url,name,artist_name,album_name,duration_ms,artwork_url) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+		(account_id,playlist_id,position,song_id,catalog_id,url,name,artist_name,album_name,duration_ms,artwork_url) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, t := range tracks {
-		if _, err := stmt.ExecContext(ctx, playlistID, t.Position, t.SongID, t.CatalogID, t.URL, t.Name, t.ArtistName,
+		if _, err := stmt.ExecContext(ctx, accountID, playlistID, t.Position, t.SongID, t.CatalogID, t.URL, t.Name, t.ArtistName,
 			t.AlbumName, t.DurationMS, t.ArtworkURL); err != nil {
 			return err
 		}
@@ -315,11 +319,12 @@ func (s *Store) ReplaceAppleLibraryPlaylistTracks(ctx context.Context, playlistI
 	return tx.Commit()
 }
 
-// AppleLibraryPlaylistTracks returns a cached playlist's tracks in order.
-// found is false when no such playlist is cached; a cached playlist whose
-// tracks were never read returns found and no tracks, with readAt empty.
-func (s *Store) AppleLibraryPlaylistTracks(ctx context.Context, playlistID string) (tracks []domain.AppleLibraryTrack, readAt string, found bool, err error) {
-	err = s.db.QueryRowContext(ctx, `SELECT tracks_read_at FROM apple_library_items WHERE kind='playlists' AND item_id=?`, playlistID).Scan(&readAt)
+// AppleLibraryPlaylistTracks returns the tracks of a playlist cached for an
+// account, in order. found is false when no such playlist is cached; a cached
+// playlist whose tracks were never read returns found and no tracks, with
+// readAt empty.
+func (s *Store) AppleLibraryPlaylistTracks(ctx context.Context, accountID, playlistID string) (tracks []domain.AppleLibraryTrack, readAt string, found bool, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT tracks_read_at FROM apple_library_items WHERE account_id=? AND kind='playlists' AND item_id=?`, accountID, playlistID).Scan(&readAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", false, nil
 	}
@@ -327,7 +332,7 @@ func (s *Store) AppleLibraryPlaylistTracks(ctx context.Context, playlistID strin
 		return nil, "", false, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT position,song_id,catalog_id,url,name,artist_name,album_name,duration_ms,artwork_url
-		FROM apple_library_playlist_tracks WHERE playlist_id=? ORDER BY position`, playlistID)
+		FROM apple_library_playlist_tracks WHERE account_id=? AND playlist_id=? ORDER BY position`, accountID, playlistID)
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -343,20 +348,33 @@ func (s *Store) AppleLibraryPlaylistTracks(ctx context.Context, playlistID strin
 	return tracks, readAt, true, rows.Err()
 }
 
-// AppleLibraryMeta reads one bookkeeping value of the Apple library sync; ""
-// when unset.
-func (s *Store) AppleLibraryMeta(ctx context.Context, key string) (string, error) {
+// AppleLibraryMeta reads one bookkeeping value of an account's Apple library
+// sync; "" when unset.
+func (s *Store) AppleLibraryMeta(ctx context.Context, accountID, key string) (string, error) {
 	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM apple_library_meta WHERE key=?`, key).Scan(&v)
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM apple_library_meta WHERE account_id=? AND key=?`, accountID, key).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	return v, err
 }
 
-// SetAppleLibraryMeta writes one bookkeeping value of the Apple library sync.
-func (s *Store) SetAppleLibraryMeta(ctx context.Context, key, value string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO apple_library_meta(key,value) VALUES(?,?)
-		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
+// SetAppleLibraryMeta writes one bookkeeping value of an account's Apple
+// library sync.
+func (s *Store) SetAppleLibraryMeta(ctx context.Context, accountID, key, value string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO apple_library_meta(account_id,key,value) VALUES(?,?,?)
+		ON CONFLICT(account_id,key) DO UPDATE SET value=excluded.value`, accountID, key, value)
 	return err
+}
+
+// AppleLibraryPlaylistOwner returns the account whose cached library holds
+// the library playlist playlistID; found is false when none does. A library
+// playlist id (p.…) belongs to one account, so the first match is the one.
+func (s *Store) AppleLibraryPlaylistOwner(ctx context.Context, playlistID string) (accountID string, found bool, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT account_id FROM apple_library_items WHERE kind='playlists' AND item_id=?
+		ORDER BY account_id LIMIT 1`, playlistID).Scan(&accountID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return accountID, err == nil, err
 }

@@ -53,6 +53,8 @@ Signing in to Apple is done by a person, never by an agent: do not ask for, type
 
 When get_status (or `amdl doctor`) says the wrapper is not signed in, tell the user to run `amdl wrapper login` in their own terminal, which asks for the password and any two-step code without echoing them, or to use the web console's Account page.
 
+With several Apple IDs signed in, `amdl accounts` (tool `list_accounts`) lists them; the Apple library commands and tools take `--account` (an id, an Apple ID or a region) and use the default account without it.
+
 A machine with no wrapper can run one: `amdl wrapper install`, then `amdl service install`. It downloads about 65 MB and may install QEMU, so let the user decide.
 
 ## Setup and diagnosis

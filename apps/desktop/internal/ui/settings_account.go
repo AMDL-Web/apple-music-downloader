@@ -2,6 +2,8 @@ package ui
 
 import (
 	"github.com/egoist/mygo/ui"
+
+	"amdl/apps/desktop/internal/store"
 )
 
 // loginForm is what the Account section's form holds between frames. The
@@ -15,20 +17,29 @@ type loginForm struct {
 	// not name; logoutOpen shows its dialog.
 	logout     string
 	logoutOpen bool
+	// adding shows the login while accounts are logged in, until one more
+	// is.
+	adding bool
 }
 
 // settle forgets the password and the code once the step they went with has
-// its answer. The view calls it every frame, so one that is no longer on
-// screen forgets them too.
-func (f *loginForm) settle(busy bool) {
-	if f.sent && !busy {
+// its answer, and closes Add account once the login is through. The view
+// calls it every frame, so one that is no longer on screen forgets them
+// too.
+func (f *loginForm) settle(l store.Login) {
+	if f.sent && !l.Busy {
+		if l.Err == "" && l.LoginID == "" {
+			f.adding = false
+		}
 		f.pass, f.code, f.sent = "", "", false
 	}
 }
 
-// accountSession is the Account section's sign-in: the login form and its
-// two-step code where the wrapper logs in over the API, log out once an
-// account is in, and otherwise the next step on the wrapper's machine.
+// accountSession is the Account section's accounts and sign-in: the list
+// of accounts, then the login form and its two-step code where the wrapper
+// logs in over the API, for the first account or one more. A backend
+// without the list offers log out by Apple ID; otherwise the next step is
+// on the wrapper's machine.
 func (a *App) accountSession(c *ui.Context, k *Tokens) {
 	sv := &a.Store.Server
 	w := sv.Wrapper
@@ -37,19 +48,26 @@ func (a *App) accountSession(c *ui.Context, k *Tokens) {
 	}
 	st := accountState(w, sv.WrapperErr)
 	l := &a.Store.Login
+	f := &a.set.login
+	listed := len(sv.Accounts) > 0
+	adding := f.adding && w.LoginSupported && !st.signIn
+	if listed {
+		a.accountList(c, k, w.LoginSupported && l.LoginID == "" && !adding && !st.signIn)
+	}
+	unlisted := !listed && w.LoggedIn && w.LoginSupported
 	// A local wrapper that is not serving has no step here: the head says
 	// what it does and the command that fixes it.
-	if l.LoginID == "" && !st.signIn && !(w.LoggedIn && w.LoginSupported) && l.Err == "" {
+	if l.LoginID == "" && !st.signIn && !adding && !unlisted && l.Err == "" {
 		return
 	}
 	card(c.Key("session"), k).Gap(12).Children(func() {
 		switch {
 		case l.LoginID != "":
 			a.codeStep(c, k)
-		case st.signIn:
-			a.credentials(c, k, w.Managed != nil)
-		case w.LoggedIn && w.LoginSupported:
-			a.signedIn(c, k, w.Accounts)
+		case st.signIn || adding:
+			a.credentials(c, k, w.Managed != nil, adding)
+		case unlisted:
+			a.signedIn(c, k)
 		}
 		if l.Err != "" {
 			ui.Text(c, loginError(l.Code, l.Err)).FontSize(12.5).TextColor(k.Bad).LineHeight(1.45)
@@ -58,7 +76,9 @@ func (a *App) accountSession(c *ui.Context, k *Tokens) {
 	a.logoutDialog(c, k)
 }
 
-func (a *App) credentials(c *ui.Context, k *Tokens, local bool) {
+// credentials is the login's first step; another names a login while
+// accounts are logged in, which Cancel closes.
+func (a *App) credentials(c *ui.Context, k *Tokens, local, another bool) {
 	f := &a.set.login
 	l := &a.Store.Login
 	wait := waited(c, l.Busy, l.Since)
@@ -76,6 +96,10 @@ func (a *App) credentials(c *ui.Context, k *Tokens, local bool) {
 		if (buttonRoom(c, k, buttonPrimary, text, "Logging in…", nil, !filled || wait).Height(32).Clicked() || pass.Submitted() || user.Submitted()) && filled && !l.Busy {
 			a.Store.StartLogin(f.user, f.pass)
 			f.sent = true
+		}
+		if another && buttonOff(c, k, buttonGhost, "Cancel", nil, wait).Height(32).Clicked() && !l.Busy {
+			f.adding, f.user, f.pass = false, "", ""
+			l.Err, l.Code = "", ""
 		}
 	})
 	if wait && local {
@@ -108,28 +132,16 @@ func (a *App) codeStep(c *ui.Context, k *Tokens) {
 	})
 }
 
-func (a *App) signedIn(c *ui.Context, k *Tokens, accounts []string) {
+// signedIn is a logged-in wrapper's log out where the backend does not list
+// the accounts: the Apple ID is typed.
+func (a *App) signedIn(c *ui.Context, k *Tokens) {
 	f := &a.set.login
 	l := &a.Store.Login
 	wait := waited(c, l.Busy, l.Since)
-	if len(accounts) == 0 {
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "An account is logged in.").FontSize(13).Grow(1)
-			if buttonOff(c, k, buttonPlain, "Log out…", nil, wait).Clicked() {
-				f.logout, f.logoutOpen = "", true
-			}
-		})
-		return
-	}
-	ui.Column(c).Dividers(1, k.Line).Children(func() {
-		for _, acc := range accounts {
-			ui.Row(c.Key(acc)).Height(40).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, icPerson).FontSize(13).TextColor(k.Faint)
-				mono(c, acc, 12.5).Grow(1)
-				if buttonOff(c, k, buttonPlain, "Log out…", nil, wait).Clicked() {
-					f.logout, f.logoutOpen = acc, true
-				}
-			})
+	ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "An account is logged in.").FontSize(13).Grow(1)
+		if buttonOff(c, k, buttonPlain, "Log out…", nil, wait).Clicked() {
+			f.logout, f.logoutOpen = "", true
 		}
 	})
 }

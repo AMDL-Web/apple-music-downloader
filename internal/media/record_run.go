@@ -14,9 +14,10 @@ import (
 )
 
 // processRecordRun runs a run of a record (design §3.2–§3.4) in the order
-// jobs.RecordReporter states: resolve the record in the account storefront
-// and hand the read to the store, plan the run from the records, then carry
-// each planned slot through the pipeline and report its outcome.
+// jobs.RecordReporter states: resolve the record in its storefront (its pin,
+// else the default account's) and hand the read to the store, plan the run
+// from the records, then carry each planned slot through the pipeline and
+// report its outcome.
 func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, reporter jobs.Reporter) error {
 	record, ok := reporter.(jobs.RecordReporter)
 	if !ok {
@@ -25,15 +26,25 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 	if job.ResourceKind != domain.ResourceAlbum && job.ResourceKind != domain.ResourcePlaylist {
 		return fmt.Errorf("run %s: unknown record kind %q", job.ID, job.ResourceKind)
 	}
-	storefront, err := d.AccountStorefront(ctx)
+	pin, err := record.RecordPin(ctx, job.ResourceKind, job.ResourceID)
 	if err != nil {
 		return err
 	}
-	// The link's storefront only named the record; the account's is the one
-	// the wrapper decrypts for.
-	if err := d.validateStorefront(ctx, storefront, "the account storefront"); err != nil {
+	storefront, err := d.RunStorefront(ctx, pin)
+	if err != nil {
 		return err
 	}
+	which := "the account storefront"
+	if pin != "" {
+		which = "the record's pinned storefront"
+	}
+	// A pinned record is read in the storefront its add named, so the
+	// account of that storefront decrypts it; an unpinned one in the default
+	// account's.
+	if err := d.validateStorefront(ctx, storefront, which); err != nil {
+		return err
+	}
+	d.storefront = storefront
 	parsed := applemusic.ParsedURL{Raw: job.Input, Type: applemusic.URLType(job.ResourceKind), Storefront: storefront, ID: job.ResourceID}
 	job.Type = string(job.ResourceKind)
 	job.Storefront = storefront

@@ -527,8 +527,8 @@ pointer is near its edge. Under reduced motion rows move at once.
   Settings has a media user token), Error or Watching, and stays loading
   until the config and the wrapper status say whether there is one. Account
   shows, below its head and when the session service has a login API
-  (`login_supported`), Log out (a `ConfirmDialog`: per named account, else one
-  that asks for the Apple ID, because no wrapper lists its accounts) and the
+  (`login_supported`), Log out (a `ConfirmDialog`: per account of `GET /accounts`, listed as
+  "name · region", else, for an account without a name, one that asks for the Apple ID) and the
   login form (with a show-password toggle) with its two-step code step, which
   takes six digits, keeps the step on a 400 or 409 and otherwise starts over
   from the password after a failed code; a wrapper amdl runs

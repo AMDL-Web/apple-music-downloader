@@ -143,7 +143,7 @@ func TestAccountSectionOffersTheLoginOnlyWhereItWorks(t *testing.T) {
 	a.GoSettings("account")
 	sv := &a.Store.Server
 	sv.Read = time.Now()
-	sv.Wrapper = &client.WrapperStatus{Ready: true, Regions: []string{}, Accounts: []string{}, LoginSupported: true,
+	sv.Wrapper = &client.WrapperStatus{Ready: true, Regions: []string{}, LoginSupported: true,
 		Managed: &client.ManagedWrapper{Mode: "serving", Accel: "kvm"}}
 	tt := ui.NewTester(a.View, 1280, 800)
 	if !tt.HasText("Log in with the Apple ID that has the Apple Music subscription") || !tt.HasText("local wrapper") {

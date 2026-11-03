@@ -5,6 +5,7 @@ import { html, useState } from '../ui/preact.js';
 import { flattenConfig, diffConfig, reloadSummary, splitReloadError } from '../lib/settings-draft.js';
 import { resetLibrarySync, reloadConfig } from '../api.js';
 import { count } from '../lib/format.js';
+import { librarySyncLines } from '../lib/accounts.js';
 import { useApp, Button, Icon, Notice } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { invalidateStatus } from '../ui/system-status.js';
@@ -13,15 +14,17 @@ const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 
 /**
  * "Start over from now" (POST /library-sync/reset, which clears the anchor),
- * offered only once a check has recorded the library (`sync` is the
- * GET /library-sync answer).
+ * offered only once a check has recorded the library of the default account,
+ * the one the reset clears (`sync` is the GET /library-sync answer, whose
+ * first account is the default).
  */
 export function SyncResetAction({ sync, disabled }) {
   const app = useApp();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  if (!sync || !(sync.anchor_size > 0)) return null;
+  const first = sync && Array.isArray(sync.accounts) ? sync.accounts[0] : null;
+  if (!first || !(first.anchor_size > 0)) return null;
   const reset = async () => {
     setBusy(true);
     setError(null);
@@ -57,6 +60,17 @@ export function SyncResetAction({ sync, disabled }) {
         </${ConfirmDialog}>`
       : null}
   </div>`;
+}
+
+/** With several accounts, one short line each: "name · region" and what its check last saw. */
+export function SyncAccountLines({ sync }) {
+  const lines = librarySyncLines(sync);
+  if (!lines.length) return null;
+  return html`<ul class="account-rows" aria-label="Library sync by account">
+    ${lines.map((l) => html`<li key=${l.id} class="account-row">
+      <span class="account-name"><span class="mono">${l.label}</span> · <span data-role=${l.role}>${l.text}</span></span>
+    </li>`)}
+  </ul>`;
 }
 
 /**

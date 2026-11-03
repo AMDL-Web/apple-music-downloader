@@ -92,11 +92,11 @@ func TestCLISearchAnswersWhereTheFilesAre(t *testing.T) {
 	}
 }
 
-func TestLogoutUsageNamesTheRequiredFlag(t *testing.T) {
+func TestLogoutUsageNamesTheFlags(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
 	r := run(t, srv, "", "wrapper", "logout", "--yes")
-	if r.code != exitInput || !strings.Contains(r.stderr, "usage: amdl wrapper logout --username <username>") {
+	if r.code != exitInput || !strings.Contains(r.stderr, "exactly one of --username and --account-id") {
 		t.Errorf("got %+v", r)
 	}
 }

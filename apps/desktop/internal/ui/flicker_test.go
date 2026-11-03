@@ -334,7 +334,7 @@ func TestWrapperAddressTestKeepsStartWhileItRuns(t *testing.T) {
 
 func TestSignInKeepsTheFormWhileTheAnswerIsOnItsWay(t *testing.T) {
 	serving := func() *client.WrapperStatus {
-		return &client.WrapperStatus{Ready: true, Regions: []string{}, Accounts: []string{}, LoginSupported: true,
+		return &client.WrapperStatus{Ready: true, Regions: []string{}, LoginSupported: true,
 			Managed: &client.ManagedWrapper{Mode: "serving", Accel: "kvm"}}
 	}
 	t.Run("Settings", func(t *testing.T) {
@@ -402,7 +402,7 @@ func TestReloadingTheConfigKeepsTheButtonUntilItIsSlow(t *testing.T) {
 // A request that is slow says so, once statusDelay has passed and not
 // before; the fake backend's answers wait in the queue meanwhile.
 func TestWaitingStatesShowOnlyOnceTheRequestIsSlow(t *testing.T) {
-	serving := &client.WrapperStatus{Ready: true, Regions: []string{}, Accounts: []string{}, LoginSupported: true,
+	serving := &client.WrapperStatus{Ready: true, Regions: []string{}, LoginSupported: true,
 		Managed: &client.ManagedWrapper{Mode: "serving", Accel: "kvm"}}
 	cases := []struct {
 		name, click, word string

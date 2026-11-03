@@ -32,7 +32,10 @@ var (
 	ErrLoginSessionBusy     = errors.New("wrapper login session is already being verified")
 	ErrLoginTimeout         = errors.New("wrapper login timed out")
 	ErrAccountNotFound      = errors.New("wrapper account not found")
-	ErrWrapperResponse      = errors.New("wrapper returned an unexpected response")
+	// ErrAccountLimit is a login a wrapper-manager refuses because it holds
+	// its most accounts (10), logins in flight included.
+	ErrAccountLimit    = errors.New("the wrapper holds its most accounts (10); delete one first")
+	ErrWrapperResponse = errors.New("wrapper returned an unexpected response")
 	// ErrLoginUnsupported answers every login, two-step and logout call on a
 	// wrapper without wrapper-manager's login API: wrapper-lite logs in only
 	// from its own command line (--login).
@@ -104,19 +107,38 @@ type LoginResult struct {
 // Status is the wrapper's state as GET /api/v1/wrapper/status returns it.
 // Ready means the wrapper answered and, for a wrapper-manager, has restored its
 // accounts; LoggedIn means an account is logged in, which wrapper-lite shows by
-// listing its storefront in Regions. Neither wrapper-lite nor wrapper-manager
-// names its accounts, so Accounts stays empty. LoginSupported is true when the
-// wrapper has the login API (a wrapper-manager). Regions and Accounts are never
-// nil, so they encode as [] when empty.
+// listing its storefront in Regions. LoginSupported is true when the wrapper
+// has the login API (a wrapper-manager). Regions is never nil, so it encodes
+// as [] when empty. The accounts themselves are GET /api/v1/accounts.
 type Status struct {
 	Ready          bool     `json:"ready"`
 	LoggedIn       bool     `json:"logged_in"`
 	Regions        []string `json:"regions"`
-	Accounts       []string `json:"accounts"`
 	LoginSupported bool     `json:"login_supported"`
 	// Managed is set when amdl runs the wrapper on this machine
 	// (internal/wrapperhost).
 	Managed *Managed `json:"managed,omitempty"`
+	// Instances are the accounts a wrapper-manager lists in its /status
+	// instances, in its order; Listed says the wrapper sent that list (an
+	// empty one included). A bare wrapper-lite and an older wrapper-manager
+	// do not, and hold one implicit account.
+	Instances []Instance `json:"-"`
+	Listed    bool       `json:"-"`
+	// Name is the Apple ID a bare wrapper-lite reports for its one account;
+	// empty when it does not say.
+	Name string `json:"-"`
+}
+
+// Instance is one account of a wrapper-manager's /status instances: its
+// instance id (stable across logins of one Apple ID), storefront, Apple ID,
+// whether it serves, and whether the manager has set it aside after repeated
+// decrypt failures.
+type Instance struct {
+	ID       string `json:"id"`
+	Region   string `json:"region"`
+	Name     string `json:"name"`
+	Ready    bool   `json:"ready"`
+	Degraded bool   `json:"degraded"`
 }
 
 // Managed describes a wrapper amdl runs in a QEMU guest on this machine.
@@ -195,12 +217,22 @@ type Client struct {
 
 	logins loginBook
 
+	// pairing authorizes requests to a wrapper behind a gateway; nil sends no
+	// Authorization header.
+	pairing *Pairing
+
 	// life ends at Close and stops template fetches no caller waits for.
 	life     context.Context
 	shutdown context.CancelFunc
 }
 
 type ClientOption func(*Client)
+
+// WithPairing sends the pairing's access token on every request (see
+// Pairing); nil sends none.
+func WithPairing(p *Pairing) ClientOption {
+	return func(c *Client) { c.pairing = p }
+}
 
 // WithTemplateParser replaces the FairPlay template implementation, which is
 // internal/fairplay by default.
@@ -241,6 +273,9 @@ func NewClient(cfg config.WrapperConfig, options ...ClientOption) (*Client, erro
 	}
 	for _, option := range options {
 		option(c)
+	}
+	if c.pairing != nil {
+		c.http.Transport = pairedTransport{pairing: c.pairing, next: transport}
 	}
 	if c.parse == nil {
 		shutdown()
@@ -404,8 +439,17 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 		Ready:          true,
 		LoggedIn:       len(body.Regions) > 0,
 		Regions:        nonNil(body.Regions),
-		Accounts:       []string{},
 		LoginSupported: body.ClientCount != nil,
+		Listed:         body.Instances != nil,
+		Name:           body.Name,
+	}
+	if body.Instances != nil {
+		status.Instances = []Instance{}
+		for _, in := range *body.Instances {
+			if in.ID != "" {
+				status.Instances = append(status.Instances, in)
+			}
+		}
 	}
 	if body.Ready != nil {
 		status.Ready = *body.Ready
@@ -414,9 +458,11 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 }
 
 type statusBody struct {
-	Regions     []string `json:"regions"`
-	ClientCount *int     `json:"clientCount"`
-	Ready       *bool    `json:"ready"`
+	Regions     []string    `json:"regions"`
+	ClientCount *int        `json:"clientCount"`
+	Ready       *bool       `json:"ready"`
+	Instances   *[]Instance `json:"instances"`
+	Name        string      `json:"name"`
 }
 
 func (c *Client) fetchStatus(ctx context.Context) (statusBody, error) {

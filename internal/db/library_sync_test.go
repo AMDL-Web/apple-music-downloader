@@ -25,7 +25,7 @@ func TestLibrarySyncAnchorRoundTripPreservesOrder(t *testing.T) {
 	store := libraryAnchorStore(t)
 	ctx := context.Background()
 
-	if got, err := store.LoadLibrarySyncAnchor(ctx); err != nil || len(got) != 0 {
+	if got, err := store.LoadLibrarySyncAnchor(ctx, "a1"); err != nil || len(got) != 0 {
 		t.Fatalf("fresh store anchor = %v, err = %v, want empty", got, err)
 	}
 
@@ -34,10 +34,10 @@ func TestLibrarySyncAnchorRoundTripPreservesOrder(t *testing.T) {
 		{SongID: "i.middle", Name: "middle", AlbumName: "B"},
 		{SongID: "i.oldest", Name: "oldest", AlbumName: "C"},
 	}
-	if err := store.ReplaceLibrarySyncAnchor(ctx, want); err != nil {
+	if err := store.ReplaceLibrarySyncAnchor(ctx, "a1", want); err != nil {
 		t.Fatalf("replace: %v", err)
 	}
-	got, err := store.LoadLibrarySyncAnchor(ctx)
+	got, err := store.LoadLibrarySyncAnchor(ctx, "a1")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -61,14 +61,14 @@ func TestLibrarySyncAnchorReplaceDropsOldEntries(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		long = append(long, domain.LibraryAnchorEntry{SongID: string(rune('a' + i))})
 	}
-	if err := store.ReplaceLibrarySyncAnchor(ctx, long); err != nil {
+	if err := store.ReplaceLibrarySyncAnchor(ctx, "a1", long); err != nil {
 		t.Fatalf("replace long: %v", err)
 	}
 	short := []domain.LibraryAnchorEntry{{SongID: "only"}}
-	if err := store.ReplaceLibrarySyncAnchor(ctx, short); err != nil {
+	if err := store.ReplaceLibrarySyncAnchor(ctx, "a1", short); err != nil {
 		t.Fatalf("replace short: %v", err)
 	}
-	got, err := store.LoadLibrarySyncAnchor(ctx)
+	got, err := store.LoadLibrarySyncAnchor(ctx, "a1")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -82,17 +82,17 @@ func TestLibrarySyncAnchorClearReportsCount(t *testing.T) {
 	ctx := context.Background()
 
 	entries := []domain.LibraryAnchorEntry{{SongID: "a"}, {SongID: "b"}}
-	if err := store.ReplaceLibrarySyncAnchor(ctx, entries); err != nil {
+	if err := store.ReplaceLibrarySyncAnchor(ctx, "a1", entries); err != nil {
 		t.Fatalf("replace: %v", err)
 	}
-	cleared, err := store.ClearLibrarySyncAnchor(ctx)
+	cleared, err := store.ClearLibrarySyncAnchor(ctx, "a1")
 	if err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 	if cleared != 2 {
 		t.Fatalf("cleared = %d, want 2", cleared)
 	}
-	got, err := store.LoadLibrarySyncAnchor(ctx)
+	got, err := store.LoadLibrarySyncAnchor(ctx, "a1")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -100,7 +100,27 @@ func TestLibrarySyncAnchorClearReportsCount(t *testing.T) {
 		t.Fatalf("anchor after clear = %v, want empty", got)
 	}
 	// Clearing an already-empty anchor is a normal repeat call, not an error.
-	if cleared, err := store.ClearLibrarySyncAnchor(ctx); err != nil || cleared != 0 {
+	if cleared, err := store.ClearLibrarySyncAnchor(ctx, "a1"); err != nil || cleared != 0 {
 		t.Fatalf("second clear = %d, err = %v, want 0 and no error", cleared, err)
+	}
+}
+
+// Each account has its own anchor: replacing or clearing one leaves the
+// other's alone.
+func TestLibrarySyncAnchorIsPerAccount(t *testing.T) {
+	store := libraryAnchorStore(t)
+	ctx := context.Background()
+	if err := store.ReplaceLibrarySyncAnchor(ctx, "a1", []domain.LibraryAnchorEntry{{SongID: "us"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceLibrarySyncAnchor(ctx, "a2", []domain.LibraryAnchorEntry{{SongID: "jp1"}, {SongID: "jp2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if cleared, err := store.ClearLibrarySyncAnchor(ctx, "a2"); err != nil || cleared != 2 {
+		t.Fatalf("clear a2 = %d, %v", cleared, err)
+	}
+	got, err := store.LoadLibrarySyncAnchor(ctx, "a1")
+	if err != nil || len(got) != 1 || got[0].SongID != "us" {
+		t.Fatalf("a1 anchor = %v, %v, want [us]", got, err)
 	}
 }

@@ -30,6 +30,12 @@ type Server struct {
 	Health  *client.Health
 	System  *client.SystemInfo
 	Wrapper *client.WrapperStatus
+	// Accounts are the wrapper's accounts with amdl's switches for them,
+	// the default first; nil when the backend did not answer.
+	Accounts []client.Account
+	// Pairing is amdl's pairing with a wrapper behind a gateway; nil when
+	// the backend has none.
+	Pairing *client.WrapperPairing
 	Stats   *client.Stats
 	Sync    *client.LibrarySync
 	Hooks   *client.Hooks
@@ -105,6 +111,19 @@ func (s *Store) WatchServerWithin(every time.Duration) {
 				next.WrapperErr = err.Error()
 			}
 		})
+		read(func(ctx context.Context) {
+			if v, err := c.WrapperPairing(ctx); err == nil {
+				next.Pairing = &v
+			}
+		})
+		read(func(ctx context.Context) {
+			if v, err := c.ListAccounts(ctx); err == nil {
+				next.Accounts = v.Accounts
+				if next.Accounts == nil {
+					next.Accounts = []client.Account{}
+				}
+			}
+		})
 		// Backends older than these endpoints answer 404; their cards then
 		// say nothing rather than fail the screen.
 		read(func(ctx context.Context) {
@@ -133,6 +152,15 @@ func (s *Store) WatchServerWithin(every time.Duration) {
 		s.postIf(ctx, func() {
 			// A change made while this read ran asks for one more.
 			next.Read, next.Active, next.stale = s.now(), sv.Active, sv.stale
+			// While a change to an account is on its way, the list keeps
+			// it: this read may have left before it.
+			if s.accountOps > 0 {
+				next.Accounts = sv.Accounts
+			}
+			// The poll of a pairing under way is newer than this read.
+			if s.Pair.polling > 0 {
+				next.Pairing = sv.Pairing
+			}
 			if next.System != nil {
 				next.Active = append(next.Active, next.System.Jobs.Active)
 				if len(next.Active) > activeSamples {
@@ -140,6 +168,11 @@ func (s *Store) WatchServerWithin(every time.Duration) {
 				}
 			}
 			*sv = next
+			// A pairing started elsewhere, as in the web console, is
+			// followed here too.
+			if next.Pairing != nil {
+				s.followPairing(*next.Pairing)
+			}
 		})
 	}()
 }

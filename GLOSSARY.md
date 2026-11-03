@@ -10,8 +10,13 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | amp-api | `amp-api.music.apple.com`: Apple's undocumented web-player API, called with a scraped JWT and an `Origin` header; the only source of some fields | `internal/applemusic#CatalogClient.doWithWebAuth` |
 | Web-player JWT | The token scraped from music.apple.com's JS bundle that amp-api requires | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Media-user-token | A signed-in account's token; radio stations, private playlists, library sync and the Apple library need it, and with it the backend fetches lyrics and the AAC-LC playlist and license from Apple itself. The wrapper's own (its `GET /token` or `MUSIC_TOKEN` file) when the backend can get it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
+| Media-user-token | An account's token; radio stations, private playlists, library sync and the Apple library need it, and with it the backend fetches lyrics and the AAC-LC playlist and license from Apple itself. The wrapper's own for that account (its `GET /token` or `MUSIC_TOKEN` file) when the backend can get it, else, for the default account, `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
 | Storefront | The country code in a link (`us`, `cn`) that selects Apple's regional catalog | `configs/config.example.yaml#catalog.default_storefront` |
+| Account | One Apple Music account a wrapper holds (a wrapper-manager instance, at most 10), with amdl's `library_sync` and `apple_library` switches and a position; `GET /api/v1/accounts` | `internal/accounts` |
+| Pairing | The device-code handshake that gives the backend a bearer token for a wrapper behind a gateway (the Cloudflare deploy of wrapper-manager): a user code approved with a passkey, then an access token the backend renews; stored in `pairing/wrapper.json` next to the database, never in `config.yaml`; `GET`/`POST`/`DELETE /api/v1/wrapper/pairing`, `amdl wrapper pair` | `internal/wrapper#Pairing` |
+| Default account | The account at position 0: it reads records with no pinned storefront and links whose storefront no account serves, and holds `catalog.media_user_token` | `internal/usertoken#Provider` |
+| Implicit account | The one account (id `wrapper`) of a wrapper that does not list its accounts, such as a bare wrapper-lite, or of `catalog.media_user_token` alone | `internal/domain#ImplicitAccountID` |
+| Pinned storefront | The storefront a record's runs read it in (`pinned_storefront`, a pending add's `storefront`): the link's when an account serves it, else the default account's; not `storefront_read`, which is the storefront of the last track-list read | `internal/media#Downloader.RunStorefront` |
 | enhancedHls | The amp-api-only HLS manifest that lists the lossless and spatial variants | `internal/applemusic#Song` |
 | editorialVideo, motion artwork | Animated album covers, amp-api only; absence is normal, never an error | `internal/applemusic#CatalogClient.MotionArtworkViaWebToken` |
 | L3 | The Widevine security level the pipeline runs at; it caps video quality, which is why music videos are out of scope | [docs/download-pipeline.md](docs/download-pipeline.md#download-pipeline) |
@@ -21,7 +26,7 @@ wins when they disagree, so details are not copied here.
 | Term | Meaning | Source |
 | --- | --- | --- |
 | wrapper, wrapper-lite | The HTTP service that holds the Apple account session and serves device manifests and per-key decryption templates, and lyrics and AAC-LC licenses when the backend has no media-user-token to ask Apple itself; required for real downloads | `internal/wrapper#Client` |
-| wrapper-manager | Upstream v2 gateway in front of one wrapper-lite per account; the only upstream wrapper with the login API behind the console's Account page (`login_supported`) | `internal/wrapper#Client.StartLogin` |
+| wrapper-manager | Upstream v2 gateway in front of one wrapper-lite per account (at most 10 accounts); the only upstream wrapper with the login API behind the console's Account page (`login_supported`) | `internal/wrapper#Client.StartLogin` |
 | Managed wrapper | A wrapper-lite that amdl runs itself in a QEMU guest on the backend's machine (`amdl wrapper install`); it logs in by booting the guest with the account, and `GET /wrapper/status` describes it in `managed` | `internal/wrapperhost#Supervisor` |
 | Key template | The `ctx` and `state` tables wrapper-lite's `/key` returns for a FairPlay key URI; `internal/fairplay` decrypts samples with it, in-process | `internal/fairplay#Template` |
 | Record | An album or catalog playlist amdl keeps: its tracks and per track its slots; the only truth of what is downloaded. The API calls it a resource | `internal/domain#Album`, `internal/domain#Playlist` |
@@ -59,8 +64,8 @@ wins when they disagree, so details are not copied here.
 | Seed | A first value `amdl serve --init key=value` writes into a config.yaml it creates | `internal/config#Seed` |
 | Job overrides | The per-add `overrides` object that overlays the quality keys of the runtime config; stored on the record (or a station run) and applied each time a run starts | `internal/config#DownloadOverrides` |
 | Job hook | A webhook or command fired on `job_queued` or a terminal job event | `internal/hooks#Dispatcher` |
-| Library sync | The poller that turns newly added library songs into album records | `internal/librarysync#Watcher` |
-| Apple library | The signed-in Apple Music account's own library (albums, songs, playlists, artists), as Apple Music calls it; amdl keeps a local copy for `/api/v1/apple-library` and `in_apple_library`. Not amdl's own records of what it downloaded, which `/api/v1/library` and `amdl library list` call the library | `internal/applelibrary#Engine` |
+| Library sync | The poller that turns newly added library songs of each account whose switch is on into album records | `internal/librarysync#Watcher` |
+| Apple library | An Apple Music account's own library (albums, songs, playlists, artists), as Apple Music calls it; amdl keeps a local copy per account for `/api/v1/apple-library` and `in_apple_library`. Not amdl's own records of what it downloaded, which `/api/v1/library` and `amdl library list` call the library | `internal/applelibrary#Engine` |
 | Watermark | Library sync's position-based anchor in the newest-first library list | [docs/automation.md](docs/automation.md#why-the-watermark-is-a-position-not-a-timestamp) |
 | Skin | The console's look, one skin (`music`) on `<html data-skin>`, separate from the light/dark theme | [apps/console/DESIGN.md](apps/console/DESIGN.md#skin) |
 

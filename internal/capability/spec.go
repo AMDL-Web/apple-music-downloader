@@ -3,6 +3,7 @@ package capability
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -78,8 +79,8 @@ func Lookup(id string) Operation {
 }
 
 type rawSpec struct {
-	Paths      map[string]map[string]rawOp `yaml:"paths"`
-	Components map[string]map[string]any   `yaml:"components"`
+	Paths      map[string]map[string]yaml.Node `yaml:"paths"`
+	Components map[string]map[string]any       `yaml:"components"`
 }
 
 type rawOp struct {
@@ -98,10 +99,25 @@ func parseSpec(raw []byte) (map[string]Operation, error) {
 	r := resolver{components: spec.Components}
 	ops := map[string]Operation{}
 	for path, methods := range spec.Paths {
-		for method, o := range methods {
+		// Parameters under the path itself apply to each of its methods.
+		var shared []map[string]any
+		if n, ok := methods["parameters"]; ok {
+			if err := n.Decode(&shared); err != nil {
+				return nil, fmt.Errorf("parse openapi.yaml: %s parameters: %w", path, err)
+			}
+		}
+		for method, n := range methods {
+			if method == "parameters" {
+				continue
+			}
+			var o rawOp
+			if err := n.Decode(&o); err != nil {
+				return nil, fmt.Errorf("parse openapi.yaml: %s %s: %w", method, path, err)
+			}
 			if o.OperationID == "" {
 				continue
 			}
+			o.Parameters = append(slices.Clone(shared), o.Parameters...)
 			op := Operation{ID: o.OperationID, Method: strings.ToUpper(method), Path: path, Summary: o.Summary}
 			for _, p := range o.Parameters {
 				p = r.object(p)

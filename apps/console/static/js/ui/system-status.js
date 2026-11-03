@@ -1,7 +1,7 @@
 // The status store (lib/status-store.js) bound to the API and the page: one
 // read per status endpoint for the whole tab, shared by Overview, System,
 // Settings, New download and the shell. Keys and intervals:
-//   health, system, wrapper, librarySync, hooks  30 s
+//   health, system, wrapper, accounts, librarySync, hooks  30 s
 //   stats (GET /stats?days=STATS_DAYS)           60 s (the server caches 30 s)
 //   logs (errors of the last 24 h, by cursor)     60 s
 //   config                                        no interval: first subscribe, invalidate, epoch
@@ -10,7 +10,7 @@
 // first answer.
 
 import { useEffect, useRef, useState } from './preact.js';
-import { getHealth, getSystem, getWrapperStatus, getLibrarySync, getHooks, getStats, getConfig, listLogs } from '../api.js';
+import { getHealth, getSystem, getWrapperStatus, getAccounts, getLibrarySync, getHooks, getStats, getConfig, listLogs } from '../api.js';
 import { createStatusStore } from '../lib/status-store.js';
 import { STATS_DAYS, logsQuery, mergeLogs } from '../lib/sysdata.js';
 
@@ -37,13 +37,14 @@ const store = createStatusStore({
     health: getHealth,
     system: getSystem,
     wrapper: getWrapperStatus,
+    accounts: getAccounts,
     librarySync: getLibrarySync,
     hooks: getHooks,
     stats: () => getStats(STATS_DAYS),
     logs: readLogs,
     config: getConfig,
   },
-  every: { health: 30000, system: 30000, wrapper: 30000, librarySync: 30000, hooks: 30000, stats: 60000, logs: 60000 },
+  every: { health: 30000, system: 30000, wrapper: 30000, accounts: 30000, librarySync: 30000, hooks: 30000, stats: 60000, logs: 60000 },
   visible: () => document.visibilityState === 'visible',
 });
 

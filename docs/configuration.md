@@ -104,7 +104,7 @@ nothing.
 ## Wrapper
 
 The `wrapper` section points the backend at the HTTP service that holds the Apple Music
-account session. `wrapper.data_dir` is a runtime key; the other three apply after a restart.
+account sessions. `wrapper.data_dir` is a runtime key; the other four apply after a restart.
 
 - `wrapper.address` is `http://host:port` or `https://host:port`, with an optional path
   prefix for a reverse proxy; the default is `http://127.0.0.1:12340`. A bare `host:port`
@@ -127,56 +127,69 @@ account session. `wrapper.data_dir` is a runtime key; the other three apply afte
 - `wrapper.login_timeout_seconds` (default 120) bounds one console login request to a
   wrapper-manager. A login that needs a two-step code takes two requests.
 - `wrapper.data_dir` (default empty) is the wrapper's data directory as the backend sees
-  it, so the backend can read the wrapper's media-user-token
+  it, so the backend can read the wrapper's media-user-tokens
   ([The media-user-token](#the-media-user-token)).
+- A wrapper behind a gateway that asks for a bearer token (the Cloudflare deploy of
+  wrapper-manager) has no config key: the backend pairs with it
+  ([Pairing](api.md#pairing); `amdl wrapper pair`, or the desktop app's Connect button).
+  The credential is stored in `pairing/wrapper.json` next to the database file, readable
+  by the backend's user only, tied to the `wrapper.address` it was paired with, and never
+  written to `config.yaml`, shown by `GET /config` or logged. A wrapper without a gateway
+  needs none.
+- The wrapper may hold several accounts: a wrapper-manager holds at most 10. The backend
+  learns them from the wrapper's `/status` (a wrapper-manager lists them as instances) and
+  keeps one row per account, with its switches, in the database
+  ([Accounts](api.md#accounts)); the keys of `library_sync` and `apple_library` are shared
+  by all of them.
 - Simulate mode (below) skips the wrapper status check, so jobs can be submitted without one.
 
 ### The media-user-token
 
 Station downloads, private playlist covers, library sync and the Apple library cache (with
 the `in_apple_library` mark on search hits) need the Apple Music
-media-user-token of a subscribed account. With one, the backend also fetches lyrics and the
+media-user-token of a subscribed account. Each account has its own: library sync and the
+Apple library use the token of the account they run for, and any other request uses the
+token of the active account that serves the request's storefront (the one with the lowest
+position when several do), else the default account's. With one, the backend also fetches lyrics and the
 AAC-LC playlist and license from Apple itself rather than through the wrapper
 ([Download pipeline](download-pipeline.md#lyrics)); without one, the wrapper does that.
-The wrapper keeps its logged-in account's token, in memory and in a file named
+The wrapper keeps each logged-in account's token, in memory and in a file named
 `MUSIC_TOKEN`, and refreshes it itself, so the backend uses that one whenever it can get
-it, and `catalog.media_user_token` only when it cannot. The first of these that has a token
-wins:
+it, and `catalog.media_user_token` only when it cannot. For each account, the first of
+these that has a token wins:
 
-1. A wrapper the backend runs itself (`amdl wrapper install`): discover accounts through
-   the local manager's `/status.instances`, then read `/token?instance=<id>`. The disk
-   is used only to count accounts before boot, never to read tokens. The scalar token
-   reader refuses multiple accounts rather than selecting an arbitrary Apple ID;
-   account-aware callers use `internal/wrapperhost#Home.Instances` and
-   `internal/wrapperhost#Home.InstanceToken`. Nothing below applies; `wrapper.data_dir`
-   is ignored, and startup says so when it is set.
-2. The wrapper's `GET /token`, which amdl's wrapper-lite fork serves at
-   `wrapper.address`, so it works for a wrapper on another machine or in another
+1. The wrapper's `GET /token`, which amdl's wrapper-lite fork serves at
+   `wrapper.address` (a wrapper-manager answers `GET /token?instance=<id>` for each
+   account; the wrapper amdl runs itself, `amdl wrapper install`, is a wrapper-manager read
+   this way too), so it works for a wrapper on another machine or in another
    container with nothing to configure. The backend asks at startup, again a few seconds
    after the wrapper's own next refresh (`next_refresh_at`; at least one minute and at
    most one hour apart), after a console login or logout, and when Apple refuses the token.
    Upstream wrapper-lite, older fork builds and a wrapper-manager that does not forward the
    route answer `404`; the backend then uses the sources below and asks again only every
    30 minutes.
-3. A wrapper whose files the backend can see: set `wrapper.data_dir` to the wrapper's data
-   directory. A wrapper-lite base directory holds `MUSIC_TOKEN` directly; a
-   wrapper-manager's data directory holds one per account under `instances/<id>/`. This
-   filesystem fallback reads the newest token when several exist; per-account
-   selection uses the manager's HTTP API instead. In containers, mount that directory read-only into the backend
+2. A wrapper whose files the backend can see: set `wrapper.data_dir` to the wrapper's data
+   directory. A wrapper-lite base directory holds `MUSIC_TOKEN` directly, for its one
+   account; a wrapper-manager's data directory holds one per account under
+   `instances/<id>/`, and the backend reads the file of the account with that instance id.
+   A wrapper that does not list its accounts falls back to the newest `instances/*/MUSIC_TOKEN`.
+   In containers, mount that directory read-only into the backend
    ([Deployment](deployment.md#the-wrapper)). The file must be readable by the user the
    backend runs as. It is read afresh on every use, so a login or a refreshed token takes
    effect with the next request.
-4. The backend's own copy of the last token `GET /token` returned, kept in
-   `usertoken/wrapper-token.json` next to the database file (directory mode 0700, file
+3. The backend's own copy of the last token `GET /token` returned for the account, kept in
+   `usertoken/` next to the database file (`wrapper-token.json` for the implicit account,
+   `account-<id>.json` for another; directory mode 0700, file
    0600). It lets the backend work on while the wrapper restarts. It is replaced by every
    new token, deleted when the wrapper answers that no account is logged in (`503`) or
    that it has no `GET /token` (`404`), and not used once `wrapper.address` points at
    another wrapper.
-5. `catalog.media_user_token`, for a wrapper whose token none of the above reaches: paste
-   the token there (the console's Settings › Account).
+4. `catalog.media_user_token`, for the default account only, when a wrapper's token none of
+   the above reaches: paste the token there (the console's Settings › Account).
 
-`GET /api/v1/wrapper/status` reports the token in use from the wrapper, masked, as
-`media_user_token` (`""` when there is none). A token typed into
+`GET /api/v1/wrapper/status` reports the default account's token in use from the wrapper,
+masked, as `media_user_token` (`""` when there is none), and `GET /api/v1/accounts` each
+account's, masked the same way. A token typed into
 `catalog.media_user_token` is never overwritten or removed; it is simply not used while the
 wrapper has one. The token is never logged.
 

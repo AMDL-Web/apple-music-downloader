@@ -17,14 +17,14 @@ import (
 func TestWrapperStatusEndpoint(t *testing.T) {
 	fake := &fakeWrapperService{statusResult: wrapper.Status{
 		Ready: true, LoggedIn: true, Regions: []string{"us"},
-		Accounts: []string{"user@example.com"},
+		Instances: []wrapper.Instance{{ID: "a", Region: "us", Name: "user@example.com"}}, Listed: true,
 	}}
 	server := &Server{wrapper: fake}
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	want := `{"ready":true,"logged_in":true,"regions":["us"],"accounts":["user@example.com"],"login_supported":false,"media_user_token":""}` + "\n"
+	want := `{"ready":true,"logged_in":true,"regions":["us"],"login_supported":false,"media_user_token":""}` + "\n"
 	if recorder.Body.String() != want {
 		t.Fatalf("body = %s, want %s", recorder.Body.String(), want)
 	}
@@ -47,11 +47,11 @@ func TestWrapperStatusMasksWrapperToken(t *testing.T) {
 		tokens *usertoken.Provider
 		want   string
 	}{
-		{"managed wrapper token", config.Default(), usertoken.New(func() (string, error) { return token, nil }), "...wxyz"},
-		{"data_dir token", withDataDir, usertoken.New(nil), "...wxyz"},
-		{"no wrapper token, config token only", withDataDir, usertoken.New(func() (string, error) { return "", nil }), ""},
-		{"unreadable wrapper file", config.Default(), usertoken.New(func() (string, error) { return "", errors.New("io") }), ""},
-		{"invalid wrapper file", config.Default(), usertoken.New(func() (string, error) { return "not a token", nil }), ""},
+		{"managed wrapper token", config.Default(), usertoken.NewReading(func(string) (string, error) { return token, nil }), "...wxyz"},
+		{"data_dir token", withDataDir, usertoken.New(), "...wxyz"},
+		{"no wrapper token, config token only", withDataDir, usertoken.NewReading(func(string) (string, error) { return "", nil }), ""},
+		{"unreadable wrapper file", config.Default(), usertoken.NewReading(func(string) (string, error) { return "", errors.New("io") }), ""},
+		{"invalid wrapper file", config.Default(), usertoken.NewReading(func(string) (string, error) { return "not a token", nil }), ""},
 		{"no provider", withDataDir, nil, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

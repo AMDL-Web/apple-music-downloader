@@ -23,7 +23,11 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 		"logs tail":         logsTailCmd,
 		"config get":        configGetCmd,
 		"config set":        configSetCmd,
+		"accounts set":      accountsSetCmd,
+		"wrapper logout":    wrapperLogoutCmd,
 		"wrapper login":     wrapperLoginCmd,
+		"wrapper pair":      wrapperPairCmd,
+		"wrapper unpair":    wrapperUnpairCmd,
 		"wrapper 2fa":       wrapperTwoStepCmd,
 		"cli search":        cliSearchCmd,
 		"cli commands":      cliCommandsCmd,
@@ -184,6 +188,9 @@ func passthrough(c capability.Capability) func(fs *flag.FlagSet) func(e *env, ar
 			}
 			for i, a := range args {
 				values[c.Args[i]] = a
+			}
+			if err := e.c.ResolveAccounts(e.ctx, values); err != nil {
+				return err
 			}
 			req, err := op.Build(values)
 			if err != nil {

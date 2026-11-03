@@ -97,12 +97,12 @@ func (e *Engine) pass(ctx context.Context, token string) Run {
 	saveCtx, cancelSave := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancelSave()
 	if raw, err := json.Marshal(copied); err == nil {
-		if err := e.store.SetAppleLibraryMeta(saveCtx, metaLastRun, string(raw)); err != nil {
+		if err := e.store.SetAppleLibraryMeta(saveCtx, e.account, metaLastRun, string(raw)); err != nil {
 			e.logger.Warn("save apple library sync run", "error", err)
 		}
 	}
 	if run.OK && run.Mode == ModeFull {
-		if err := e.store.SetAppleLibraryMeta(saveCtx, metaLastFullAt, finished.Format(time.RFC3339Nano)); err != nil {
+		if err := e.store.SetAppleLibraryMeta(saveCtx, e.account, metaLastFullAt, finished.Format(time.RFC3339Nano)); err != nil {
 			e.logger.Warn("save apple library full sync time", "error", err)
 		}
 	}
@@ -204,7 +204,7 @@ func (p *passRun) fullKind(ctx context.Context, kind applemusic.LibraryKind) err
 		p.capped(string(kind), "the rest of the list is not cached", "kind", kind, "pages", maxPages[kind], "apple_total", endTotal)
 	case startTotal == endTotal:
 		p.uncapped(string(kind))
-		removed, err := p.e.store.DeleteAppleLibraryUnseen(ctx, string(kind), p.run.ID)
+		removed, err := p.e.store.DeleteAppleLibraryUnseen(ctx, p.e.account, string(kind), p.run.ID)
 		if err != nil {
 			return err
 		}
@@ -260,7 +260,7 @@ func (p *passRun) headKind(ctx context.Context, kind applemusic.LibraryKind, st 
 		for i, raw := range page.Items {
 			ids[i] = raw.ID
 		}
-		known, err := p.e.store.AppleLibraryKnownIDs(ctx, string(kind), ids)
+		known, err := p.e.store.AppleLibraryKnownIDs(ctx, p.e.account, string(kind), ids)
 		if err != nil {
 			return err
 		}
@@ -280,7 +280,7 @@ func (p *passRun) headKind(ctx context.Context, kind applemusic.LibraryKind, st 
 		return p.fullKind(ctx, kind)
 	}
 	if len(added) > 0 {
-		top, err := p.e.store.AppleLibraryMaxOrder(ctx, string(kind))
+		top, err := p.e.store.AppleLibraryMaxOrder(ctx, p.e.account, string(kind))
 		if err != nil {
 			return err
 		}
@@ -304,7 +304,7 @@ func (p *passRun) artistsTotal(ctx context.Context, st kindState) error {
 }
 
 func (p *passRun) reconcileTotal(ctx context.Context, kind applemusic.LibraryKind, st kindState, total int) error {
-	counts, err := p.e.store.AppleLibraryCounts(ctx)
+	counts, err := p.e.store.AppleLibraryCounts(ctx, p.e.account)
 	if err != nil {
 		return err
 	}
@@ -325,7 +325,7 @@ func (p *passRun) reconcileTotal(ctx context.Context, kind applemusic.LibraryKin
 }
 
 func (p *passRun) upsert(ctx context.Context, kind applemusic.LibraryKind, items []domain.AppleLibraryItem, setOrder bool) error {
-	res, err := p.e.store.UpsertAppleLibraryItems(ctx, string(kind), items, p.run.ID, setOrder)
+	res, err := p.e.store.UpsertAppleLibraryItems(ctx, p.e.account, string(kind), items, p.run.ID, setOrder)
 	p.run.Added += res.Added
 	p.run.Changed += res.Changed
 	return err
@@ -334,7 +334,7 @@ func (p *passRun) upsert(ctx context.Context, kind applemusic.LibraryKind, items
 // refreshTracks re-reads the track lists of playlists whose version changed
 // since their tracks were read, and on a full pass also the stalest lists.
 func (p *passRun) refreshTracks(ctx context.Context) error {
-	states, err := p.e.store.AppleLibraryPlaylistStates(ctx)
+	states, err := p.e.store.AppleLibraryPlaylistStates(ctx, p.e.account)
 	if err != nil {
 		return err
 	}
@@ -401,7 +401,7 @@ func (p *passRun) playlistTracks(ctx context.Context, st db.AppleLibraryPlaylist
 	if !capped {
 		p.uncapped(list)
 	}
-	return p.e.store.ReplaceAppleLibraryPlaylistTracks(ctx, st.ID, st.Version, tracks)
+	return p.e.store.ReplaceAppleLibraryPlaylistTracks(ctx, p.e.account, st.ID, st.Version, tracks)
 }
 
 // item maps an Apple library entry to a cache row.

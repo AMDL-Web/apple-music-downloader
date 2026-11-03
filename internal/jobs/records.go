@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"amdl/internal/config"
@@ -19,11 +20,63 @@ type recordKey struct {
 	id   string
 }
 
+// Storefronts is what the accounts say about storefronts
+// (usertoken.Provider): whether an active account serves one, and the
+// default account's.
+type Storefronts interface {
+	Serves(storefront string) bool
+	DefaultRegion() string
+}
+
+// SetStorefronts wires the accounts' storefronts. Without it, no link pins
+// its record and record runs show catalog.default_storefront.
+func (m *Manager) SetStorefronts(s Storefronts) {
+	m.catalogMu.Lock()
+	m.storefronts = s
+	m.catalogMu.Unlock()
+}
+
+func (m *Manager) accountStorefronts() Storefronts {
+	m.catalogMu.Lock()
+	defer m.catalogMu.Unlock()
+	return m.storefronts
+}
+
+// pinFor is the pin of a record a link of storefront adds: that storefront
+// when an account serves it, else none (the default account's).
+func (m *Manager) pinFor(storefront string) string {
+	s := m.accountStorefronts()
+	if s == nil || storefront == "" || !s.Serves(storefront) {
+		return ""
+	}
+	return strings.ToLower(storefront)
+}
+
+// readStorefront is the storefront a record pinned to pin is read in: the
+// pin, else the default account's, else catalog.default_storefront.
+func (m *Manager) readStorefront(pin string) string {
+	if pin != "" {
+		return pin
+	}
+	if s := m.accountStorefronts(); s != nil {
+		if region := s.DefaultRegion(); region != "" {
+			return region
+		}
+	}
+	return m.config().Catalog.DefaultStorefront
+}
+
 // recordRunURL is the input a record run shows: the record's catalog link in
-// the default storefront. The run resolves the record in the account
-// storefront whatever it says.
-func (m *Manager) recordRunURL(kind domain.ResourceKind, id string) string {
-	return fmt.Sprintf("https://music.apple.com/%s/%s/%s", m.config().Catalog.DefaultStorefront, kind, id)
+// the storefront it is read in (readStorefront).
+func (m *Manager) recordRunURL(kind domain.ResourceKind, id, pin string) string {
+	return fmt.Sprintf("https://music.apple.com/%s/%s/%s", m.readStorefront(pin), kind, id)
+}
+
+// RecordPin is the record's pinned storefront, "" for the default account
+// (jobs.RecordReporter).
+func (m *Manager) RecordPin(ctx context.Context, kind domain.ResourceKind, id string) (string, error) {
+	rec, err := m.recordStatus(ctx, kind, id)
+	return rec.pin, err
 }
 
 // queueRecordRunLocked inserts a queued run for a record, unless it already
@@ -48,7 +101,7 @@ func (m *Manager) queueRecordRunLocked(ctx context.Context, kind domain.Resource
 	}
 	now := time.Now().UTC()
 	job := domain.Job{
-		ID: ids.NewID("job"), Input: m.recordRunURL(kind, id), Type: string(kind), Overrides: rec.overrides,
+		ID: ids.NewID("job"), Input: m.recordRunURL(kind, id, rec.pin), Type: string(kind), Overrides: rec.overrides,
 		Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
 		ResourceKind: kind, ResourceID: id, Trigger: trigger, Priority: rec.priority,
 	}
@@ -113,11 +166,12 @@ const (
 )
 
 // AddAlbums adds whole-album records from source, without a catalog read,
-// and queues a run for each that needs one. The library monitor
+// and queues a run for each that needs one. A new record is pinned to
+// storefront ("" for the default account). The library monitor
 // (domain.SourceLibrarySync) skips albums removed from amdl and adds with the
 // auto priority class; other sources clear a removal and add as manual. An
 // error stops the batch: the albums before it keep their outcome.
-func (m *Manager) AddAlbums(ctx context.Context, source domain.RecordSource, albumIDs []string) (map[string]AddOutcome, error) {
+func (m *Manager) AddAlbums(ctx context.Context, source domain.RecordSource, storefront string, albumIDs []string) (map[string]AddOutcome, error) {
 	out := make(map[string]AddOutcome, len(albumIDs))
 	priority, trigger := domain.PriorityManual, triggerFor(source)
 	var tombstoned map[string]bool
@@ -133,7 +187,7 @@ func (m *Manager) AddAlbums(ctx context.Context, source domain.RecordSource, alb
 			out[id] = AddTombstoned
 			continue
 		}
-		outcome, _, err := m.addAlbum(ctx, db.AlbumAdd{ID: id, WantedAll: true, Source: source, Priority: priority}, trigger)
+		outcome, _, err := m.addAlbum(ctx, db.AlbumAdd{ID: id, WantedAll: true, Source: source, Priority: priority, Storefront: storefront}, trigger)
 		if err != nil {
 			return out, fmt.Errorf("add album %s: %w", id, err)
 		}

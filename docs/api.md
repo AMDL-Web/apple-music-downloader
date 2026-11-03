@@ -34,11 +34,11 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 401 | `authentication_failed` |
 | 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `catalog_not_found`, `hook_not_found`, `resource_not_found` (no record or pending add) |
 | 405 | `method_not_allowed`, with an `Allow` header |
-| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_not_queued`, `duplicate_active`, `already_logged_in`, `login_pending`, `hook_read_only`, `apple_library_sync_running`, `run_active`, `main_not_done`, `quality_present`, `check_running` |
+| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_not_queued`, `duplicate_active`, `already_logged_in`, `login_pending`, `account_limit_reached`, `hook_read_only`, `apple_library_sync_running`, `run_active`, `main_not_done`, `quality_present`, `check_running` |
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `invalid_hook`, `invalid_hooks_file`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
-| 501 | `login_unsupported` |
+| 501 | `login_unsupported`, `pairing_unsupported` |
 | 502 | `upstream_error` |
 | 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable`, `apple_library_unavailable`, `downloads_dir_unavailable` |
 | 504 | `upstream_timeout` |
@@ -194,17 +194,17 @@ restart.
 curl http://localhost:18080/api/v1/wrapper/status
 ```
 
-Returns `ready`, `logged_in`, `regions`, `accounts`, `login_supported` and
+Returns `ready`, `logged_in`, `regions`, `login_supported` and
 `media_user_token`. `logged_in` is true
-when an account is logged in and serves a storefront. `accounts` lists the account
-identifiers the wrapper reports (`[]` when none; neither wrapper-lite nor wrapper-manager
-reports any). `login_supported` is true when the wrapper is a wrapper-manager, or a
+when an account is logged in and serves a storefront. `regions` lists each storefront the
+wrapper's accounts serve once; the accounts themselves are under
+[Accounts](#accounts). `login_supported` is true when the wrapper is a wrapper-manager, or a
 wrapper amdl runs on this machine; the three routes below need one of them. The backend
 does not contact the wrapper at startup, so it starts fine without a reachable wrapper,
 and this endpoint is how you verify connectivity; an unreachable wrapper is
 `503 wrapper_unavailable`.
 
-`media_user_token` is the wrapper account's media-user-token as the backend has it, masked
+`media_user_token` is the default account's media-user-token as the backend has it, masked
 like the configured token in `GET /config` (`...` and its last four characters), or `""`
 when it has none. The backend reads it from a wrapper it runs itself, from the wrapper's
 `GET /token`, from `wrapper.data_dir`, or from its own copy of an earlier `GET /token`
@@ -254,12 +254,107 @@ curl -X POST http://localhost:18080/api/v1/wrapper/logout \
   -d '{"username":"apple-id@example.com"}'
 ```
 
+The body names the account by `username` or by `account_id` (an [account](#accounts)'s id),
+exactly one of them. The answer is `status` `logged_out` with the field you sent. amdl keeps
+the account's row, which becomes `missing`; `DELETE /accounts/{account_id}` removes it.
+
 Login errors: `401 authentication_failed`, `409 already_logged_in` (the account already
-has a wrapper), `409 login_pending` (a login for the account, or this session's two-step
+has a wrapper), `409 account_limit_reached` (a wrapper-manager holds at most 10 accounts,
+logins in flight included), `409 login_pending` (a login for the account, or this session's two-step
 code, is already in progress), `404 login_not_found` (the two-step session expired),
 `404 account_not_found` (logout of an account with no wrapper), `501 login_unsupported`
 (the wrapper is a bare wrapper-lite: log in with `wrapper-lite-rootless --login` on its
 host), `502 upstream_error`, `504 upstream_timeout`.
+
+### Pairing
+
+A wrapper behind a gateway that asks for a bearer token (the Cloudflare deploy of
+wrapper-manager) is reached through a pairing, device-code style. The credential is kept
+in the backend, never in `config.yaml` and never in a response.
+
+```bash
+curl http://localhost:18080/api/v1/wrapper/pairing
+curl -X POST http://localhost:18080/api/v1/wrapper/pairing
+curl -X DELETE http://localhost:18080/api/v1/wrapper/pairing
+```
+
+All three answer a `WrapperPairing`: `state` is `unpaired` (no credential), `pending` (a
+pairing is under way), `paired`, or `needs_pairing` (the wrapper answered `401` and amdl
+holds no credential it accepts: pair again). `pending` carries `user_code`,
+`verification_url`, `verification_url_complete` (the page with the code filled in, the link
+to show) and `expires_at`; `paired` carries `paired_at` and `access_expires_at`;
+`last_error` says why the last pairing or renewal failed.
+
+`POST` starts a pairing and answers `202` at once with state `pending`: the wrapper's owner
+opens `verification_url_complete`, checks `user_code` and approves it with a passkey. The
+backend names itself to the wrapper as `amdl on <hostname>`; a wrapper that rate-limits the
+start answers `429`, reported as `502 upstream_error`. The backend
+polls the wrapper in the background; poll `GET` every couple of seconds until the state
+leaves `pending`, which becomes `paired`, or `unpaired` with a `last_error` when the owner
+refused or the code expired. A new `POST` replaces a pairing under way. Once paired, every
+wrapper request carries the access token, which the backend renews before it expires and
+once after a `401`; a renewal the gateway refuses (its refresh token unused for 30 days, or
+revoked) drops the credential and the state becomes `needs_pairing`. `DELETE` forgets the
+credential and any pairing under way; wrapper requests then go out without a token.
+
+Errors: `501 pairing_unsupported` (`POST`: the wrapper takes requests without a token),
+`502 upstream_error` (`POST`: the wrapper could not be asked), `503 feature_unavailable`
+(a process started without a pairing), `500 internal_error` (`DELETE`: the stored credential
+could not be removed).
+
+## Accounts
+
+amdl serves several Apple Music accounts held by one wrapper-manager (at most 10). Its
+`/status` lists them as instances, by instance id, and `GET /token?instance=<id>` hands
+over each one's media-user-token. A wrapper that lists none (a bare wrapper-lite, or
+`catalog.media_user_token` alone) counts as one implicit account with the id `wrapper`.
+
+```bash
+curl http://localhost:18080/api/v1/accounts
+```
+
+```json
+{"accounts":[{"id":"6f1c…","name":"a@icloud.com","region":"us","position":0,"default":true,
+  "library_sync":true,"apple_library":true,"state":"active",
+  "added_at":"2026-11-02T08:30:00Z","seen_at":"2026-11-03T01:10:00Z","media_user_token":"...a1b2"}]}
+```
+
+The list is sorted by `position`; position 0 is the default account, which reads records
+with no pinned storefront and links whose storefront no account serves. `name` is the
+Apple ID, `""` when the wrapper does not say; `region` is the storefront, `""` while
+unknown; `media_user_token` is masked like the one in `GET /wrapper/status`, `""` when
+amdl has none. `state` is `active` or `missing` (the wrapper no longer reports it; its row
+and switches stay). The route makes no wrapper request: amdl reads the wrapper's accounts
+at start, every 10 minutes and after a login, logout or delete, so refetch a second or two
+after a login. A new account starts with `library_sync` and `apple_library` off; the one
+that adopts the library state of a database from before accounts takes `library_sync` from
+`library_sync.enabled` and `apple_library` on.
+
+```bash
+curl -X PATCH http://localhost:18080/api/v1/accounts/6f1c… \
+  -d '{"library_sync":true,"apple_library":true,"position":0}'
+```
+
+Any of `library_sync`, `apple_library` and `position` (an integer from 0), at least one.
+`position: 0` makes the account the default. The answer is the updated account;
+`404 account_not_found`.
+
+```bash
+curl -X DELETE http://localhost:18080/api/v1/accounts/6f1c…
+```
+
+Logs the account out of the wrapper and drops its row, its library-sync anchor, its Apple
+library cache and its stored token; files, records and runs stay. The answer is
+`{"deleted":"<id>","logged_out":true|false}`. `404 account_not_found`; `501
+login_unsupported` for the active implicit account of a bare wrapper-lite; wrapper
+errors `502` and `503`. Records pinned to the deleted account's storefront read in it
+while another account serves it, else they fail with `decryptor_unavailable`.
+
+A link is pinned to its storefront when an account serves that storefront, and read in the
+default account's storefront when none does. A record carries that as `pinned_storefront`
+(absent: the default account's), a pending add as `storefront`, and a record added by
+library sync is pinned to the syncing account's storefront. Add an account with
+`POST /wrapper/login` ([Wrapper](#wrapper)).
 
 ## Library
 
@@ -291,10 +386,10 @@ curl 'http://localhost:18080/api/v1/library/albums?flag=given_up,missing&sort=na
 curl http://localhost:18080/api/v1/library/albums/1463409338
 ```
 
-A record's rollup is stored with it: `tracks_wanted` (wanted tracks the account storefront
+A record's rollup is stored with it: `tracks_wanted` (wanted tracks its storefront
 lists), `tracks_done` (of those, the ones whose main slot is done), `tracks_failed`,
 `tracks_given_up`, `tracks_missing`, and `state`, `complete` when every wanted track is
-done. `withheld_count` counts tracks of the release the account storefront does not list;
+done. `withheld_count` counts tracks of the release its storefront does not list;
 they are not counted and not retried. A track's `files` are its slots: `main`, the first
 quality, owns the plain file name, and another quality is a codec slot whose file name
 carries a suffix such as ` [EC3 768Kbps]`. Each slot has `audio_state` (`pending`,
@@ -306,7 +401,7 @@ absolute `path`, `failures`, `next_attempt_at`, `last_error` and `last_job_id`.
 run that ends a slot failed counts a failure and the scheduler queues a new run (trigger
 `retry`) 30 minutes later, then each wait four times the last; after
 `download.give_up_after_runs` (default 3) the slot is `given_up` until a reset. An error
-that cannot pass gives up at once. A track the account storefront stops listing, and a
+that cannot pass gives up at once. A track its storefront stops listing, and a
 codec the track does not offer, is `unavailable` and never retried.
 
 **Download, pause, delete.** `POST /library/{kind}/{id}/download` resumes the record,
@@ -401,9 +496,10 @@ An album link, an album-track link and a catalog playlist (`pl.`) add or extend 
 [record](#library), set the failed, given-up and missing slots of what the link names
 pending, and queue its run when the record needs one; a record with an active run
 answers `duplicate_active` with that run's id. Every download is a new job. A record is
-read in the account's storefront whatever the link's says, so a `us` link on a `cn`
-account downloads the `cn` track list; the wrapper must serve the account storefront, else
-the link is `decryptor_unavailable` naming both. A station link is a one-off run read in
+read in its pinned storefront (`pinned_storefront`): the link's when an account serves it,
+else the default account's, so a `jp` link downloads the `jp` track list with a `jp`
+account and the default account's list without one. The wrapper must serve the pinned
+storefront, else the link is `decryptor_unavailable` naming both. A station link is a one-off run read in
 its own storefront. An artist link adds every album the artist read returns; `POST
 /library/add` with `include: "albums"` leaves singles out.
 
@@ -650,8 +746,8 @@ a song or album carries Apple's `audio_traits` as search hits do, and a station 
 album or playlist pages through its track list): never the animated-cover or Enhanced
 HLS reads, never a station's next-tracks feed, at most 15 seconds in all.
 
-A song, album or playlist is read in the account storefront, as its download is, so its
-`track_count` is what the download gets and a link the account storefront lacks is `404
+A song, album or playlist is read in the default account's storefront, as a download with
+no pin is, so its `track_count` is what that download gets and a link the storefront lacks is `404
 catalog_not_found`; `storefront` stays the link's. A station is read in its own storefront.
 An album, playlist or song amdl keeps a record of carries `resource` (a [record
 mark](#record-marks)).
@@ -725,8 +821,8 @@ A hit amdl keeps a record of carries `resource`, a [record mark](#record-marks):
 or playlist's own record, a song's album record with `song_state`. When the store cannot be
 read the hits come back unmarked rather than failing the search.
 
-`in_apple_library` says whether the item is in the signed-in Apple Music account library
-([Apple library](#apple-library)). The search asks Apple for its own mark on songs, albums
+`in_apple_library` says whether the item is in the Apple Music library of the account that serves the search's storefront, else of the default
+account ([Apple library](#apple-library)). The search asks Apple for its own mark on songs, albums
 and playlists with the media-user-token, at no extra request; where Apple leaves it out,
 and always for artists, the local Apple library cache answers once that kind has
 completed a full sync. The field is absent when neither can tell. A token Apple refuses
@@ -904,21 +1000,26 @@ invalid_hooks_file`, and nothing is written until it is fixed.
 curl http://localhost:18080/api/v1/library-sync
 ```
 
-Watcher status: enabled flag, interval, anchor entry count and the last pass's result.
-It answers even while the feature is disabled, so a client never has to guess.
+Watcher status: `enabled` (the master switch `library_sync.enabled`), `interval_minutes`
+and `accounts`, one entry per account, the default first: `account_id`, `name`, `region`,
+`enabled` (the account's `library_sync` switch), the anchor entry count and the last
+pass's result. An account polls while both switches are on and it is active. It answers
+even while the feature is disabled, so a client never has to guess.
 
 ```bash
-curl -X POST http://localhost:18080/api/v1/library-sync/reset
+curl -X POST http://localhost:18080/api/v1/library-sync/reset -d '{"account":"6f1c…"}'
 ```
 
-Clears the anchor. The next pass re-anchors to the library **as it stands then** and
+Clears one account's anchor (`account` is optional; absent is the default account;
+`404 account_not_found`). The answer is `account`, `cleared` and the new `status`. The next pass re-anchors to the library **as it stands then** and
 submits **nothing** — this is "forget history", not "replay history". To re-download an
 album, `POST /api/v1/downloads` it. See [automation.md](automation.md).
 
 ## Apple library
 
-The backend keeps a local copy of the signed-in Apple Music account library (Apple's
-"Library": albums, songs, playlists with their tracks, artists) and serves these routes
+The backend keeps a local copy of the Apple Music library of each account whose
+`apple_library` switch is on (Apple's "Library": albums, songs, playlists with their tracks,
+artists) and serves these routes
 from it alone, so browsing makes no Apple request. This is not the download library on
 disk. A sync fills the copy (`internal/applelibrary`); it never creates or changes a
 download job. It needs the media-user-token ([Wrapper](#wrapper)); without one, or while
@@ -937,7 +1038,8 @@ curl 'http://localhost:18080/api/v1/apple-library/albums?sort=added&limit=2'
    "release_date":"2026-10-17","genre":"Rock","date_added":"2026-10-26T15:20:21Z"}, …]}
 ```
 
-`GET /apple-library/{kind}` lists `albums`, `songs`, `playlists` or `artists`.
+`GET /apple-library/{kind}` lists `albums`, `songs`, `playlists` or `artists` of one account:
+`?account=<id>`, absent for the default account, `404 account_not_found` for an unknown one.
 
 | Parameter | Meaning |
 | --- | --- |
@@ -957,26 +1059,30 @@ in the library. An own playlist's `artwork_url` is a direct, expiring link with 
 and `synced_at` absent. `503 apple_library_unavailable` (`details.reason` `no_token` or
 `token_refused`) comes only when nothing is cached and no usable token can fill the copy.
 
-`GET /apple-library/playlists/{playlist_id}/tracks` returns a playlist's tracks in order,
+`GET /apple-library/playlists/{playlist_id}/tracks` (also with `?account=`) returns a playlist's tracks in order,
 `{playlist_id, items: [{position, song_id, catalog_id, url, name, artist_name,
 album_name, duration_ms, artwork_url}], total, read_at}`, `404 catalog_not_found` for a
 playlist that is not cached. It is how a playlist without a catalog link is shown and its
 songs downloaded one by one.
 
 ```bash
-curl -X POST http://localhost:18080/api/v1/apple-library/sync -d '{"mode":"full"}'
+curl -X POST http://localhost:18080/api/v1/apple-library/sync -d '{"mode":"full","account":"6f1c…"}'
 curl http://localhost:18080/api/v1/apple-library/status
 ```
 
-`POST /apple-library/sync` starts a sync in the background and answers `202` with the
-status; its `current.id` names the sync. `mode` is `full` (default) or `incremental`. A
+`POST /apple-library/sync` starts a sync of one account (`account`, absent for the default
+account) in the background and answers `202` with that account's entry of the status; its
+`current.id` names the sync. `mode` is `full` (default) or `incremental`. A
 sync under way answers `409 apple_library_sync_running` with `details.sync_id`; no token,
-`503 apple_library_unavailable`. `GET /apple-library/status` answers `available` (and
-`reason` when false), `state` (`idle`, `running`, `failed`), `current` while a sync
+`503 apple_library_unavailable`. `GET /apple-library/status` answers the two schedule keys
+(`sync_interval_minutes`, `full_sync_hours`) and `accounts`, one entry per account, the
+default first. An entry has `account_id`, `name`, `region`, `default`, `enabled` (the
+account's `apple_library` switch), `available` (and `reason` when false: `no_token`,
+`token_refused`, or `disabled` for a switch that is off or an account the wrapper no longer
+holds), `state` (`idle`, `running`, `failed`), `current` while a sync
 runs (`{id, mode, trigger, started_at, kind, pages_read, requests}`), `last_sync`
 (`{id, mode, trigger, started_at, finished_at, ok, error, requests, added, removed,
-changed, capped}`), `last_full_sync_at`, `next_sync_at`, `counts` per kind and the two schedule
-keys. There is no SSE event for the sync: poll the status every couple of seconds while
+changed, capped}`), `last_full_sync_at`, `next_sync_at` and `counts` per kind. There is no SSE event for the sync: poll the status every couple of seconds while
 `state` is `running`.
 
 How a sync keeps up without a change feed (Apple has none, and no per-song add time):

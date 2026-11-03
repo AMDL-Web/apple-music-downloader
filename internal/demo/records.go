@@ -288,9 +288,15 @@ var appleAlbums = []int{0, 4, 2, 7, 3}
 
 func (b *Backend) appleStatus(w http.ResponseWriter, r *http.Request) {
 	t := b.now().Add(-12 * time.Minute)
-	writeJSON(w, http.StatusOK, client.AppleLibraryStatus{Available: true, State: "idle",
+	acct := client.AppleLibraryAccountStatus{AccountID: demoAccountID, Name: "demo@example.com", Region: "us", Default: true, Enabled: true,
+		Available: true, State: "idle",
 		LastSync: &client.AppleLibraryRun{ID: "sync-1", Mode: "incremental", Trigger: "schedule", StartedAt: t, FinishedAt: &t, OK: true},
-		Counts:   map[string]int{"albums": len(appleAlbums), "songs": 12, "playlists": 2, "artists": 3}, SyncIntervalMinutes: 30, FullSyncHours: 24})
+		Counts:   map[string]int{"albums": len(appleAlbums), "songs": 12, "playlists": 2, "artists": 3}}
+	if r.Method == http.MethodPost {
+		writeJSON(w, http.StatusAccepted, acct)
+		return
+	}
+	writeJSON(w, http.StatusOK, client.AppleLibraryStatus{SyncIntervalMinutes: 30, FullSyncHours: 24, Accounts: []client.AppleLibraryAccountStatus{acct}})
 }
 
 func (b *Backend) appleList(w http.ResponseWriter, r *http.Request) {

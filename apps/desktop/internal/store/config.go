@@ -219,15 +219,16 @@ func (s *Store) RestartServer() {
 	}()
 }
 
-// ResetLibrarySync clears the library sync's anchor: its next check records
-// the library as it is then and queues nothing.
-func (s *Store) ResetLibrarySync() {
+// ResetLibrarySync clears the library sync's anchor of account ("" for the
+// default account): its next check records the library as it is then and
+// queues nothing.
+func (s *Store) ResetLibrarySync(account string) {
 	if s.client == nil {
 		return
 	}
 	c, ctx := s.client, s.ctx
 	go func() {
-		_, err := c.Call(ctx, http.MethodPost, "/api/v1/library-sync/reset", nil, nil)
+		_, err := c.ResetLibrarySync(ctx, account)
 		s.postIf(ctx, func() {
 			if err != nil {
 				s.setNotice("Library sync did not start over: "+Reason(err), true)

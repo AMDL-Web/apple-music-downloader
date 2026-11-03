@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"amdl/internal/domain"
 )
@@ -12,7 +13,7 @@ import (
 // ErrPendingNotFound is returned when no pending add has the id.
 var ErrPendingNotFound = errors.New("pending add not found")
 
-const pendingColumns = `id, kind, catalog_id, album_hint, source, priority, paused, include, overrides, added_at, attempts, last_error, state`
+const pendingColumns = `id, kind, catalog_id, album_hint, source, priority, paused, include, overrides, added_at, attempts, last_error, state, storefront`
 
 func scanPending(row jobScanner) (domain.PendingAdd, error) {
 	var (
@@ -20,7 +21,7 @@ func scanPending(row jobScanner) (domain.PendingAdd, error) {
 		kind, source, overrides, added, state string
 	)
 	if err := row.Scan(&p.ID, &kind, &p.CatalogID, &p.AlbumHint, &source, &p.Priority, &p.Paused, &p.Include, &overrides,
-		&added, &p.Attempts, &p.LastError, &state); err != nil {
+		&added, &p.Attempts, &p.LastError, &state, &p.Storefront); err != nil {
 		return domain.PendingAdd{}, err
 	}
 	var err error
@@ -35,8 +36,9 @@ func scanPending(row jobScanner) (domain.PendingAdd, error) {
 // AddPending stores an add that needs a catalog read, one row per (kind,
 // catalog id). Adding an existing one re-arms it (pending, no attempts),
 // keeps the higher priority class, unpauses it unless the new add is paused,
-// and takes the new add's overrides and album hint when it has them. It
-// returns the stored row.
+// and takes the new add's overrides and album hint when it has them. The
+// storefront the add is read in is the first one given: a later add keeps
+// it unless the row had none. It returns the stored row.
 func (s *Store) AddPending(ctx context.Context, p domain.PendingAdd) (domain.PendingAdd, error) {
 	if p.Kind == "" || p.CatalogID == "" || p.Source == "" {
 		return domain.PendingAdd{}, fmt.Errorf("add pending: kind, catalog id and source are required")
@@ -44,21 +46,23 @@ func (s *Store) AddPending(ctx context.Context, p domain.PendingAdd) (domain.Pen
 	if p.Priority == 0 {
 		p.Priority = domain.PriorityManual
 	}
+	p.Storefront = strings.ToLower(strings.TrimSpace(p.Storefront))
 	overrides, err := encodeOverrides(p.Overrides)
 	if err != nil {
 		return domain.PendingAdd{}, err
 	}
 	return withTx(ctx, s.db, func(tx *sql.Tx) (domain.PendingAdd, error) {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO pending_adds(kind, catalog_id, album_hint, source, priority, paused, include, overrides, added_at, state)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+		if _, err := tx.ExecContext(ctx, `INSERT INTO pending_adds(kind, catalog_id, album_hint, source, priority, paused, include, overrides, added_at, state, storefront)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
 			ON CONFLICT(kind, catalog_id) DO UPDATE SET
 				album_hint = CASE WHEN excluded.album_hint <> '' THEN excluded.album_hint ELSE album_hint END,
 				priority = MIN(priority, excluded.priority),
 				paused = paused AND excluded.paused,
 				include = CASE WHEN excluded.include <> '' THEN excluded.include ELSE include END,
 				overrides = CASE WHEN excluded.overrides <> '' THEN excluded.overrides ELSE overrides END,
+				storefront = CASE WHEN storefront = '' THEN excluded.storefront ELSE storefront END,
 				attempts = 0, last_error = '', state = 'pending'`,
-			string(p.Kind), p.CatalogID, p.AlbumHint, string(p.Source), p.Priority, p.Paused, p.Include, overrides, formatTime(p.AddedAt)); err != nil {
+			string(p.Kind), p.CatalogID, p.AlbumHint, string(p.Source), p.Priority, p.Paused, p.Include, overrides, formatTime(p.AddedAt), p.Storefront); err != nil {
 			return domain.PendingAdd{}, fmt.Errorf("add pending %s %s: %w", p.Kind, p.CatalogID, err)
 		}
 		return scanPending(tx.QueryRowContext(ctx, `SELECT `+pendingColumns+` FROM pending_adds WHERE kind = ? AND catalog_id = ?`, string(p.Kind), p.CatalogID))

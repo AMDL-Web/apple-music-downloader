@@ -389,12 +389,16 @@ func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server, span int) 
 			display(c, st.word, 24).SingleLine()
 			pill(c, k, st.kind, st.icon, st.state)
 		})
-		if w != nil && len(w.Accounts) > 0 {
+		if w != nil && len(sv.Accounts) > 0 {
 			ui.Row(c).Gap(8).Wrap().Children(func() {
-				for _, acc := range w.Accounts {
-					ui.Row(c.Key(acc)).Height(28).PaddingX(10).Gap(6).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2).AlignItems(ui.Center).Children(func() {
-						ui.Icon(c, icPerson).FontSize(12).TextColor(k.Faint)
-						mono(c, acc, 12)
+				for _, acc := range sv.Accounts {
+					col := k.Faint
+					if acc.State == client.AccountActive {
+						col = k.OK
+					}
+					ui.Row(c.Key(acc.ID)).Height(28).PaddingX(10).Gap(7).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2).AlignItems(ui.Center).Children(func() {
+						ui.Box(c).Size(6, 6).Radius(radiusFull).Background(col)
+						mono(c, accountLabel(acc), 12).SingleLine().Ellipsis("…")
 					})
 				}
 			})
@@ -426,16 +430,7 @@ func syncCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
 				pill(c, k, pillWait, nil, "Off in config")
 			}
 		})
-		switch {
-		case l.LastError != "":
-			cardFoot(c, k, l.LastError)
-		case l.LastPollAt == nil:
-			cardFoot(c, k, "Not polled yet")
-		case l.LastSubmitted == 0:
-			cardFoot(c, k, "Last pass "+format.Clock(*l.LastPollAt)+" · nothing new")
-		default:
-			cardFoot(c, k, "Last pass "+format.Clock(*l.LastPollAt)+" · "+plural(l.LastSubmitted, "album")+" queued")
-		}
+		cardFoot(c, k, syncFoot(syncShown(l)))
 	})
 }
 

@@ -7,6 +7,7 @@
 // on its own. An artist opens its albums in New download.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
+import { defaultAppleAccount } from '../lib/accounts.js';
 import { getAppleLibraryStatus, syncAppleLibrary, listAppleLibrary, listAppleLibraryTracks, listAlbumRecords, listPlaylistRecords, createDownload } from '../api.js';
 import { libraryHash, recordHash, buildHash, settingsHash } from '../lib/route.js';
 import { count, trackLength } from '../lib/format.js';
@@ -63,14 +64,14 @@ function useRecordIds(app) {
   return [ids, () => setStamp((n) => n + 1)];
 }
 
-/** The sync status, polled while a sync runs. */
+/** The default account's sync status, polled while a sync runs. */
 function useAppleStatus(app) {
   const [status, setStatus] = useState({ data: null, error: null });
   const [stamp, setStamp] = useState(0);
   useEffect(() => {
     let live = true;
     getAppleLibraryStatus().then(
-      (data) => live && setStatus({ data, error: null }),
+      (data) => live && setStatus({ data: defaultAppleAccount(data), error: null }),
       (error) => live && setStatus((s) => ({ data: s.data, error })),
     );
     return () => {
@@ -146,7 +147,7 @@ export function AppleLibrary({ filters }) {
   const left = Math.max(0, page.total - page.items.length);
   if (unavailable) {
     return html`<${Notice} role="warning" icon="key" action=${html`<a class="link" href=${settingsHash('account')}>Account settings</a>`}>
-      ${st && st.reason === 'token_refused' ? 'Apple refused the media-user-token.' : 'No media-user-token to read the Apple Music library with.'}
+      ${st && st.reason === 'disabled' ? 'The Apple Music library is turned off for this account.' : st && st.reason === 'token_refused' ? 'Apple refused the media-user-token.' : 'No media-user-token to read the Apple Music library with.'}
     </${Notice}>`;
   }
   return html`<div class="apple-lib">

@@ -134,7 +134,40 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   // The restart keys saved since the last restart.
   const pending = new Set();
   const configBody = () => ({ config, persisted: true, pending_restart: [...pending].sort() });
-  const librarySync = { enabled: false, interval_minutes: 15, anchor_size: 0, last_submitted: 0, total_submitted: 0 };
+  const accounts = [
+    { id: 'wm_demo_us', name: 'demo@example.com', region: STOREFRONT, position: 0, default: true, library_sync: true, apple_library: true, state: 'active', added_at: iso(now - 30 * 86400000), seen_at: iso(now - 60000), media_user_token: '...a1b2' },
+    { id: 'wm_demo_jp', name: 'demo.jp@example.com', region: 'jp', position: 1, default: false, library_sync: false, apple_library: false, state: 'active', added_at: iso(now - 9 * 86400000), seen_at: iso(now - 60000), media_user_token: '...c3d4' },
+  ];
+  const sortAccounts = () => {
+    accounts.sort((a, b) => a.position - b.position);
+    accounts.forEach((a, i) => {
+      a.position = i;
+      a.default = i === 0;
+    });
+  };
+  const librarySync = { enabled: true, interval_minutes: 15, anchor_size: 0, last_submitted: 0, total_submitted: 0 };
+  const librarySyncBody = () => ({
+    enabled: librarySync.enabled,
+    interval_minutes: librarySync.interval_minutes,
+    accounts: accounts.map((a) => ({
+      account_id: a.id,
+      name: a.name,
+      region: a.region,
+      enabled: a.library_sync,
+      anchor_size: a.default ? librarySync.anchor_size || 50 : 0,
+      last_poll_at: iso(now - 4 * 60000),
+      last_submitted: a.default ? librarySync.last_submitted : 0,
+      total_submitted: a.default ? librarySync.total_submitted : 0,
+    })),
+  });
+  const appleAccount = (a) => {
+    const { sync_interval_minutes, full_sync_hours, ...status } = records.appleStatus();
+    return { account_id: a.id, name: a.name, region: a.region, default: a.default, enabled: a.apple_library, ...(a.apple_library ? status : { available: false, reason: 'disabled', state: 'idle', counts: { albums: 0, songs: 0, playlists: 0, artists: 0 } }) };
+  };
+  const appleStatusBody = () => {
+    const { sync_interval_minutes, full_sync_hours } = records.appleStatus();
+    return { sync_interval_minutes, full_sync_hours, accounts: accounts.map(appleAccount) };
+  };
   const hooks = createHookStore({
     enabled: true,
     entries: [
@@ -882,6 +915,24 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     if (appleTracks && method === 'GET') return json(200, records.appleTracks(decodeURIComponent(appleTracks[1])));
     const pendingAdd = path.match(/^\/api\/v1\/library\/pending\/([^/]+)(\/retry)?$/);
     if (pendingAdd) return apiError(404, 'resource_not_found', 'no pending add with this id');
+    const account = path.match(/^\/api\/v1\/accounts\/([^/]+)$/);
+    if (account && (method === 'PATCH' || method === 'DELETE')) {
+      const acc = accounts.find((a) => a.id === decodeURIComponent(account[1]));
+      if (!acc) return apiError(404, 'account_not_found', 'no account with this id');
+      if (method === 'DELETE') {
+        accounts.splice(accounts.indexOf(acc), 1);
+        sortAccounts();
+        return json(200, { deleted: acc.id, logged_out: true });
+      }
+      const body = await readBody(req);
+      if (typeof body.library_sync === 'boolean') acc.library_sync = body.library_sync;
+      if (typeof body.apple_library === 'boolean') acc.apple_library = body.apple_library;
+      if (Number.isInteger(body.position) && body.position >= 0) {
+        acc.position = body.position - 0.5;
+        sortAccounts();
+      }
+      return json(200, acc);
+    }
     const job = path.match(/^\/api\/v1\/downloads\/(job_[0-9a-f]+)(?:\/(cancel|retry|move|events))?$/);
     if (job) return jobRoute(method, job[1], job[2], q, req.signal, job[2] === 'move' ? await readBody(req) : undefined);
     const artist = path.match(/^\/api\/v1\/artists\/([^/]+)\/albums$/);
@@ -916,13 +967,20 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       case 'POST /api/v1/system/restart':
         pending.clear();
         return json(202, { restarting: true });
+      case 'GET /api/v1/accounts':
+        return json(200, { accounts });
       case 'GET /api/v1/library-sync':
-        return json(200, librarySync);
-      case 'POST /api/v1/library-sync/reset':
-        librarySync.anchor_size = 0;
-        return json(200, librarySync);
+        return json(200, librarySyncBody());
+      case 'POST /api/v1/library-sync/reset': {
+        const body = await readBody(req);
+        const acc = body.account ? accounts.find((a) => a.id === body.account) : accounts[0];
+        if (!acc) return apiError(404, 'account_not_found', 'no account with this id');
+        const cleared = acc.default ? librarySync.anchor_size : 0;
+        if (acc.default) librarySync.anchor_size = 0;
+        return json(200, { account: acc.id, cleared, status: librarySyncBody() });
+      }
       case 'GET /api/v1/wrapper/status':
-        return json(200, { ready: true, logged_in: true, regions: [STOREFRONT, 'jp', 'cn'], accounts: [], login_supported: false, media_user_token: '' });
+        return json(200, { ready: true, logged_in: true, regions: [...new Set(accounts.map((a) => a.region))], login_supported: false, media_user_token: accounts.length ? accounts[0].media_user_token : '' });
       case 'GET /api/v1/logs': {
         const match = logMatcher(q);
         const after = Number(q.get('cursor')) || 0;
@@ -987,9 +1045,13 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       case 'POST /api/v1/library/check':
         return json(202, { check: records.startCheck(await readBody(req)) });
       case 'GET /api/v1/apple-library/status':
-        return json(200, records.appleStatus());
-      case 'POST /api/v1/apple-library/sync':
-        return json(202, records.appleStatus());
+        return json(200, appleStatusBody());
+      case 'POST /api/v1/apple-library/sync': {
+        const body = await readBody(req);
+        const acc = body.account ? accounts.find((a) => a.id === body.account) : accounts[0];
+        if (!acc) return apiError(404, 'account_not_found', 'no account with this id');
+        return json(202, appleAccount(acc));
+      }
     }
     return apiError(404, 'not_found', `no route ${method} ${path}`);
   }

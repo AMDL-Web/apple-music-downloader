@@ -149,7 +149,7 @@ func TestHeroPercentGainingADigitMovesNothingElse(t *testing.T) {
 }
 
 func TestWaitingWordsKeepTheirButtonWhereItWas(t *testing.T) {
-	serving := &client.WrapperStatus{Ready: true, Regions: []string{}, Accounts: []string{}, LoginSupported: true,
+	serving := &client.WrapperStatus{Ready: true, Regions: []string{}, LoginSupported: true,
 		Managed: &client.ManagedWrapper{Mode: "serving", Accel: "kvm"}}
 	// slowly shows the frame of the request leaving, then the one a moment
 	// past statusDelay.

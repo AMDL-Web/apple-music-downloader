@@ -68,24 +68,25 @@ type fakeStore struct {
 	writes int
 }
 
-func (s *fakeStore) LoadLibrarySyncAnchor(context.Context) ([]domain.LibraryAnchorEntry, error) {
+func (s *fakeStore) LoadLibrarySyncAnchor(context.Context, string) ([]domain.LibraryAnchorEntry, error) {
 	return s.anchor, nil
 }
 
-func (s *fakeStore) ReplaceLibrarySyncAnchor(_ context.Context, entries []domain.LibraryAnchorEntry) error {
+func (s *fakeStore) ReplaceLibrarySyncAnchor(_ context.Context, _ string, entries []domain.LibraryAnchorEntry) error {
 	s.anchor = append([]domain.LibraryAnchorEntry(nil), entries...)
 	s.writes++
 	return nil
 }
 
-func (s *fakeStore) ClearLibrarySyncAnchor(context.Context) (int64, error) {
+func (s *fakeStore) ClearLibrarySyncAnchor(context.Context, string) (int64, error) {
 	n := int64(len(s.anchor))
 	s.anchor = nil
 	return n, nil
 }
 
 type fakeSubmitter struct {
-	batches [][]string
+	batches     [][]string
+	storefronts []string
 	// outcomes answers the listed album ids with this outcome instead of
 	// jobs.AddQueued.
 	outcomes map[string]jobs.AddOutcome
@@ -94,7 +95,8 @@ type fakeSubmitter struct {
 	failAt string
 }
 
-func (f *fakeSubmitter) AddAlbums(_ context.Context, source domain.RecordSource, ids []string) (map[string]jobs.AddOutcome, error) {
+func (f *fakeSubmitter) AddAlbums(_ context.Context, source domain.RecordSource, storefront string, ids []string) (map[string]jobs.AddOutcome, error) {
+	f.storefronts = append(f.storefronts, storefront)
 	if source != domain.SourceLibrarySync {
 		return nil, fmt.Errorf("source = %q, want library_sync", source)
 	}
@@ -142,7 +144,7 @@ func newWatcher(t *testing.T, lib *fakeLibrary, store *fakeStore, jobs *fakeSubm
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	return New(config.NewStore(cfg), nil, lib, store, jobs, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return New(config.NewStore(cfg), nil, nil, lib, store, jobs, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 // A first pass records where the library stands and submits nothing: whatever
@@ -152,7 +154,7 @@ func TestFirstPassAnchorsWithoutSubmitting(t *testing.T) {
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
 	store := &fakeStore{}
 	jobs := &fakeSubmitter{}
-	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background())
+	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 0 {
 		t.Fatalf("first pass submitted %v, want nothing", jobs.batches)
@@ -174,7 +176,7 @@ func TestQuietPassSubmitsNothing(t *testing.T) {
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
 	store := &fakeStore{anchor: toEntries(songs[:anchorSize])}
 	jobs := &fakeSubmitter{}
-	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background())
+	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 0 {
 		t.Fatalf("quiet pass submitted %v, want nothing", jobs.batches)
@@ -194,7 +196,7 @@ func TestSongsBeyondAnchorWindowAreNotNew(t *testing.T) {
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
 	store := &fakeStore{anchor: toEntries(songs[:anchorSize])}
 	jobs := &fakeSubmitter{}
-	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background())
+	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 0 {
 		t.Fatalf("older songs past the anchor window were submitted: %v", jobs.batches)
@@ -210,7 +212,7 @@ func TestNewSongsSubmitDedupedAlbums(t *testing.T) {
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
 	store := &fakeStore{anchor: toEntries(songs[3 : 3+anchorSize])}
 	jobs := &fakeSubmitter{}
-	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background())
+	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 1 {
 		t.Fatalf("batches = %v, want exactly one", jobs.batches)
@@ -236,7 +238,7 @@ func TestAlbumWithoutCatalogCounterpartIsSkipped(t *testing.T) {
 	store := &fakeStore{anchor: toEntries(songs[2 : 2+anchorSize])}
 	jobs := &fakeSubmitter{}
 	w := newWatcher(t, lib, store, jobs, nil)
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 1 {
 		t.Fatalf("batches = %v, want just the resolvable album", jobs.batches)
@@ -249,7 +251,7 @@ func TestAlbumWithoutCatalogCounterpartIsSkipped(t *testing.T) {
 	if store.anchor[0].SongID != "i.song0" {
 		t.Fatalf("anchor head = %q, want it advanced past the skipped album", store.anchor[0].SongID)
 	}
-	if status := w.Status(); status.LastError != "" {
+	if status := w.statusOf(t); status.LastError != "" {
 		t.Fatalf("last_error = %q, want a clean pass", status.LastError)
 	}
 }
@@ -262,7 +264,7 @@ func TestMissingAnchorReanchorsWithoutSubmitting(t *testing.T) {
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
 	store := &fakeStore{anchor: []domain.LibraryAnchorEntry{{SongID: "i.deleted"}}}
 	jobs := &fakeSubmitter{}
-	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background())
+	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 0 {
 		t.Fatalf("submitted %v after losing the anchor, want nothing", jobs.batches)
@@ -280,12 +282,12 @@ func TestIdleWithoutMediaUserToken(t *testing.T) {
 	store := &fakeStore{}
 	jobs := &fakeSubmitter{}
 	w := newWatcher(t, lib, store, jobs, func(c *config.Config) { c.Catalog.MediaUserToken = "" })
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 
 	if lib.pageCalls != 0 {
 		t.Fatalf("made %d Apple requests without a token, want 0", lib.pageCalls)
 	}
-	if status := w.Status(); status.LastError != IdleNoToken {
+	if status := w.statusOf(t); status.LastError != IdleNoToken {
 		t.Fatalf("last_error = %q, want %q", status.LastError, IdleNoToken)
 	}
 }
@@ -298,9 +300,9 @@ func TestWrapperTokenRunsWithoutConfigToken(t *testing.T) {
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
 	wrapperToken := strings.Repeat("W", 200)
-	tokens := usertoken.New(func() (string, error) { return wrapperToken, nil })
-	w := New(config.NewStore(cfg), tokens, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	w.RunOnce(context.Background())
+	tokens := usertoken.NewReading(func(string) (string, error) { return wrapperToken, nil })
+	w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w.RunOnce(context.Background(), testAccount)
 
 	if lib.pageCalls == 0 {
 		t.Fatal("the watcher stayed idle although the wrapper has a token")
@@ -308,7 +310,7 @@ func TestWrapperTokenRunsWithoutConfigToken(t *testing.T) {
 	if lib.lastToken != wrapperToken {
 		t.Fatalf("library read with a %d-byte token, want the wrapper's", len(lib.lastToken))
 	}
-	if status := w.Status(); status.LastError != "" {
+	if status := w.statusOf(t); status.LastError != "" {
 		t.Fatalf("last_error = %q, want none", status.LastError)
 	}
 }
@@ -319,13 +321,13 @@ func TestIdleWhenNeitherSourceHasAToken(t *testing.T) {
 	lib := &fakeLibrary{}
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
-	tokens := usertoken.New(func() (string, error) { return "", nil })
-	w := New(config.NewStore(cfg), tokens, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	w.RunOnce(context.Background())
+	tokens := usertoken.NewReading(func(string) (string, error) { return "", nil })
+	w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w.RunOnce(context.Background(), testAccount)
 	if lib.pageCalls != 0 {
 		t.Fatalf("made %d Apple requests without a token, want 0", lib.pageCalls)
 	}
-	if status := w.Status(); status.LastError != IdleNoToken {
+	if status := w.statusOf(t); status.LastError != IdleNoToken {
 		t.Fatalf("last_error = %q, want %q", status.LastError, IdleNoToken)
 	}
 }
@@ -339,14 +341,14 @@ func TestResetAnchorThenReanchorSubmitsNothing(t *testing.T) {
 	jobs := &fakeSubmitter{}
 	w := newWatcher(t, lib, store, jobs, nil)
 
-	cleared, err := w.ResetAnchor(context.Background())
+	cleared, err := w.ResetAnchor(context.Background(), testAccount)
 	if err != nil {
 		t.Fatalf("reset: %v", err)
 	}
 	if cleared != int64(anchorSize) {
 		t.Fatalf("cleared = %d, want %d", cleared, anchorSize)
 	}
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 	if len(jobs.batches) != 0 {
 		t.Fatalf("reset then pass submitted %v, want nothing", jobs.batches)
 	}
@@ -364,7 +366,7 @@ func TestLargeBurstPagesBeyondTheMargin(t *testing.T) {
 	// the first request.
 	store := &fakeStore{anchor: toEntries(songs[60 : 60+anchorSize])}
 	jobs := &fakeSubmitter{}
-	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background())
+	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 60 {
 		count := 0
@@ -391,13 +393,13 @@ func TestResetDuringPassIsNotUndone(t *testing.T) {
 	lib.onResolve = func() {
 		if resets == 0 {
 			resets++
-			if _, err := w.ResetAnchor(context.Background()); err != nil {
+			if _, err := w.ResetAnchor(context.Background(), testAccount); err != nil {
 				t.Errorf("reset: %v", err)
 			}
 		}
 	}
 
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 
 	if resets != 1 {
 		t.Fatalf("reset ran %d times, want once mid-pass", resets)
@@ -405,12 +407,12 @@ func TestResetDuringPassIsNotUndone(t *testing.T) {
 	if store.writes != 0 || len(store.anchor) != 0 {
 		t.Fatalf("pass rewrote the anchor after a reset: %d writes, %d entries", store.writes, len(store.anchor))
 	}
-	if status := w.Status(); status.AnchorSize != 0 || status.LastError != "" {
+	if status := w.statusOf(t); status.AnchorSize != 0 || status.LastError != "" {
 		t.Fatalf("status = %+v, want an empty anchor and no error", status)
 	}
 
 	// The next pass re-anchors from scratch and submits nothing new.
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 	if len(store.anchor) != anchorSize || len(jobs.batches) != 1 {
 		t.Fatalf("after reset: anchor %d entries, batches %v; want a fresh anchor and no new submission", len(store.anchor), jobs.batches)
 	}
@@ -427,17 +429,17 @@ func TestResetDuringFailingPassForgetsPendingAlbums(t *testing.T) {
 	w := newWatcher(t, lib, store, jobs, nil)
 	lib.onResolve = func() {
 		lib.onResolve = nil
-		if _, err := w.ResetAnchor(context.Background()); err != nil {
+		if _, err := w.ResetAnchor(context.Background(), testAccount); err != nil {
 			t.Errorf("reset: %v", err)
 		}
 	}
 
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 
 	if store.writes != 0 || len(store.anchor) != 0 {
 		t.Fatalf("anchor after reset = %d entries in %d writes, want it left empty", len(store.anchor), store.writes)
 	}
-	if status := w.Status(); status.LastError != "" || status.AnchorSize != 0 {
+	if status := w.statusOf(t); status.LastError != "" || status.AnchorSize != 0 {
 		t.Fatalf("status = %+v, want no retry error and an empty anchor", status)
 	}
 }
@@ -463,7 +465,7 @@ func TestRunReturnsAfterCancelAndInFlightPass(t *testing.T) {
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
 	cfg.Catalog.MediaUserToken = "token"
-	w := New(config.NewStore(cfg), nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := New(config.NewStore(cfg), nil, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -496,13 +498,13 @@ func TestRunPassesOnceATokenAppears(t *testing.T) {
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
 	var loggedIn atomic.Bool
-	tokens := usertoken.New(func() (string, error) {
+	tokens := usertoken.NewReading(func(string) (string, error) {
 		if loggedIn.Load() {
 			return strings.Repeat("W", 200), nil
 		}
 		return "", nil
 	})
-	w := New(config.NewStore(cfg), tokens, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -512,7 +514,7 @@ func TestRunPassesOnceATokenAppears(t *testing.T) {
 		close(done)
 	}()
 	time.Sleep(20 * time.Millisecond)
-	if status := w.Status(); status.LastError != IdleNoToken {
+	if status := w.statusOf(t); status.LastError != IdleNoToken {
 		t.Fatalf("last_error = %q before the login, want %q", status.LastError, IdleNoToken)
 	}
 	loggedIn.Store(true)
@@ -523,4 +525,23 @@ func TestRunPassesOnceATokenAppears(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+// testAccount is the account a watcher without Accounts watches: the token
+// provider's default.
+const testAccount = "wrapper"
+
+// statusOf is the test account's entry of Status.
+func (w *Watcher) statusOf(t *testing.T) AccountStatus {
+	t.Helper()
+	st, err := w.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range st.Accounts {
+		if a.AccountID == testAccount {
+			return a
+		}
+	}
+	return AccountStatus{AccountID: testAccount}
 }

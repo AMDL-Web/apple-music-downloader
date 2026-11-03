@@ -126,6 +126,9 @@ type RecordReporter interface {
 	SlotLyrics(ctx context.Context, runID string, key domain.FileKey, state domain.LyricsStatus) error
 	SetCoverStates(ctx context.Context, kind domain.ResourceKind, id string, cover, artist domain.CoverState) error
 	SetRecordMotionArtwork(ctx context.Context, albumID string, art domain.MotionArtwork) error
+	// RecordPin is the storefront the record is read in, "" for the
+	// default account's.
+	RecordPin(ctx context.Context, kind domain.ResourceKind, id string) (string, error)
 }
 
 var _ RecordReporter = (*Manager)(nil)
@@ -466,6 +469,7 @@ type recordStatus struct {
 	catalog   domain.CatalogState
 	priority  int
 	overrides *config.DownloadOverrides
+	pin       string
 }
 
 func (m *Manager) recordStatus(ctx context.Context, kind domain.ResourceKind, id string) (recordStatus, error) {
@@ -475,13 +479,13 @@ func (m *Manager) recordStatus(ctx context.Context, kind domain.ResourceKind, id
 		if err != nil {
 			return recordStatus{}, err
 		}
-		return recordStatus{paused: a.Paused, state: a.State, wantedAll: a.WantedAll, resolved: a.ResolvedAt != nil, catalog: a.CatalogState, priority: a.Priority, overrides: a.Overrides}, nil
+		return recordStatus{paused: a.Paused, state: a.State, wantedAll: a.WantedAll, resolved: a.ResolvedAt != nil, catalog: a.CatalogState, priority: a.Priority, overrides: a.Overrides, pin: a.PinnedStorefront}, nil
 	case domain.ResourcePlaylist:
 		p, err := m.store.GetPlaylist(ctx, id)
 		if err != nil {
 			return recordStatus{}, err
 		}
-		return recordStatus{paused: p.Paused, state: p.State, wantedAll: true, resolved: p.ResolvedAt != nil, catalog: p.CatalogState, priority: p.Priority, overrides: p.Overrides}, nil
+		return recordStatus{paused: p.Paused, state: p.State, wantedAll: true, resolved: p.ResolvedAt != nil, catalog: p.CatalogState, priority: p.Priority, overrides: p.Overrides, pin: p.PinnedStorefront}, nil
 	}
 	return recordStatus{}, fmt.Errorf("unknown record kind %q", kind)
 }

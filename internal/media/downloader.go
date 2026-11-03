@@ -29,8 +29,12 @@ type Downloader struct {
 	cfg   config.Config
 	// tokens picks the media-user-token for playlists, stations and the
 	// in-process playback requests; nil uses catalog.media_user_token alone.
-	tokens  *usertoken.Provider
-	catalog downloaderCatalog
+	tokens *usertoken.Provider
+	// storefront is the storefront a job-scoped clone reads in: the token
+	// of the account that serves it is used (usertoken.Provider.TokenFor).
+	// Empty uses the default account's.
+	storefront string
+	catalog    downloaderCatalog
 	// playback sends lyrics, WebPlayback and license requests to Apple
 	// itself when there is a media-user-token (see playbackClient); nil
 	// leaves all of them to the wrapper.
@@ -175,16 +179,20 @@ func (d *Downloader) validateRequest(ctx context.Context, url string) (jobs.Vali
 	return result, nil
 }
 
-// requestStorefront is the storefront a submitted link's run reads in: the
-// account storefront for a record (the link's own storefront only names it),
-// the link's for a station, which plays in it. An unreadable account
-// storefront skips the check; the run reads it again and fails there.
+// requestStorefront is the storefront a submitted link's run reads in: for
+// a record the link's when an account serves it (the record is pinned to
+// it), else the default account's; the link's for a station, which plays in
+// it. An unreadable account storefront skips the check; the run reads it
+// again and fails there.
 func (d *Downloader) requestStorefront(ctx context.Context, typ applemusic.URLType, linkStorefront string) (string, string, bool) {
 	if typ == applemusic.TypeStation {
 		return linkStorefront, "the link's storefront", true
 	}
 	if d.cfg.Simulate.Enabled {
 		return "", "", false
+	}
+	if d.tokens.Serves(linkStorefront) {
+		return strings.ToLower(linkStorefront), "the link's storefront", true
 	}
 	account, err := d.AccountStorefront(ctx)
 	if err != nil {

@@ -74,7 +74,7 @@ func remoteAddr(s *mode.Settings) { s.RemoteURL = "http://192.168.3.5:18570" }
 func managed(st, accel string, ready, in bool) *client.WrapperStatus {
 	w := &client.WrapperStatus{Ready: ready, LoggedIn: in, LoginSupported: true, Managed: &client.ManagedWrapper{Mode: st, Accel: accel}}
 	if in {
-		w.Accounts, w.Regions = []string{"someone@icloud.com"}, []string{"us"}
+		w.Regions = []string{"us"}
 	}
 	return w
 }
@@ -145,6 +145,7 @@ var setupStages = []setupStage{
 	{name: "12-ready", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, _ *ui.Tester) {
 		tools(s)
 		v.Store.Server.Wrapper = managed("serving", "tcg", true, true)
+		v.Store.Server.Accounts = []client.Account{{ID: "a1", Name: "someone@icloud.com", Region: "us", Default: true, State: client.AccountActive}}
 		storage(&v.Store.Server)
 	}},
 	{name: "13-start-failed", settings: standalone, show: mode.Standalone,

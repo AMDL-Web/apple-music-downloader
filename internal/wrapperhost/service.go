@@ -23,7 +23,7 @@ type Service struct {
 // and never answer it.
 func (s Service) Status(ctx context.Context) (wrapper.Status, error) {
 	m := s.Sup.Managed()
-	st := wrapper.Status{Regions: []string{}, Accounts: []string{}}
+	st := wrapper.Status{Regions: []string{}}
 	if m.Mode == "serving" {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -61,3 +61,7 @@ func (s Service) Logout(ctx context.Context, account string) error {
 	}
 	return wrapper.ErrAccountNotFound
 }
+
+// LogoutAccount implements the backend's wrapper service: the manager
+// removes an instance by its id.
+func (s Service) LogoutAccount(ctx context.Context, id string) error { return s.Logout(ctx, id) }

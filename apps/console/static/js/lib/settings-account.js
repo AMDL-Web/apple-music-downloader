@@ -66,6 +66,8 @@ export function wrapperErrorText(err, step = 'login') {
       return { message: step === 'code' ? 'Apple did not accept this code. Enter your password to start again.' : 'Apple did not accept this Apple ID and password.', detail: '' };
     case 'already_logged_in':
       return { message: 'This account is already logged in.', detail: '' };
+    case 'account_limit_reached':
+      return { message: raw || 'The session service holds the most accounts it can. Log one out first.', detail: '' };
     case 'login_pending':
       return { message: 'A login for this account is already in progress. Finish it, or wait for it to time out.', detail: '' };
     case 'login_not_found':

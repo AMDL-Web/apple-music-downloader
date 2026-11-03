@@ -127,7 +127,10 @@ export const putHook = (name, body) => request('PUT', `/api/v1/hooks/${encodeURI
 export const testHook = (name) => request('POST', `/api/v1/hooks/${encodeURIComponent(name)}/test`, undefined, { timeoutMs: HOOK_TEST_TIMEOUT_MS });
 /** Removes the webhook entry `name` from hooks.yaml. */
 export const deleteHook = (name) => request('DELETE', `/api/v1/hooks/${encodeURIComponent(name)}`);
+/** {enabled, interval_minutes, accounts: [{account_id, name, region, enabled, anchor_size, last_poll_at, last_error, last_submitted, total_submitted}]}. */
 export const getLibrarySync = () => request('GET', '/api/v1/library-sync');
+/** {accounts: [{id, name, region, position, default, library_sync, apple_library, state, ...}]}, default first. */
+export const getAccounts = () => request('GET', '/api/v1/accounts');
 export const getWrapperStatus = () => request('GET', '/api/v1/wrapper/status');
 export const listDownloads = (query) => request('GET', '/api/v1/downloads', query);
 export const getDownload = (id) => request('GET', `/api/v1/downloads/${encodeURIComponent(id)}`);
@@ -176,7 +179,7 @@ export const loginWrapper = ({ username, password }) =>
 export const submitWrapperTwoStep = (loginId, code) =>
   request('POST', `/api/v1/wrapper/login/${encodeURIComponent(loginId)}/2fa`, undefined, { body: { two_step_code: code }, timeoutMs: LOGIN_TIMEOUT_MS });
 export const logoutWrapper = (username) => request('POST', '/api/v1/wrapper/logout', undefined, { body: { username } });
-/** Clears the library-sync anchor; the next poll re-anchors without submitting albums. */
+/** Clears the default account's library-sync anchor; the next poll re-anchors without submitting albums. */
 export const resetLibrarySync = () => request('POST', '/api/v1/library-sync/reset');
 
 // Records (/library): `kind` is album(s) or playlist(s).
@@ -209,9 +212,9 @@ export const startCheck = (body = {}) => request('POST', '/api/v1/library/check'
 export const getCheck = () => request('GET', '/api/v1/library/check');
 
 // The Apple Music account library cache.
-/** {available, reason?, state, current?, last_sync?, counts, ...} (AppleLibraryStatus). */
+/** {sync_interval_minutes, full_sync_hours, accounts: [{account_id, name, region, default, enabled, available, reason?, state, current?, last_sync?, counts, ...}]}. */
 export const getAppleLibraryStatus = () => request('GET', '/api/v1/apple-library/status');
-/** Starts a full sync; 409 apple_library_sync_running, 503 apple_library_unavailable. */
+/** Starts a full sync of the default account (answers its entry of the status); 409 apple_library_sync_running, 503 apple_library_unavailable. */
 export const syncAppleLibrary = () => request('POST', '/api/v1/apple-library/sync', undefined, { body: { mode: 'full' } });
 /** One page of a kind (albums, songs, playlists, artists): query {sort?, order?, q?, limit?, offset?}. */
 export const listAppleLibrary = (kind, query) => request('GET', `/api/v1/apple-library/${encodeURIComponent(kind)}`, query);

@@ -44,11 +44,11 @@ import { useShowKeys } from './settings-keys.js';
 import { useRestart } from './settings-restart.js';
 
 const EMPTY = { loaded: false, error: null, base: {}, persisted: true, reloadError: '', pending: [] };
-const STATUS_KEYS = ['health', 'system', 'wrapper', 'librarySync', 'hooks', 'stats', 'logs', 'config'];
+const STATUS_KEYS = ['health', 'system', 'wrapper', 'accounts', 'librarySync', 'hooks', 'stats', 'logs', 'config'];
 
 // The head actions that read a domain again (D18), by section, and the keys they read.
 const REFRESH = {
-  account: { label: 'Refresh session status', keys: ['wrapper'] },
+  account: { label: 'Refresh session status', keys: ['wrapper', 'accounts'] },
   jobs: { label: 'Refresh jobs status', keys: ['system', 'stats'] },
   library_sync: { label: 'Refresh library sync status', keys: ['librarySync'] },
   hooks: { label: 'Refresh hooks status', keys: ['hooks', 'stats'] },
@@ -360,7 +360,7 @@ export function SettingsPage({ route }) {
   }, [section.id]);
   const headLoading = Boolean(views[section.id]) && views[section.id].state === 'loading';
   const cfgLoading = !cfg.loaded && !cfg.error;
-  const accountLoading = section.id === 'account' && (!st.system || !st.wrapper);
+  const accountLoading = section.id === 'account' && (!st.system || !st.wrapper || !st.accounts);
   const held = !late && (headLoading || cfgLoading || accountLoading);
 
   const form = { valueOf, dirtyKeys, errors, warnings, setValue, revert, showKeys };

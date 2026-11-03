@@ -63,13 +63,13 @@ func exitFor(code string, status int) int {
 	case "route_not_found", "job_not_found", "login_not_found", "account_not_found", "catalog_not_found", "resource_not_found":
 		return exitNotFound
 	case "job_active", "job_not_retryable", "job_not_cancellable", "job_not_queued", "duplicate_active",
-		"already_logged_in", "login_pending", "method_not_allowed", "apple_library_sync_running",
+		"already_logged_in", "login_pending", "account_limit_reached", "method_not_allowed", "apple_library_sync_running",
 		"run_active", "main_not_done", "quality_present", "check_running":
 		return exitConflict
 	case "upstream_error", "queue_full", "wrapper_unavailable", "feature_unavailable", "apple_library_unavailable", "downloads_dir_unavailable",
 		"upstream_timeout", "server_unreachable", "server_not_configured":
 		return exitUnavailable
-	case "authentication_failed", "login_unsupported":
+	case "authentication_failed", "login_unsupported", "pairing_failed", "pairing_unsupported":
 		return exitAuth
 	case "internal_error", "store_error":
 		return exitInternal
@@ -109,6 +109,8 @@ func asCLIError(err error) *cliError {
 			if strings.Contains(string(api.Details), "managed_wrapper") {
 				ce.Hint = "this machine runs its own wrapper, which sets wrapper.address; to use another, run amdl wrapper uninstall, then " + otherWrapper
 			}
+		case "pairing_unsupported":
+			ce.Hint = "this wrapper takes requests without a token, so there is nothing to pair"
 		case "wrapper_unavailable":
 			ce.Hint = "the backend cannot reach its wrapper; start the wrapper, or point the backend at another: " + restartWithWrapper
 		}

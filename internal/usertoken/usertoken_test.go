@@ -23,30 +23,36 @@ func cfgWith(token, dataDir string) config.Config {
 	return cfg
 }
 
-// managedReader returns a managed reader that answers val and counts calls.
-func managedReader(val string, err error, calls *int) func() (string, error) {
-	return func() (string, error) {
-		*calls++
-		return val, err
+// dataDirWith is a wrapper.data_dir whose MUSIC_TOKEN holds val, or none
+// when val is empty.
+func dataDirWith(t *testing.T, val string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if val != "" {
+		writeFile(t, filepath.Join(dir, FileName), val, time.Time{})
 	}
+	return dir
 }
 
 func TestTokenPrecedence(t *testing.T) {
-	var calls int
+	unreadable := t.TempDir()
+	if err := os.Mkdir(filepath.Join(unreadable, FileName), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name string
 		p    *Provider
 		cfg  config.Config
 		want Token
 	}{
-		{"wrapper beats config", New(managedReader(wrapperTok, nil, &calls)), cfgWith(configTok, ""), Token{wrapperTok, SourceWrapper}},
-		{"config when the wrapper has none", New(managedReader("", nil, &calls)), cfgWith("  "+configTok+"\n", ""), Token{configTok, SourceConfig}},
-		{"config when the wrapper file is unreadable", New(managedReader("", errors.New("boom"), &calls)), cfgWith(configTok, ""), Token{configTok, SourceConfig}},
-		{"config when the wrapper file is not a token", New(managedReader("short", nil, &calls)), cfgWith(configTok, ""), Token{configTok, SourceConfig}},
-		{"nil provider is config only", nil, cfgWith(configTok, ""), Token{configTok, SourceConfig}},
-		{"no managed reader and no data_dir", New(nil), cfgWith(configTok, ""), Token{configTok, SourceConfig}},
-		{"none anywhere", New(managedReader("", nil, &calls)), cfgWith("   ", ""), Token{}},
-		{"nil provider and no config token", nil, cfgWith("", ""), Token{}},
+		{"wrapper beats config", New(), cfgWith(configTok, dataDirWith(t, wrapperTok)), Token{wrapperTok, SourceWrapper, implicitID}},
+		{"config when the wrapper has none", New(), cfgWith("  "+configTok+"\n", dataDirWith(t, "")), Token{configTok, SourceConfig, implicitID}},
+		{"config when the wrapper file is unreadable", New(), cfgWith(configTok, unreadable), Token{configTok, SourceConfig, implicitID}},
+		{"config when the wrapper file is not a token", New(), cfgWith(configTok, dataDirWith(t, "short")), Token{configTok, SourceConfig, implicitID}},
+		{"nil provider is config only", nil, cfgWith(configTok, ""), Token{configTok, SourceConfig, implicitID}},
+		{"no data_dir", New(), cfgWith(configTok, ""), Token{configTok, SourceConfig, implicitID}},
+		{"none anywhere", New(), cfgWith("   ", dataDirWith(t, "")), Token{Account: implicitID}},
+		{"nil provider and no config token", nil, cfgWith("", ""), Token{Account: implicitID}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,7 +65,7 @@ func TestTokenPrecedence(t *testing.T) {
 
 func TestNilProviderWrapper(t *testing.T) {
 	var p *Provider
-	if v, err := p.Wrapper(cfgWith(configTok, t.TempDir())); v != "" || err != nil {
+	if v, err := p.Wrapper(cfgWith(configTok, t.TempDir()), implicitID); v != "" || err != nil {
 		t.Fatalf("nil Wrapper = %d bytes, %v; want none", len(v), err)
 	}
 }
@@ -104,49 +110,34 @@ func TestValidate(t *testing.T) {
 }
 
 func TestInvalidWrapperTokenIsAnError(t *testing.T) {
-	var calls int
-	val := "short"
-	p := New(func() (string, error) { calls++; return val, nil })
-	if _, err := p.Wrapper(config.Default()); !errors.Is(err, ErrInvalid) {
+	dir := dataDirWith(t, "short")
+	p := New()
+	if _, err := p.Wrapper(cfgWith("", dir), implicitID); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("Wrapper error = %v, want ErrInvalid", err)
 	}
-	val = wrapperTok
-	if v, err := p.Wrapper(config.Default()); err != nil || v != wrapperTok {
+	writeFile(t, filepath.Join(dir, FileName), wrapperTok, time.Time{})
+	if v, err := p.Wrapper(cfgWith("", dir), implicitID); err != nil || v != wrapperTok {
 		t.Fatalf("after a valid write Wrapper = %d bytes, %v", len(v), err)
 	}
-	if calls != 2 {
-		t.Fatalf("reads = %d, want 2", calls)
-	}
 }
 
-// Every use reads the file afresh: a refreshed token is used at once.
+// Every use reads the file afresh: a refreshed token is used at once, and a
+// token written right after a miss is seen on the next read.
 func TestReadsEveryTime(t *testing.T) {
-	var calls int
-	val := wrapperTok
-	p := New(func() (string, error) { calls++; return val, nil })
-	cfg := config.Default()
-	if v, _ := p.Wrapper(cfg); v != wrapperTok {
-		t.Fatal("first read")
-	}
-	val = strings.Repeat("N", 200) // the wrapper refreshes its token
-	if v, _ := p.Wrapper(cfg); v != val || calls != 2 {
-		t.Fatalf("second read: %d calls, want a fresh read of the new token", calls)
-	}
-}
-
-func TestTokenAppearsRightAfterAMiss(t *testing.T) {
-	var calls int
-	val := ""
-	p := New(func() (string, error) { calls++; return val, nil })
-	if v, err := p.Wrapper(config.Default()); v != "" || err != nil {
+	dir := dataDirWith(t, "")
+	p := New()
+	cfg := cfgWith("", dir)
+	if v, err := p.Wrapper(cfg, implicitID); v != "" || err != nil {
 		t.Fatalf("no token: %d bytes, %v", len(v), err)
 	}
-	val = wrapperTok // a login lands
-	if v, _ := p.Wrapper(config.Default()); v != wrapperTok {
+	writeFile(t, filepath.Join(dir, FileName), wrapperTok, time.Time{}) // a login lands
+	if v, _ := p.Wrapper(cfg, implicitID); v != wrapperTok {
 		t.Fatal("a token written right after a miss is not seen on the next read")
 	}
-	if calls != 2 {
-		t.Fatalf("reads = %d, want 2", calls)
+	refreshed := strings.Repeat("N", 200)
+	writeFile(t, filepath.Join(dir, FileName), refreshed, time.Time{})
+	if v, _ := p.Wrapper(cfg, implicitID); v != refreshed {
+		t.Fatal("a refreshed token is not read afresh")
 	}
 }
 
@@ -170,8 +161,8 @@ func TestDataDirLiteLayout(t *testing.T) {
 	writeFile(t, filepath.Join(dir, FileName), wrapperTok+"\n", time.Time{})
 	// A direct file wins over instances, whatever their age.
 	writeFile(t, filepath.Join(dir, "instances", "a", FileName), configTok, time.Now().Add(time.Hour))
-	got := New(nil).Token(cfgWith(configTok, dir))
-	if got != (Token{wrapperTok, SourceWrapper}) {
+	got := New().Token(cfgWith(configTok, dir))
+	if got != (Token{wrapperTok, SourceWrapper, implicitID}) {
 		t.Fatalf("Token = %q source, %d bytes; want the direct MUSIC_TOKEN", got.Source, len(got.Value))
 	}
 }
@@ -187,7 +178,7 @@ func TestDataDirManagerLayoutNewestWins(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "instances", "33333333-cccc"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	v, err := New(nil).Wrapper(cfgWith("", dir))
+	v, err := New().Wrapper(cfgWith("", dir), implicitID)
 	if err != nil || v != newer {
 		t.Fatalf("Wrapper = %d bytes, %v; want the newest instance's token", len(v), err)
 	}
@@ -200,11 +191,11 @@ func TestDataDirMissingIsNoToken(t *testing.T) {
 		"instances without tokens": func() string { d := t.TempDir(); _ = os.MkdirAll(filepath.Join(d, "instances", "x"), 0o755); return d }(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			v, err := New(nil).Wrapper(cfgWith(configTok, dir))
+			v, err := New().Wrapper(cfgWith(configTok, dir), implicitID)
 			if v != "" || err != nil {
 				t.Fatalf("Wrapper = %d bytes, %v; want no token", len(v), err)
 			}
-			if got := New(nil).Token(cfgWith(configTok, dir)); got.Source != SourceConfig {
+			if got := New().Token(cfgWith(configTok, dir)); got.Source != SourceConfig {
 				t.Fatalf("Token source = %q, want config", got.Source)
 			}
 		})
@@ -214,24 +205,8 @@ func TestDataDirMissingIsNoToken(t *testing.T) {
 func TestDataDirInvalidFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, FileName), strings.Repeat("a", 3*maxLen), time.Time{})
-	if _, err := New(nil).Wrapper(cfgWith("", dir)); !errors.Is(err, ErrInvalid) {
+	if _, err := New().Wrapper(cfgWith("", dir), implicitID); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("oversized file: err = %v, want ErrInvalid", err)
-	}
-}
-
-func TestDataDirIgnoredWhenManaged(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, FileName), wrapperTok, time.Time{})
-	var calls int
-	p := New(managedReader("", nil, &calls))
-	if v, err := p.Wrapper(cfgWith("", dir)); v != "" || err != nil {
-		t.Fatalf("managed with no token read data_dir: %d bytes, %v", len(v), err)
-	}
-	if calls != 1 {
-		t.Fatalf("managed reader calls = %d, want 1", calls)
-	}
-	if got := p.Token(cfgWith(configTok, dir)); got.Source != SourceConfig {
-		t.Fatalf("Token source = %q, want config", got.Source)
 	}
 }
 
@@ -240,11 +215,11 @@ func TestEachDataDirReadsItsOwn(t *testing.T) {
 	tokA, tokB := strings.Repeat("A", 200), strings.Repeat("B", 200)
 	writeFile(t, filepath.Join(a, FileName), tokA, time.Time{})
 	writeFile(t, filepath.Join(b, FileName), tokB, time.Time{})
-	p := New(nil)
-	if v, _ := p.Wrapper(cfgWith("", a)); v != tokA {
+	p := New()
+	if v, _ := p.Wrapper(cfgWith("", a), implicitID); v != tokA {
 		t.Fatal("first data_dir")
 	}
-	if v, _ := p.Wrapper(cfgWith("", b)); v != tokB {
+	if v, _ := p.Wrapper(cfgWith("", b), implicitID); v != tokB {
 		t.Fatal("a second data_dir got the first one's token")
 	}
 }

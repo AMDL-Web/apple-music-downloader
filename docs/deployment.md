@@ -232,13 +232,17 @@ connection with `GET /api/v1/wrapper/status`.
 
 | Option | Upstream | Port | Login |
 | --- | --- | --- | --- |
-| wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager fork, `manager/` in AMDL-Web/wrapper](https://github.com/AMDL-Web/wrapper/tree/lite/manager): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
+| wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager fork, `manager/` in AMDL-Web/wrapper](https://github.com/AMDL-Web/wrapper/tree/lite/manager): supervises one wrapper-lite per account behind one HTTP port, at most 10 accounts | 8080 | From the console's Account page, through its `POST /login` |
 | wrapper-lite | [AMDL-Web's wrapper fork, `lite` branch](https://github.com/AMDL-Web/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
-The local managed guest runs wrapper-manager and holds up to ten accounts;
-a bare wrapper-lite holds one. See [Install](install.md#a-wrapper-amdl-runs) for
-persistence and upgrades, and [token selection](configuration.md#the-media-user-token)
-for the per-account provider boundary.
+The local managed guest runs wrapper-manager too. Wrapper-manager holds up to 10 accounts, and amdl serves them all: each account's
+storefront is served by its own account, and the console's Settings page switches library
+sync and the Apple library per account. A bare wrapper-lite holds one. A wrapper-manager
+behind a gateway that asks for a token (the Cloudflare deploy) is paired once: run `amdl wrapper pair`,
+or press Connect in the desktop app, open the page it prints, and approve the code with your passkey
+([Pairing](api.md#pairing)). The credential stays in the backend's data directory
+([configuration.md](configuration.md#wrapper)); `amdl wrapper pair --status` shows whether it is still
+accepted.
 
 The wrapper-lite that amdl points to is AMDL-Web's fork of
 [upstream's `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite)
@@ -312,7 +316,7 @@ then restart from the notice:
 - wrapper-manager as a compose service: `http://wrapper-manager:8080`. It keeps its
   accounts and the wrapper-lite payload in the `wrapper-data` volume; the first start
   downloads the payload from nightly.link, so it needs internet access. Log in on the
-  console's Account page, then check that `GET /api/v1/wrapper/status` lists a region.
+  console's Account page, then check that `GET /api/v1/wrapper/status` lists a region and `GET /api/v1/accounts` the account.
 - wrapper-lite as a compose service: `http://wrapper-lite:12340`. Put `USERNAME` and
   `PASSWORD` in a `.env` file next to the compose file for the first start, which logs
   in; with a 2FA code, write it to `2fa.txt` in the mounted data directory. The image

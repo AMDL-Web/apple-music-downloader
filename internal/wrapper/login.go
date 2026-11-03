@@ -29,6 +29,7 @@ const (
 	msgLoginFailed     = "login failed"
 	msgNoPendingLogin  = "no pending login"
 	msgNoSuchAccount   = "no such account"
+	msgAccountLimit    = "account limit reached"
 )
 
 // twoStepWindow is how long a login that needs a code keeps its password while
@@ -228,10 +229,20 @@ func (c *Client) SubmitTwoStepCode(ctx context.Context, loginID, code string) (L
 
 // Logout ends username's login and deletes its data in the wrapper.
 func (c *Client) Logout(ctx context.Context, username string) error {
+	return c.logout(ctx, map[string]string{"username": username})
+}
+
+// LogoutAccount is Logout by a wrapper-manager's instance id, the account id
+// of GET /api/v1/accounts.
+func (c *Client) LogoutAccount(ctx context.Context, id string) error {
+	return c.logout(ctx, map[string]string{"id": id})
+}
+
+func (c *Client) logout(ctx context.Context, body map[string]string) error {
 	if err := c.requireLoginAPI(ctx); err != nil {
 		return err
 	}
-	_, err := c.call(ctx, http.MethodPost, "/logout", nil, map[string]string{"username": username})
+	_, err := c.call(ctx, http.MethodPost, "/logout", nil, body)
 	var reply *ReplyError
 	if errors.As(err, &reply) && reply.Msg == msgNoSuchAccount {
 		return ErrAccountNotFound
@@ -249,6 +260,8 @@ func loginFailure(err error) error {
 			return ErrAlreadyLoggedIn
 		case reply.Msg == msgLoginTimeout:
 			return ErrLoginTimeout
+		case strings.HasPrefix(reply.Msg, msgAccountLimit):
+			return ErrAccountLimit
 		case strings.HasPrefix(reply.Msg, msgLoginFailed):
 			return fmt.Errorf("%w: %s", ErrAuthenticationFailed, reply.Msg)
 		case strings.HasPrefix(reply.Msg, msgNoPendingLogin):

@@ -40,12 +40,23 @@ func (b *Backend) handler() http.Handler {
 		b.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
 	})
+	m.HandleFunc("GET /api/v1/accounts", func(w http.ResponseWriter, r *http.Request) {
+		b.mu.Lock()
+		in := b.signedIn
+		b.mu.Unlock()
+		list := client.AccountList{Accounts: []client.Account{}}
+		if in {
+			list.Accounts = append(list.Accounts, client.Account{ID: demoAccountID, Name: "demo@example.com", Region: "us", Default: true,
+				LibrarySync: true, AppleLibrary: true, State: client.AccountActive, AddedAt: b.now(), MediaUserToken: "...d3mo"})
+		}
+		writeJSON(w, http.StatusOK, list)
+	})
 	m.HandleFunc("GET /api/v1/stats", b.stats)
 	m.HandleFunc("GET /api/v1/library-sync", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, client.LibrarySync{IntervalMinutes: 60})
+		writeJSON(w, http.StatusOK, demoLibrarySync)
 	})
 	m.HandleFunc("POST /api/v1/library-sync/reset", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, client.LibrarySync{IntervalMinutes: 60})
+		writeJSON(w, http.StatusOK, client.LibrarySyncReset{Account: demoAccountID, Cleared: true, Status: demoLibrarySync})
 	})
 	m.HandleFunc("GET /api/v1/hooks", b.listHooks)
 	m.HandleFunc("PUT /api/v1/hooks", b.setHooksEnabled)
@@ -125,13 +136,19 @@ func (b *Backend) system(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
+// demoAccountID is the one account the demo backend holds.
+const demoAccountID = "demo"
+
+var demoLibrarySync = client.LibrarySync{IntervalMinutes: 60, Accounts: []client.LibrarySyncAccount{
+	{AccountID: demoAccountID, Name: "demo@example.com", Region: "us"}}}
+
 func (b *Backend) wrapperStatus(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	in := b.signedIn
 	b.mu.Unlock()
-	s := client.WrapperStatus{Ready: true, LoggedIn: in, LoginSupported: true, Regions: []string{}, Accounts: []string{}}
+	s := client.WrapperStatus{Ready: true, LoggedIn: in, LoginSupported: true, Regions: []string{}}
 	if in {
-		s.Regions, s.Accounts, s.MediaUserToken = []string{"us"}, []string{"demo@example.com"}, "...d3mo"
+		s.Regions, s.MediaUserToken = []string{"us"}, "...d3mo"
 	}
 	writeJSON(w, http.StatusOK, s)
 }

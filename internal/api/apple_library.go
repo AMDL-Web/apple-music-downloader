@@ -11,17 +11,19 @@ import (
 	"amdl/internal/applemusic"
 )
 
-// AppleLibraryService is the cache of the user's Apple Music account library
-// and its sync (internal/applelibrary). Every read is served from the cache.
+// AppleLibraryService is the cache of each account's Apple Music library and
+// its sync (internal/applelibrary.Set). Every read is served from the cache;
+// an empty account is the default account.
 type AppleLibraryService interface {
-	List(ctx context.Context, q applelibrary.Query) (applelibrary.Page, error)
-	PlaylistTracks(ctx context.Context, playlistID string) (applelibrary.Tracks, error)
-	Trigger(ctx context.Context, mode string) (applelibrary.Status, error)
-	Status(ctx context.Context) applelibrary.Status
-	Running() string
+	List(ctx context.Context, account string, q applelibrary.Query) (applelibrary.Page, error)
+	PlaylistTracks(ctx context.Context, account, playlistID string) (applelibrary.Tracks, error)
+	Trigger(ctx context.Context, account, mode string) (applelibrary.AccountStatus, error)
+	Status(ctx context.Context) applelibrary.SetStatus
+	Running(ctx context.Context, account string) string
 	// Membership reports which catalog ids of a search group are in the
-	// cached library; nil when the cache cannot tell.
-	Membership(ctx context.Context, kind string, catalogIDs []string) map[string]bool
+	// cached library of the account that serves storefront; nil when the
+	// cache cannot tell.
+	Membership(ctx context.Context, storefront, kind string, catalogIDs []string) map[string]bool
 }
 
 const (
@@ -75,7 +77,7 @@ func (s *Server) appleLibraryList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, fmt.Sprintf("q must be at most %d characters", appleLibraryMaxQRunes))
 		return
 	}
-	page, err := s.appleLibrary.List(r.Context(), applelibrary.Query{
+	page, err := s.appleLibrary.List(r.Context(), q.Get("account"), applelibrary.Query{
 		Kind: kind, Sort: sortBy, Desc: desc, Q: text, Limit: limit, Offset: offset,
 	})
 	if err != nil {
@@ -93,7 +95,7 @@ func (s *Server) appleLibraryPlaylistTracks(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "playlist_id must be a library playlist id (p.…)")
 		return
 	}
-	tracks, err := s.appleLibrary.PlaylistTracks(r.Context(), id)
+	tracks, err := s.appleLibrary.PlaylistTracks(r.Context(), r.URL.Query().Get("account"), id)
 	if errors.Is(err, applelibrary.ErrPlaylistNotFound) {
 		writeError(w, http.StatusNotFound, CodeCatalogNotFound, fmt.Sprintf("playlist %s is not in the cached Apple library", id))
 		return
@@ -106,11 +108,13 @@ func (s *Server) appleLibraryPlaylistTracks(w http.ResponseWriter, r *http.Reque
 }
 
 type appleLibrarySyncRequest struct {
-	Mode string `json:"mode"`
+	Mode    string `json:"mode"`
+	Account string `json:"account"`
 }
 
-// appleLibrarySync answers POST /apple-library/sync: it starts a pass in the
-// background and answers 202 with the status, whose current.id is the pass.
+// appleLibrarySync answers POST /apple-library/sync: it starts a pass of the
+// account (the default one when the body names none) in the background and
+// answers 202 with that account's status, whose current.id is the pass.
 func (s *Server) appleLibrarySync(w http.ResponseWriter, r *http.Request) {
 	var req appleLibrarySyncRequest
 	if r.ContentLength != 0 {
@@ -126,10 +130,10 @@ func (s *Server) appleLibrarySync(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "mode must be full or incremental")
 		return
 	}
-	status, err := s.appleLibrary.Trigger(r.Context(), req.Mode)
+	status, err := s.appleLibrary.Trigger(r.Context(), req.Account, req.Mode)
 	if errors.Is(err, applelibrary.ErrRunning) {
 		writeErrorDetails(w, http.StatusConflict, CodeAppleLibrarySyncRunning, err.Error(),
-			map[string]string{"sync_id": s.appleLibrary.Running()})
+			map[string]string{"sync_id": s.appleLibrary.Running(r.Context(), req.Account)})
 		return
 	}
 	if err != nil {
@@ -145,6 +149,10 @@ func (s *Server) appleLibraryStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeAppleLibraryError(w http.ResponseWriter, err error, op string) {
+	if errors.Is(err, applelibrary.ErrAccountNotFound) {
+		writeError(w, http.StatusNotFound, CodeAccountNotFound, err.Error())
+		return
+	}
 	var unavailable applelibrary.UnavailableError
 	if errors.As(err, &unavailable) {
 		writeErrorDetails(w, http.StatusServiceUnavailable, CodeAppleLibraryUnavailable, unavailable.Error(),
@@ -165,8 +173,9 @@ func isAppleLibraryKind(kind string) bool {
 
 // markAppleLibrary sets in_apple_library on search hits: Apple's own mark
 // when the search carried a usable media-user-token, else the cache's answer
-// for kinds the cache has read in full; otherwise the field stays out.
-func (s *Server) markAppleLibrary(ctx context.Context, group applemusic.SearchType, hits []*searchHit, live map[string]bool) {
+// of the account that serves storefront, for kinds that cache has read in
+// full; otherwise the field stays out.
+func (s *Server) markAppleLibrary(ctx context.Context, storefront string, group applemusic.SearchType, hits []*searchHit, live map[string]bool) {
 	var missing []string
 	for _, h := range hits {
 		if in, ok := live[h.ID]; ok {
@@ -178,7 +187,7 @@ func (s *Server) markAppleLibrary(ctx context.Context, group applemusic.SearchTy
 	if len(missing) == 0 {
 		return
 	}
-	cached := s.appleLibrary.Membership(ctx, string(group), missing)
+	cached := s.appleLibrary.Membership(ctx, storefront, string(group), missing)
 	if cached == nil {
 		return
 	}

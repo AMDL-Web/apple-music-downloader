@@ -302,7 +302,17 @@ var paramDescriptions = map[string]string{
 	"search_catalog.types": "The groups to search: any of songs, albums, playlists, artists; default all four.",
 	"get_logs.cursor":      "Only entries after this sequence number: the next_cursor of the previous page.",
 	"get_logs.limit":       "Maximum number of entries to return; default 200.",
+
+	"update_account.account_id":                  accountRef,
+	"delete_account.account_id":                  accountRef,
+	"update_account.library_sync":                "Poll the account's library for new albums to download; takes effect while library_sync.enabled is on.",
+	"update_account.apple_library":               "Keep a local copy of the account's Apple Music library.",
+	"list_apple_library.account":                 accountRef + " Omit for the default account.",
+	"list_apple_library_playlist_tracks.account": accountRef + " Omit for the default account.",
+	"sync_apple_library.account":                 accountRef + " Omit for the default account.",
 }
+
+const accountRef = "An account id from list_accounts, an Apple ID, or a region such as jp when exactly one active account serves it."
 
 // paletteTools are the tools whose answer carries the artwork color palette of
 // each hit, which a model has no use for; paletteArg brings it back.
@@ -409,6 +419,9 @@ func (h handlers) passthrough(c capability.Capability) runner {
 		}
 		values, err := typed(op, args)
 		if err != nil {
+			return nil, err
+		}
+		if err := h.c.ResolveAccounts(ctx, values); err != nil {
 			return nil, err
 		}
 		req, err := op.Build(values)
@@ -676,7 +689,7 @@ func (h handlers) waitForJob(ctx context.Context, req *mcp.CallToolRequest, args
 }
 
 // getStatus gathers what an agent checks before downloading: the server, its
-// health, the wrapper and the library watcher. A section that fails carries
+// health, the wrapper, its accounts and the library watcher. A section that fails carries
 // its error instead.
 func (h handlers) getStatus(ctx context.Context, _ *mcp.CallToolRequest, _ map[string]any) (any, error) {
 	out := map[string]any{}
@@ -702,6 +715,7 @@ func (h handlers) getStatus(ctx context.Context, _ *mcp.CallToolRequest, _ map[s
 		out["health"] = h2
 	}
 	section("wrapper", "/api/v1/wrapper/status")
+	section("accounts", "/api/v1/accounts")
 	section("library_sync", "/api/v1/library-sync")
 	return out, nil
 }

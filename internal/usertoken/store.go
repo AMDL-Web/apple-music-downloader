@@ -15,10 +15,32 @@ const (
 	// StoreDirName is the directory, next to the database file, that holds
 	// amdl's copy of the token GET /token returned. It is created 0700.
 	StoreDirName = "usertoken"
-	// StoreFileName is that copy, written 0600 by a rename.
-	StoreFileName = "wrapper-token.json"
-	maxStoreRead  = 64 << 10
+	// StoreFileName is the copy of the implicit account's token (a wrapper
+	// that does not list accounts), written 0600 by a rename. An account a
+	// wrapper-manager lists has its own, accountFilePrefix plus its id.
+	StoreFileName     = "wrapper-token.json"
+	accountFilePrefix = "account-"
+	maxStoreRead      = 64 << 10
 )
+
+// storeFileName is the stored copy's file for an account: StoreFileName for
+// the implicit one, account-<id>.json for another, the id reduced to
+// characters safe in a file name.
+func storeFileName(accountID string) string {
+	if accountID == "" || accountID == implicitID {
+		return StoreFileName
+	}
+	var b strings.Builder
+	for _, r := range accountID {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return accountFilePrefix + b.String() + ".json"
+}
 
 // StoreDir is the directory amdl keeps its copy of the wrapper's token in,
 // for a database at dbPath.
@@ -38,10 +60,18 @@ type storedToken struct {
 }
 
 type tokenStore struct {
-	dir string
+	dir  string
+	name string
 }
 
-func (s tokenStore) path() string { return filepath.Join(s.dir, StoreFileName) }
+func (s tokenStore) file() string {
+	if s.name == "" {
+		return StoreFileName
+	}
+	return s.name
+}
+
+func (s tokenStore) path() string { return filepath.Join(s.dir, s.file()) }
 
 // load returns the stored copy for address, validated; "" with a nil error
 // when there is none or it belongs to another address. Errors never include
@@ -90,7 +120,7 @@ func (s tokenStore) save(st storedToken) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(s.dir, StoreFileName+".*.tmp")
+	tmp, err := os.CreateTemp(s.dir, s.file()+".*.tmp")
 	if err != nil {
 		return err
 	}
@@ -147,7 +177,7 @@ func (s tokenStore) sweep() error {
 	var errs []error
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !strings.HasPrefix(name, StoreFileName+".") || !strings.HasSuffix(name, ".tmp") {
+		if e.IsDir() || !strings.HasPrefix(name, s.file()+".") || !strings.HasSuffix(name, ".tmp") {
 			continue
 		}
 		if err := os.Remove(filepath.Join(s.dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {

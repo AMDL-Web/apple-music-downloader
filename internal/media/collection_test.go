@@ -117,7 +117,7 @@ func TestResolveCollectionStationPrefersWrapperToken(t *testing.T) {
 			cfg.Catalog.MediaUserToken = "configured-token"
 			downloader := newTestDownloader(&Downloader{
 				cfg:    cfg,
-				tokens: usertoken.New(func() (string, error) { return tt.wrapper, nil }),
+				tokens: usertoken.NewReading(func(string) (string, error) { return tt.wrapper, nil }),
 				catalog: fakeDownloaderCatalog{
 					station:      applemusic.Collection{ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station"},
 					stationToken: &gotToken,

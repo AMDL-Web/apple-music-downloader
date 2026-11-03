@@ -193,7 +193,8 @@ func TestStatusBoardTilesOpenTheirSections(t *testing.T) {
 	sv.System.Jobs.Workers = 3
 	sv.System.Tools = []domain.Capability{{Name: "ffmpeg", Available: true, Path: "/usr/bin/ffmpeg"}}
 	sv.System.Storage = []client.Storage{{Name: "downloads_dir", Path: "data/downloads", FreeBytes: 1_620_000_000_000, TotalBytes: 7_670_000_000_000}}
-	sv.Wrapper = &client.WrapperStatus{Ready: true, LoggedIn: true, Accounts: []string{"someone@example.com"}, Regions: []string{"cn", "us"}}
+	sv.Wrapper = &client.WrapperStatus{Ready: true, LoggedIn: true, Regions: []string{"cn", "us"}}
+	sv.Accounts = []client.Account{{ID: "a1", Name: "someone@example.com", Region: "cn", Default: true, State: client.AccountActive}}
 	sv.Errors = &store.ErrorLogs{Times: []time.Time{time.Now().Add(-2 * time.Hour)}, Last: "wrapper: connection refused"}
 	tt := ui.NewTester(a.View, 1280, 800)
 	for _, want := range []string{"All good", "01339f0", "of 3 busy", "Storage & files", "1.62", "TB free", "Signed in", "someone@example.com", "Last: wrapper: connection refused"} {

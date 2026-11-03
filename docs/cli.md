@@ -51,17 +51,38 @@ by meaning.
 | `library delete <kind> <id>` | `DELETE /library/{kind}/{id}` | destructive |
 | `library check [--kind --id] [--force] [--wait] [--timeout]`, `library check-status` | `POST`/`GET /library/check` | write, read |
 | `library pending list [--state]`, `library pending retry <pending_id>`, `library pending delete <pending_id>` | `/library/pending`, `…/{pending_id}/retry`, `DELETE …/{pending_id}` | read, write, destructive |
-| `library sync get`, `library sync reset` | `/library-sync`, `…/reset` | read, destructive |
-| `apple-library list <kind> [--sort] [--order] [--q] [--limit] [--offset]`, `apple-library tracks <playlist_id>`, `apple-library status` | `GET /apple-library/{kind}`, `…/playlists/{playlist_id}/tracks`, `…/status` | read |
-| `apple-library sync [--mode full\|incremental]` | `POST /apple-library/sync` | write |
+| `library sync get`, `library sync reset [--account]` | `/library-sync`, `…/reset` | read, destructive |
+| `apple-library list <kind> [--account] [--sort] [--order] [--q] [--limit] [--offset]`, `apple-library tracks <playlist_id> [--account]`, `apple-library status` | `GET /apple-library/{kind}`, `…/playlists/{playlist_id}/tracks`, `…/status` | read |
+| `apple-library sync [--account] [--mode full\|incremental]` | `POST /apple-library/sync` | write |
+| `accounts` | `GET /accounts` | read |
+| `accounts set <account_id> [--library-sync on\|off] [--apple-library on\|off] [--default\|--position <n>]` | `PATCH /accounts/{account_id}` | write |
+| `accounts delete <account_id>` | `DELETE /accounts/{account_id}` | destructive |
 | `logs list [filters]`, `logs tail [filters]` | `GET /logs`, `/logs/stream` | read |
 | `system get`, `system health`, `system stats [--days]`, `hooks list` | `/system`, `/health`, `/stats`, `/hooks` | read |
 | `system restart` | `POST /system/restart` | write |
 | `hooks presets`, `hooks switch --enabled`, `hooks set <name> [--preset <id> --values <json>] [--url] [--events] [--headers <json>] [--body] ...`, `hooks test <name>`, `hooks delete <name>` | `GET /hooks/presets`, `PUT /hooks`, `PUT`/`DELETE /hooks/{name}`, `POST …/test` | read, write, write, write, destructive |
 | `config get [key...]`, `config set <key=value>...`, `config reload` | `GET`/`PUT /config`, `…/reload` | read, write, write |
-| `wrapper status`, `wrapper login [--username <id>] [--password-stdin]`, `wrapper 2fa <login_id>`, `wrapper logout --username <id>` | `/wrapper/*` | read, write, write, destructive |
+| `wrapper status`, `wrapper login [--username <id>] [--password-stdin]`, `wrapper 2fa <login_id>`, `wrapper logout --username <id>\|--account-id <id>`, `wrapper pair [--status]`, `wrapper unpair` | `/wrapper/*` | read, write, write, destructive, write, destructive |
 | `context list\|add <name> <url>\|use <name>\|remove <name>`, `version` | local, `/system` | |
 | `serve [--config] [--hooks] [--init key=value]... [--no-console]` | runs the backend in this process | |
+
+`accounts` lists the Apple Music accounts the wrapper holds, the default first: `id`,
+`name` (the Apple ID), `region`, `default`, `state` (`active`, or `missing` once the wrapper
+no longer reports it) and the two switches `library_sync` and `apple_library`; add
+`--fields id,name,region,default,state,library_sync,apple_library` to keep just those.
+Wherever a command takes an account (`accounts set` and `delete`, `--account` on
+`apple-library list`, `tracks`, `sync` and `library sync reset`, `wrapper logout
+--account-id`), it may be given as the account's id, its Apple ID, or its region
+(`jp`, any case). A region names the single active account serving it; with two it is
+refused as `invalid_request` and the message lists their ids, and with none as
+`account_not_found` (exit 3). Without `--account`, the apple-library commands and
+`library sync reset` act on the default account. `accounts set` takes at least one
+switch or `--default`; `--default` is `--position 0`. `accounts delete` logs the account
+out of the wrapper and drops its switches, library sync anchor, Apple library cache and
+stored token, while downloaded files and records stay; `wrapper logout` keeps the row
+and its switches for when the account logs in again. Adding an account is `wrapper
+login`, which fails with `account_limit_reached` (exit 4) once the wrapper-manager holds
+ten.
 
 `download -` reads links from stdin, any number per line. `config set` checks its keys
 against the runtime config first and refuses an unknown one as `config_key_not_found`,
@@ -75,6 +96,19 @@ two-step code, neither echoed. Elsewhere it needs `--username` and `--password-s
 and reads the password from the first line of stdin; a `needs_2fa` answer then carries
 the `login_id` for `wrapper 2fa <login_id>`, which reads the code the same way (a
 prompt in a terminal, else stdin's first line) and has to follow within 60 seconds.
+
+`wrapper pair` connects the backend to a wrapper behind a gateway that asks for a bearer
+token (the Cloudflare deploy of wrapper-manager; [Pairing](api.md#pairing)). It starts a
+pairing, prints the code and the page the wrapper's owner approves it on with a passkey,
+then asks the backend every 2 seconds until the pairing is `paired`. In a terminal the code
+and page go to stderr and stdout gets the final pairing; elsewhere stdout gets two JSON
+lines, the `pending` pairing with `user_code` and `verification_url` first, then the final
+one, so an agent can pass the code on while the command waits. It stops waiting when the
+code expires (exit 8, `wait_timeout`) or on Ctrl-C (130; the pairing goes on in the
+backend), and exits 6 with `pairing_failed` when the owner refused. A wrapper that takes
+requests without a token answers `pairing_unsupported` (exit 6). `wrapper pair --status`
+only reads the state (`unpaired`, `pending`, `paired`, `needs_pairing`), and `wrapper
+unpair` forgets the stored credential.
 
 What is downloaded is what amdl's records say, never the disk: `library list` and
 `library get` show them, and `search`, `lookup` and `albums get` mark what they find with
@@ -132,7 +166,7 @@ downloads it again (`--what audio`), and `library check` then `library reset --w
   do: `amdl library resume <kind> <id>` for a run that ended cancelled with the error `paused`
   (its record was paused; resuming queues a new run, whose id `jobs list --q <id>` or the
   record's `active_job_id` gives), a note that a retry fails again when the error says the
-  catalog does not have the album or playlist in the account's storefront (with
+  catalog does not have the album or playlist in its storefront (with
   `amdl lookup <link>` and `amdl library delete <kind> <id>`), and `amdl jobs retry <job_id>`
   otherwise.
 - `library check` returns at once with the check just started. `--wait` follows it, asking
@@ -154,7 +188,7 @@ to run next.
 | 3 | Not found | the 404 codes, `context_not_found`, `config_key_not_found` |
 | 4 | State conflict | the 409 codes |
 | 5 | Unavailable; retry later | 502, 503 and 504 codes, `server_unreachable`, `server_not_configured` |
-| 6 | Wrapper sign-in failed | `authentication_failed`, `login_unsupported` |
+| 6 | Wrapper sign-in or pairing failed | `authentication_failed`, `login_unsupported`, `pairing_failed`, `pairing_unsupported` |
 | 7 | A waited-for job failed or was cancelled | `job_failed` |
 | 8 | The wait ended before the job did | `wait_timeout` |
 | 10 | Confirmation needed; nothing was changed | `confirmation_required` |
@@ -166,8 +200,8 @@ and prints the batch, whose results carry `existing_job_id`.
 ## Safety
 
 - **Destructive commands** (`jobs delete`, `library reset`, `library reset-all`,
-  `library delete`, `library pending delete`, `library sync reset`, `wrapper logout`,
-  `wrapper uninstall --purge`, and `wrapper install` when it
+  `library delete`, `library pending delete`, `library sync reset`, `accounts delete`, `wrapper logout`,
+  `wrapper unpair`, `wrapper uninstall --purge`, and `wrapper install` when it
   would install QEMU) ask `[y/N]` when stdin and stderr are a terminal and otherwise
   need `--yes`; without it they exit 10 before changing anything.
 - **`--dry-run`** on every command that changes something, except `mcp`, prints
@@ -266,9 +300,17 @@ which are all queued or running already are not an error. `set_config`, like
   client lost the request, calling it again is safe.
 - **`list_jobs`** returns compact rows (`apps/amdl/internal/jobview#Row`), 50 by default as
   in the CLI, and
-  **`get_status`** gathers the system, health, wrapper and library-sync answers.
+  **`get_status`** gathers the system, health, wrapper, accounts and library-sync answers.
+- **Accounts**: `list_accounts` lists them, `update_account` switches an account's library
+  sync or Apple library or moves it (`position` 0 makes it the default) and `delete_account`
+  drops it. `list_apple_library`, `list_apple_library_playlist_tracks` and
+  `sync_apple_library` take an `account`; `update_account` and `delete_account` take
+  `account_id`. Each is an id, an Apple ID or a region, resolved as in the CLI, and the
+  Apple library tools use the default account without one.
 - **No tool signs the wrapper in**: a password never passes through a model. When
   `get_status` shows no account, a person runs `amdl wrapper login` or uses the console.
+  `get_wrapper_pairing` only reads the pairing state; when it is `needs_pairing`, a person
+  runs `amdl wrapper pair`.
 
 ## Terminal interface
 

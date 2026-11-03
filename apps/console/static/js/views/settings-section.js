@@ -14,7 +14,7 @@ import { tokenState } from '../lib/user-token.js';
 import { Notice, ErrorNote, SkeletonRows, Unavailable, Button, CopyButton, Icon } from '../ui/components.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
-import { SyncResetAction, ConfigFilePanel } from './settings-panels.js';
+import { SyncResetAction, SyncAccountLines, ConfigFilePanel } from './settings-panels.js';
 import { FactRows } from './settings-facts.js';
 import { HooksPanel } from './settings-hooks.js';
 
@@ -161,7 +161,7 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
     case 'jobs':
       return html`<${FactRows} section="jobs" system=${sys} pending=${sysPending} showKeys=${form.showKeys} />${fieldRows(fields)}`;
     case 'library_sync':
-      return html`${fieldRows(fields)}<${SyncResetAction} sync=${st.librarySync && st.librarySync.data} disabled=${offline} />`;
+      return html`${fieldRows(fields)}<${SyncAccountLines} sync=${st.librarySync && st.librarySync.data} /><${SyncResetAction} sync=${st.librarySync && st.librarySync.data} disabled=${offline} />`;
     case 'hooks': {
       return html`<${FactRows} section="hooks" system=${sys} pending=${sysPending} showKeys=${form.showKeys} />
         <${HooksPanel} hooks=${st.hooks && st.hooks.data} outcomes=${st.stats && st.stats.data ? st.stats.data.hooks : []} now=${now} offline=${offline} />`;

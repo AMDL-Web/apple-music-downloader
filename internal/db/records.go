@@ -70,7 +70,7 @@ func (s *Store) GetPlaylist(ctx context.Context, id string) (domain.Playlist, er
 }
 
 const albumColumns = `id, name, artist_name, artist_id, artist_url, release_date, genre, upc, content_rating, artwork, resolved_at,
-	release_track_count, withheld_count, storefront_read, catalog_state, wanted_all, paused, priority, overrides, cover_state, artist_cover_state,
+	release_track_count, withheld_count, storefront_read, pinned_storefront, catalog_state, wanted_all, paused, priority, overrides, cover_state, artist_cover_state,
 	tracks_wanted, tracks_done, tracks_failed, tracks_given_up, tracks_missing, state, added_at, refreshed_at, completed_at, updated_at`
 
 func getAlbum(ctx context.Context, q rowQueryer, id string) (domain.Album, error) {
@@ -90,7 +90,7 @@ func scanAlbum(row jobScanner) (domain.Album, error) {
 	)
 	err := row.Scan(
 		&a.ID, &a.Name, &a.ArtistName, &a.ArtistID, &a.ArtistURL, &a.ReleaseDate, &a.Genre, &a.UPC, &a.ContentRating, &artwork, &resolved,
-		&a.ReleaseTrackCount, &a.WithheldCount, &a.StorefrontRead, &catalogState, &a.WantedAll, &a.Paused, &a.Priority, &overrides, &cover, &artist,
+		&a.ReleaseTrackCount, &a.WithheldCount, &a.StorefrontRead, &a.PinnedStorefront, &catalogState, &a.WantedAll, &a.Paused, &a.Priority, &overrides, &cover, &artist,
 		&a.TracksWanted, &a.TracksDone, &a.TracksFailed, &a.TracksGivenUp, &a.TracksMissing, &state, &added, &refreshed, &completed, &updated)
 	if err != nil {
 		return domain.Album{}, err
@@ -109,7 +109,7 @@ func scanAlbum(row jobScanner) (domain.Album, error) {
 	return a, nil
 }
 
-const playlistColumns = `id, name, curator_name, artwork, resolved_at, storefront_read, catalog_state, last_modified, paused, priority, overrides, cover_state,
+const playlistColumns = `id, name, curator_name, artwork, resolved_at, storefront_read, pinned_storefront, catalog_state, last_modified, paused, priority, overrides, cover_state,
 	tracks_wanted, tracks_done, tracks_failed, tracks_given_up, tracks_missing, state, added_at, refreshed_at, completed_at, updated_at`
 
 func getPlaylist(ctx context.Context, q rowQueryer, id string) (domain.Playlist, error) {
@@ -128,7 +128,7 @@ func scanPlaylist(row jobScanner) (domain.Playlist, error) {
 		resolved, refreshed, completed                 sql.NullString
 	)
 	err := row.Scan(
-		&p.ID, &p.Name, &p.CuratorName, &artwork, &resolved, &p.StorefrontRead, &catalogState, &p.LastModified, &p.Paused, &p.Priority, &overrides, &cover,
+		&p.ID, &p.Name, &p.CuratorName, &artwork, &resolved, &p.StorefrontRead, &p.PinnedStorefront, &catalogState, &p.LastModified, &p.Paused, &p.Priority, &overrides, &cover,
 		&p.TracksWanted, &p.TracksDone, &p.TracksFailed, &p.TracksGivenUp, &p.TracksMissing, &state, &added, &refreshed, &completed, &updated)
 	if err != nil {
 		return domain.Playlist{}, err

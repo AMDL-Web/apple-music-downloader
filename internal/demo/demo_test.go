@@ -82,8 +82,11 @@ func TestTheQueueStartsWithEveryKindOfJob(t *testing.T) {
 	if s, err := c.System(ctx); err != nil || len(s.Storage) == 0 || s.Storage[0].Path != musicDir {
 		t.Errorf("system %+v, %v", s, err)
 	}
-	if w, err := c.WrapperStatus(ctx); err != nil || !w.LoggedIn || len(w.Accounts) != 1 {
+	if w, err := c.WrapperStatus(ctx); err != nil || !w.LoggedIn {
 		t.Errorf("wrapper %+v, %v", w, err)
+	}
+	if l, err := c.ListAccounts(ctx); err != nil || len(l.Accounts) != 1 || !l.Accounts[0].Default {
+		t.Errorf("accounts %+v, %v", l, err)
 	}
 }
 

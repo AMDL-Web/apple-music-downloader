@@ -24,6 +24,7 @@ servers:
 tags:
   - name: System
   - name: Wrapper
+  - name: Accounts
   - name: Quality
   - name: Library
   - name: Downloads
@@ -525,9 +526,12 @@ paths:
       tags: [System]
       summary: Get the library monitor status
       description: >-
-        Returns the monitor's current state: the switch and interval from the
-        configuration, plus what the most recent poll observed. It is returned even
-        when the feature is off, so clients do not have to guess the switch state.
+        Returns the monitor's current state: the master switch and interval from
+        the configuration, plus one entry per account with its own switch
+        (Account.library_sync) and what its most recent poll observed. It is
+        returned even when the feature is off, so clients do not have to guess
+        the switch state. An account polls while the master switch and its own
+        are on and the wrapper holds it (Account.state active).
 
         Apple does not expose when a track was added to the library (library-songs
         has no dateAdded attribute, and a library album's dateAdded is when the
@@ -548,9 +552,10 @@ paths:
   /api/v1/library-sync/reset:
     post:
       tags: [System]
-      summary: Reset the library monitor anchor
+      summary: Reset an account's library monitor anchor
       description: >-
-        Clears the anchor. The next poll finds no anchor, so it re-anchors on the
+        Clears the anchor of the account the body names, else of the default
+        account. The next poll finds no anchor, so it re-anchors on the
         library as it is **at that moment** and **submits no albums** — this
         "forgets history" rather than "replays history", and will not flood the
         download queue.
@@ -559,6 +564,17 @@ paths:
         reality. To download a particular album again, submit it directly with
         POST /api/v1/downloads; this endpoint cannot do that.
       operationId: resetLibrarySyncAnchor
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                account:
+                  type: string
+                  description: The account (Account.id); absent resets the default account's anchor.
       responses:
         '200':
           description: The anchor has been cleared.
@@ -566,6 +582,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LibrarySyncResetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
         '500':
           $ref: '#/components/responses/StoreError'
   /api/v1/apple-library/status:
@@ -573,9 +593,9 @@ paths:
       tags: [Apple library]
       summary: Get the Apple library cache and sync status
       description: >-
-        Whether the signed-in Apple Music account library can be read, the sync
-        under way, the last sync, and the number of cached items per kind. It
-        makes no Apple request. While state is running, poll it every couple of
+        For each account: whether its Apple Music library can be read, the
+        sync under way, the last sync, and the number of cached items per kind.
+        It makes no Apple request. While state is running, poll it every couple of
         seconds; there is no SSE event for the sync.
       operationId: getAppleLibraryStatus
       responses:
@@ -588,11 +608,13 @@ paths:
   /api/v1/apple-library/sync:
     post:
       tags: [Apple library]
-      summary: Sync the Apple library cache now
+      summary: Sync an account's Apple library cache now
       description: >-
-        Starts a sync of the local copy of the account library in the
-        background and answers at once; current.id of the returned status is
-        the sync's id. A full sync (the default) reads every page of every
+        Starts a sync of the local copy of an account's library (the body's
+        account, else the default account) in the background and answers at
+        once with that account's entry; its current.id is the sync's id. An
+        account whose apple_library switch is off answers 503
+        apple_library_unavailable with reason disabled. A full sync (the default) reads every page of every
         kind and removes what left the library; an incremental one reads the
         newest additions, the playlist list and the totals. Download jobs are
         never touched.
@@ -613,15 +635,20 @@ paths:
                     full reads every page of every kind and removes what left
                     the library; incremental reads only the newest additions,
                     the playlist list and the totals.
+                account:
+                  type: string
+                  description: The account (Account.id) to sync; absent syncs the default account.
       responses:
         '202':
           description: The sync started.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AppleLibraryStatus'
+                $ref: '#/components/schemas/AppleLibraryAccountStatus'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
         '409':
           description: apple_library_sync_running; a sync is under way, its id in details.sync_id.
           content:
@@ -633,9 +660,9 @@ paths:
   /api/v1/apple-library/{kind}:
     get:
       tags: [Apple library]
-      summary: List one kind of the Apple library
+      summary: List one kind of an account's Apple library
       description: >-
-        One page of the cached account library: albums, songs, playlists or
+        One page of an account's cached library: albums, songs, playlists or
         artists. Served from the local copy only; no Apple request. Before the
         first full sync of the kind completes, items is empty and synced_at is
         absent.
@@ -680,6 +707,13 @@ paths:
             maximum: 200
             default: 50
         - $ref: '#/components/parameters/BrowseOffset'
+        - name: account
+          in: query
+          description: >-
+            The account (Account.id) whose cache to read; absent reads the
+            default account's. An unknown id is 404 account_not_found.
+          schema:
+            type: string
       responses:
         '200':
           description: The page.
@@ -689,6 +723,8 @@ paths:
                 $ref: '#/components/schemas/AppleLibraryPage'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
         '503':
           $ref: '#/components/responses/AppleLibraryUnavailable'
   /api/v1/apple-library/playlists/{playlist_id}/tracks:
@@ -709,6 +745,13 @@ paths:
           schema:
             type: string
             maxLength: 64
+        - name: account
+          in: query
+          description: >-
+            The account (Account.id) whose cache to read; absent reads the
+            default account's. An unknown id is 404 account_not_found.
+          schema:
+            type: string
       responses:
         '200':
           description: The tracks.
@@ -719,11 +762,97 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
-          description: catalog_not_found; no cached library playlist has this id.
+          description: >-
+            catalog_not_found, no library playlist of the account's cache has
+            this id; account_not_found, no account has the id given.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/accounts:
+    get:
+      tags: [Accounts]
+      summary: List the Apple Music accounts
+      description: >-
+        Every account the wrapper holds or held, the default first, with its
+        library switches and state. It makes no wrapper request: amdl reads
+        the wrapper's accounts at start, every 10 minutes and after a login,
+        logout or delete. Add an account with POST /wrapper/login; a new one
+        starts with both switches off.
+      operationId: listAccounts
+      responses:
+        '200':
+          description: The accounts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/accounts/{account_id}:
+    parameters:
+      - name: account_id
+        in: path
+        required: true
+        description: Account.id.
+        schema:
+          type: string
+    patch:
+      tags: [Accounts]
+      summary: Change an account's switches or position
+      description: >-
+        Turns the account's library monitor and Apple library cache on or off,
+        and moves it in the list; position 0 makes it the default. It takes
+        effect at the next tick of each loop.
+      operationId: updateAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountPatch'
+      responses:
+        '200':
+          description: The account as it is now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
+        '413':
+          $ref: '#/components/responses/JSONBodyTooLarge'
+        '500':
+          $ref: '#/components/responses/StoreError'
+    delete:
+      tags: [Accounts]
+      summary: Delete an account
+      description: >-
+        Logs the account out of the wrapper (by its id, as POST /wrapper/logout
+        does) and drops what amdl keeps for it alone: its row and switches,
+        its library monitor anchor, its Apple library cache and its stored
+        token. Downloaded files, records and runs stay. A missing account is
+        not logged out, and one the wrapper no longer knows is deleted all the
+        same. Records pinned to its storefront read in it while another
+        account serves it, else they fail with decryptor_unavailable. The
+        active account of a wrapper without the login API (id wrapper, a bare
+        wrapper-lite) cannot be logged out from here: 501 login_unsupported.
+      operationId: deleteAccount
+      responses:
+        '200':
+          description: The account is gone.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDeleted'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+        '502':
+          $ref: '#/components/responses/BadGateway'
   /api/v1/wrapper/status:
     get:
       tags: [Wrapper]
@@ -732,7 +861,8 @@ paths:
         Probes the wrapper (wrapper-lite, or the wrapper-manager in front of it)
         for connectivity and runtime state such as login and regions; use it
         before downloading or managing accounts. login_supported tells whether
-        the login routes work against this wrapper.
+        the login routes work against this wrapper. The accounts themselves are
+        GET /accounts.
       operationId: getWrapperStatus
       responses:
         '200':
@@ -861,7 +991,11 @@ paths:
       summary: Log out of a wrapper account
       description: >-
         Ends the account's login in the wrapper-manager and deletes its data
-        there. A bare wrapper-lite answers 501 login_unsupported.
+        there; the body names it by Apple ID (username) or by account id
+        (account_id, Account.id). amdl keeps the account's row, switches and
+        library state, so they apply again when it logs in again; DELETE
+        /accounts/{account_id} removes those too. A bare wrapper-lite answers
+        501 login_unsupported.
       operationId: logoutWrapper
       requestBody:
         required: true
@@ -886,6 +1020,81 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         '502':
           $ref: '#/components/responses/BadGateway'
+  /api/v1/wrapper/pairing:
+    get:
+      tags: [Wrapper]
+      summary: Get the wrapper pairing
+      description: >-
+        Whether amdl holds a credential for a wrapper behind a gateway that
+        asks for a bearer token (the Cloudflare deploy of wrapper-manager), a
+        pairing under way with its code and page, or a credential the gateway
+        refused (needs_pairing). The credential itself never leaves the
+        backend.
+      operationId: getWrapperPairing
+      responses:
+        '200':
+          description: The pairing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WrapperPairing'
+        '503':
+          $ref: '#/components/responses/PairingUnavailable'
+    post:
+      tags: [Wrapper]
+      summary: Pair with the wrapper
+      description: >-
+        Starts a device-code pairing: amdl asks the wrapper's POST /pair/start
+        for a user code and the page its owner approves it on with a passkey,
+        answers them at once (state pending), and polls the wrapper in the
+        background until the owner approved, refused or the code expired.
+        Poll GET /wrapper/pairing until state leaves pending. Once paired,
+        every wrapper request carries the access token, which amdl renews
+        before it expires and once after a 401; a renewal the gateway refuses
+        (its refresh token unused for 30 days, or revoked) drops the
+        credential and the state becomes needs_pairing. A new pairing replaces
+        one under way. A wrapper without pairing answers 501
+        pairing_unsupported.
+      operationId: startWrapperPairing
+      responses:
+        '202':
+          description: The pairing started; user_code and verification_url are in the body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WrapperPairing'
+        '501':
+          description: pairing_unsupported; the wrapper takes requests without a token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/PairingUnavailable'
+    delete:
+      tags: [Wrapper]
+      summary: Unpair from the wrapper
+      description: >-
+        Forgets the stored credential and any pairing under way; wrapper
+        requests go out without a token until the next pairing.
+      operationId: deleteWrapperPairing
+      responses:
+        '200':
+          description: Unpaired; the body is the pairing now (state unpaired).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WrapperPairing'
+        '500':
+          description: internal_error; the stored credential could not be removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/PairingUnavailable'
   /api/v1/quality:
     post:
       tags: [Quality]
@@ -2589,6 +2798,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    PairingUnavailable:
+      description: feature_unavailable; this process runs without a wrapper pairing.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AccountNotFound:
+      description: account_not_found; no account has this id.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     JobNotFound:
       description: job_not_found; no job has this id.
       content:
@@ -2623,7 +2844,8 @@ components:
       description: >-
         already_logged_in: the account already has a wrapper; login_pending: a
         login for the account (or this session's two-step code) is already in
-        progress.
+        progress; account_limit_reached: the wrapper-manager holds its most
+        accounts (10, logins in progress included), so log one out first.
       content:
         application/json:
           schema:
@@ -2697,7 +2919,8 @@ components:
         resource_not_found (no record or pending add with that id); 405
         method_not_allowed (with an Allow header); 409 job_active,
         job_not_retryable, job_not_cancellable, job_not_queued,
-        duplicate_active, already_logged_in, login_pending, hook_read_only,
+        duplicate_active, already_logged_in, login_pending,
+        account_limit_reached, hook_read_only,
         apple_library_sync_running, run_active (the record has a queued or
         running run; pause it first), main_not_done (another quality needs the
         track's first quality done), quality_present (the first quality is that
@@ -2730,6 +2953,7 @@ components:
         - duplicate_active
         - already_logged_in
         - login_pending
+        - account_limit_reached
         - hook_read_only
         - apple_library_sync_running
         - run_active
@@ -2746,6 +2970,7 @@ components:
         - internal_error
         - store_error
         - login_unsupported
+        - pairing_unsupported
         - upstream_error
         - queue_full
         - wrapper_unavailable
@@ -2753,9 +2978,130 @@ components:
         - apple_library_unavailable
         - downloads_dir_unavailable
         - upstream_timeout
+    Account:
+      type: object
+      description: >-
+        One Apple Music account the wrapper holds, with amdl's switches for it.
+        A wrapper-manager's accounts are its instances, by instance id; a
+        wrapper that does not list accounts (a bare wrapper-lite) holds one,
+        with id wrapper, and so does catalog.media_user_token alone. amdl
+        reads the wrapper's accounts at start, every 10 minutes and after a
+        login or logout.
+      required: [id, name, region, position, default, library_sync, apple_library, state, added_at, media_user_token]
+      properties:
+        id:
+          type: string
+          description: The wrapper-manager instance id (stable across logins of one Apple ID), or wrapper.
+        name:
+          type: string
+          description: The Apple ID the account signed in with, as the wrapper reports it; "" when it does not.
+          example: a@icloud.com
+        region:
+          type: string
+          description: The account's storefront, lower case; "" while unknown.
+          example: jp
+        position:
+          type: integer
+          description: >-
+            The account's place in the list. Position 0 is the default account:
+            it reads records with no pinned storefront and links whose storefront
+            no account serves. Among accounts of one region the lower position's
+            token is used.
+        default:
+          type: boolean
+          description: position is 0.
+        library_sync:
+          type: boolean
+          description: The library monitor polls this account (with library_sync.enabled on). A new account starts off.
+        apple_library:
+          type: boolean
+          description: The Apple library cache syncs this account. A new account starts off.
+        state:
+          type: string
+          enum: [active, missing]
+          description: >-
+            missing: the wrapper no longer reports the account (logged out, its
+            subscription ended). Its row and switches stay for when it logs in
+            again, but it is not polled and serves no storefront.
+        added_at: {type: string, format: date-time}
+        seen_at:
+          type: string
+          format: date-time
+          description: The last discovery that found the account.
+        media_user_token:
+          type: string
+          description: >-
+            The account's media-user-token as amdl has it, masked as in
+            WrapperStatus.media_user_token; "" when amdl has none.
+          example: "...a1b2"
+    AccountList:
+      type: object
+      required: [accounts]
+      properties:
+        accounts:
+          type: array
+          description: Every account, the default first.
+          items:
+            $ref: '#/components/schemas/Account'
+    AccountPatch:
+      type: object
+      additionalProperties: false
+      description: At least one property.
+      properties:
+        library_sync: {type: boolean}
+        apple_library: {type: boolean}
+        position:
+          type: integer
+          minimum: 0
+          description: >-
+            Moves the account there, shifting the ones between; 0 makes it the
+            default. A position past the end moves it last.
+    AccountDeleted:
+      type: object
+      required: [deleted, logged_out]
+      properties:
+        deleted: {type: string, description: The deleted account's id.}
+        logged_out:
+          type: boolean
+          description: The wrapper logged the account out; false when it was missing or the wrapper no longer knew it.
+    WrapperPairing:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [unpaired, pending, paired, needs_pairing]
+          description: >-
+            needs_pairing: the wrapper answered 401 and amdl has no credential
+            it accepts; pair again.
+        user_code:
+          type: string
+          description: While pending, the code the owner confirms on verification_url.
+          example: ABCD-EFGH
+        verification_url:
+          type: string
+          description: While pending, the page the owner approves the pairing on.
+        verification_url_complete:
+          type: string
+          description: While pending, verification_url with the code filled in; the link to show.
+        expires_at:
+          type: string
+          format: date-time
+          description: While pending, when the code expires.
+        paired_at:
+          type: string
+          format: date-time
+          description: While paired, when the pairing was approved.
+        access_expires_at:
+          type: string
+          format: date-time
+          description: While paired, when the current access token runs out; amdl renews it before.
+        last_error:
+          type: string
+          description: Why the last pairing or renewal failed; absent after a success.
     WrapperStatus:
       type: object
-      required: [ready, logged_in, regions, accounts, login_supported, media_user_token]
+      required: [ready, logged_in, regions, login_supported, media_user_token]
       properties:
         ready:
           type: boolean
@@ -2767,16 +3113,9 @@ components:
           description: An account is logged in and serves at least one storefront.
         regions:
           type: array
-          description: Storefronts the wrapper's account serves; an empty array when none.
-          items:
-            type: string
-        accounts:
-          type: array
           description: >-
-            Logged-in wrapper account identifiers; an empty array when no account
-            is logged in or the wrapper does not report them. Neither
-            wrapper-lite nor wrapper-manager does, so a logout names the account
-            itself.
+            Storefronts the wrapper's accounts serve, each once; an empty array
+            when none. The accounts are GET /accounts.
           items:
             type: string
         login_supported:
@@ -2792,10 +3131,10 @@ components:
         media_user_token:
           type: string
           description: >-
-            The wrapper account's media-user-token as amdl has it, masked like
+            The default account's media-user-token as amdl has it, masked like
             catalog.media_user_token in GET /config: "..." and its last four
-            characters. amdl takes it from a wrapper it runs itself, else from
-            the wrapper's GET /token, else from wrapper.data_dir's MUSIC_TOKEN,
+            characters. amdl takes it from the wrapper's GET /token, else from
+            wrapper.data_dir's MUSIC_TOKEN,
             else from its own copy of an earlier GET /token answer. "" when
             none has one: the wrapper has no GET /token or no logged-in account,
             wrapper.data_dir is unset, its file is missing, unreadable or not a
@@ -3371,11 +3710,15 @@ components:
           example: '123456'
     LogoutRequest:
       type: object
-      required: [username]
+      description: Exactly one of username and account_id.
       properties:
         username:
           type: string
+          description: The account's Apple ID.
           example: user@example.com
+        account_id:
+          type: string
+          description: The account's id (Account.id), a wrapper-manager instance id.
     LoggedInResponse:
       type: object
       required: [status]
@@ -3394,13 +3737,17 @@ components:
           type: string
     LoggedOutResponse:
       type: object
-      required: [status, username]
+      required: [status]
       properties:
         status:
           type: string
           const: logged_out
         username:
           type: string
+          description: The request's username, when it named one.
+        account_id:
+          type: string
+          description: The request's account_id, when it named one.
     MoveRequest:
       type: object
       description: >-
@@ -3710,7 +4057,7 @@ components:
               type: string
               description: >-
                 The wrapper's data directory as this backend sees it, where it reads
-                the wrapper's MUSIC_TOKEN on every use while the wrapper's GET /token
+                each account's MUSIC_TOKEN on every use while the wrapper's GET /token
                 gives none; "" reads nothing.
         simulate:
           type: object
@@ -3769,40 +4116,58 @@ components:
                 POST /apple-library/sync. Default 24.
     LibrarySyncStatus:
       type: object
-      required: [enabled, interval_minutes, anchor_size, last_submitted, total_submitted]
+      required: [enabled, interval_minutes, accounts]
       properties:
         enabled:
           type: boolean
-          description: Taken from library_sync.enabled in the current runtime configuration.
+          description: Taken from library_sync.enabled in the current runtime configuration, the master switch.
         interval_minutes:
           type: integer
+        accounts:
+          type: array
+          description: One entry per account, the default first.
+          items:
+            $ref: '#/components/schemas/LibrarySyncAccount'
+    LibrarySyncAccount:
+      type: object
+      required: [account_id, name, region, enabled, anchor_size, last_submitted, total_submitted]
+      properties:
+        account_id: {type: string, description: Account.id.}
+        name: {type: string, description: The account's Apple ID; "" when the wrapper does not say.}
+        region: {type: string, description: The account's storefront.}
+        enabled:
+          type: boolean
+          description: The account's library_sync switch (PATCH /accounts/{account_id}).
         anchor_size:
           type: integer
           description: >-
-            Number of tracks remembered in the current anchor. 0 means no anchor
-            has been set yet (first enable, or just reset); the next poll anchors
-            on the library as it is then and submits no albums.
+            Number of tracks remembered in the account's current anchor. 0 means
+            no anchor has been set yet (first enable, or just reset); the next
+            poll anchors on the library as it is then and submits no albums.
         last_poll_at:
           type: string
           format: date-time
-          description: When a poll last actually ran; absent if it has never polled.
+          description: When a poll of the account last actually ran; absent if it has never polled.
         last_error:
           type: string
           description: >-
-            Failure reason of the most recent poll; absent on success. When the
-            monitor is enabled but amdl has no media-user-token (none from the
-            wrapper, and catalog.media_user_token empty), this explains why it is
-            idling.
+            Failure reason of the account's most recent poll; absent on success.
+            When the account is enabled but amdl has no media-user-token for it
+            (none from the wrapper, and, for the default account,
+            catalog.media_user_token empty), this explains why it is idling.
         last_submitted:
           type: integer
-          description: Number of albums enqueued in the most recent poll.
+          description: Number of albums enqueued in the account's most recent poll.
         total_submitted:
           type: integer
-          description: Total number of albums enqueued since this process started (reset to zero on restart).
+          description: Total number of albums enqueued for the account since this process started (reset to zero on restart).
     LibrarySyncResetResponse:
       type: object
-      required: [cleared, status]
+      required: [account, cleared, status]
       properties:
+        account:
+          type: string
+          description: The account whose anchor was cleared.
         cleared:
           type: integer
           description: Number of anchor entries cleared.
@@ -3810,15 +4175,39 @@ components:
           $ref: '#/components/schemas/LibrarySyncStatus'
     AppleLibraryStatus:
       type: object
-      required: [available, state, counts, sync_interval_minutes, full_sync_hours]
+      required: [sync_interval_minutes, full_sync_hours, accounts]
       properties:
+        sync_interval_minutes:
+          type: integer
+          description: apple_library.sync_interval_minutes in the runtime configuration; every account's.
+        full_sync_hours:
+          type: integer
+          description: apple_library.full_sync_hours in the runtime configuration; every account's.
+        accounts:
+          type: array
+          description: One entry per account, the default first.
+          items:
+            $ref: '#/components/schemas/AppleLibraryAccountStatus'
+    AppleLibraryAccountStatus:
+      type: object
+      required: [account_id, name, region, default, enabled, available, state, counts]
+      properties:
+        account_id: {type: string, description: Account.id.}
+        name: {type: string, description: The account's Apple ID; "" when the wrapper does not say.}
+        region: {type: string, description: The account's storefront.}
+        default: {type: boolean, description: The default account (position 0).}
+        enabled:
+          type: boolean
+          description: The account's apple_library switch (PATCH /accounts/{account_id}).
         available:
           type: boolean
-          description: A usable media-user-token is there to sync with.
+          description: The account's switch is on and a usable media-user-token is there to sync with.
         reason:
           type: string
-          enum: [no_token, token_refused]
-          description: Why available is false; absent when it is true.
+          enum: [no_token, token_refused, disabled]
+          description: >-
+            Why available is false; absent when it is true. disabled: the
+            account's switch is off, or the wrapper no longer holds it.
         state:
           type: string
           enum: [idle, running, failed]
@@ -3834,7 +4223,7 @@ components:
         next_sync_at:
           type: string
           format: date-time
-          description: When the schedule runs the next sync; absent when both schedules are off or nothing ran yet.
+          description: When the schedule runs the next sync; absent when both schedules are off, nothing ran yet or the account is unavailable.
         counts:
           type: object
           description: Cached items per kind.
@@ -3844,15 +4233,9 @@ components:
             songs: {type: integer}
             playlists: {type: integer}
             artists: {type: integer}
-        sync_interval_minutes:
-          type: integer
-          description: apple_library.sync_interval_minutes in the runtime configuration.
-        full_sync_hours:
-          type: integer
-          description: apple_library.full_sync_hours in the runtime configuration.
     AppleLibrarySyncProgress:
       type: object
-      description: The sync under way; absent from AppleLibraryStatus when none runs.
+      description: The sync under way; absent from AppleLibraryAccountStatus when none runs.
       required: [id, mode, trigger, started_at, kind, pages_read, requests]
       properties:
         id: {type: string}
@@ -4790,7 +5173,14 @@ components:
             withheld_count:
               type: integer
               description: Tracks of the release the account storefront does not list; not counted, not retried.
-            storefront_read: {type: string, description: The storefront of the last track-list read (the account's).}
+            storefront_read: {type: string, description: The storefront of the last track-list read.}
+            pinned_storefront:
+              type: string
+              description: >-
+                The storefront the record's runs read it in, set when it was
+                added: the link's when an account served it, the syncing
+                account's for library sync. Absent reads it in the default
+                account's.
             catalog_state:
               type: string
               enum: [ok, not_in_storefront, gone]
@@ -4832,6 +5222,9 @@ components:
               $ref: '#/components/schemas/Artwork'
             resolved_at: {type: string, format: date-time}
             storefront_read: {type: string}
+            pinned_storefront:
+              type: string
+              description: As the album record's.
             catalog_state:
               type: string
               enum: [ok, not_in_storefront, gone]
@@ -4955,6 +5348,11 @@ components:
         state:
           type: string
           enum: [pending, failed]
+        storefront:
+          type: string
+          description: >-
+            The storefront the add is read in and the pin of the records it
+            becomes; "" reads it in the default account's.
     CheckRun:
       type: object
       required: [id, trigger, scope, started_at, checked, missing]

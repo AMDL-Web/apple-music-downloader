@@ -687,7 +687,7 @@ func TestAddAlbumsSkipsRemovedRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := m.AddAlbums(ctx, domain.SourceLibrarySync, []string{"100", "200"})
+	out, err := m.AddAlbums(ctx, domain.SourceLibrarySync, "", []string{"100", "200"})
 	if err != nil || out["100"] != AddTombstoned || out["200"] != AddQueued {
 		t.Fatalf("AddAlbums = %v (%v), want 100 tombstoned and 200 queued", out, err)
 	}
@@ -702,7 +702,7 @@ func TestAddAlbumsSkipsRemovedRecords(t *testing.T) {
 	if resp := m.SubmitBatch(ctx, []string{"album|us|100"}, nil); resp.Results[0].Job == nil {
 		t.Fatalf("manual add = %+v, want a run", resp)
 	}
-	if again, _ := m.AddAlbums(ctx, domain.SourceLibrarySync, []string{"100"}); again["100"] == AddTombstoned {
+	if again, _ := m.AddAlbums(ctx, domain.SourceLibrarySync, "", []string{"100"}); again["100"] == AddTombstoned {
 		t.Fatal("a manual add did not clear the removal")
 	}
 }

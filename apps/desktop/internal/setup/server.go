@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"amdl/apps/desktop/internal/region"
 	"amdl/internal/client"
 	"amdl/internal/format"
 )
@@ -109,7 +110,9 @@ func DiagnoseClient(ctx context.Context, c *client.Client, address, mine string)
 	case !ws.LoggedIn:
 		sv.Account = Line{Missing, "Not signed in"}
 	default:
-		sv.Account = Line{Ready, AccountText(ws.Accounts, ws.Regions)}
+		// A backend older than the accounts list says the regions.
+		list, _ := c.ListAccounts(ctx)
+		sv.Account = Line{Ready, AccountText(list.Accounts, ws.Regions)}
 	}
 	saved := savedToken(ctx, c)
 	switch {
@@ -123,20 +126,24 @@ func DiagnoseClient(ctx context.Context, c *client.Client, address, mine string)
 	return sv
 }
 
-// AccountText names the signed-in accounts and their storefronts, or says
-// one is signed in when the wrapper names none.
-func AccountText(accounts, regions []string) string {
+// AccountText names the accounts by Apple ID and region, else the regions
+// the wrapper serves, or says one is signed in when it names neither.
+func AccountText(accounts []client.Account, regions []string) string {
 	parts := []string{}
-	if len(accounts) > 0 {
-		parts = append(parts, strings.Join(accounts, ", "))
+	for _, a := range accounts {
+		if l := region.Label(a.Name, a.Region, ""); l != "" {
+			parts = append(parts, l)
+		}
 	}
-	if len(regions) > 0 {
-		parts = append(parts, strings.Join(regions, ", "))
+	if len(parts) == 0 {
+		for _, r := range regions {
+			parts = append(parts, region.Name(r))
+		}
 	}
 	if len(parts) == 0 {
 		return "Signed in"
 	}
-	return strings.Join(parts, " · ")
+	return strings.Join(parts, ", ")
 }
 
 func folderLine(storage []client.Storage) Line {

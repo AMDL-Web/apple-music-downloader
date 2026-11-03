@@ -99,7 +99,7 @@ needs the API changes below before it works against 2.0.
 | `POST /downloads/{id}/retry` | queued the job again under its id; `202 {"status":"queued"}` | a new job: for a record's run the record's failed, given-up and missing slots are re-armed, answering `202 {"status":"queued","job"}`, `200 {"status":"already_downloaded"}` with nothing left, or `200 {"status":"waiting"}` when no run takes the record now (a full queue too); `409 job_finalizing` is gone | retry buttons, clients that follow the retried id |
 | `POST /downloads/{id}/cancel` on a record's run | cancelled the job | pauses the record (its run ends `cancelled`, checkpoints stay, nothing is queued until `POST /library/{kind}/{id}/resume`); a station's run is cancelled as before. Label it Pause | queue views |
 | `DELETE /downloads/{id}` | deleted the job and its records | deletes the run's history; the record and files stay (`DELETE /library/{kind}/{id}` removes a record) | queue views |
-| A link's storefront | the wrapper had to serve it, else `unsupported_storefront` | a record is read in the account storefront whatever the link's, so a `us` link on a `cn` account downloads the `cn` track list; the wrapper must serve the account storefront, else `decryptor_unavailable` naming both. `unsupported_storefront` is gone from `SubmitErrorCode`; a station still plays in its link's storefront | submit flows that switched on `unsupported_storefront` |
+| A link's storefront | the wrapper had to serve it, else `unsupported_storefront` | a record is read in its pinned storefront: the link's when an account serves it, else the default account's, so a `us` link with only a `cn` account downloads the `cn` track list; the wrapper must serve that storefront, else `decryptor_unavailable` naming both. `unsupported_storefront` is gone from `SubmitErrorCode`; a station still plays in its link's storefront | submit flows that switched on `unsupported_storefront` |
 | `library`, `prior_job`, `on_disk` on search hits, lookups and the album page | not in 1.x | removed; `resource {kind, id, state, tracks_done, tracks_wanted, withheld_count, active_job_id?, paused, song_state?}` marks the record holding the hit, and an album track's `state` is its main slot state | search, link preview and album page clients |
 | Job fields | none | `resource {kind, id}`, `trigger` (`manual`, `library_sync`, `artist`, `retry`, `reset`, `import_1x`) and `priority` (`0` now, `1` manual, `2` the library monitor); queued runs start by `priority`, then `queue_order`. `GET /downloads` filters by `resource_kind`, `resource_id` and `trigger` | queue views |
 | Items | one per track | one per planned quality slot, with `slot` (`main` or a codec); the status `unavailable` (the track does not offer the slot) counts in `skipped_items` | job detail views |
@@ -108,7 +108,7 @@ needs the API changes below before it works against 2.0.
 | Wrapper login already pending | `401` (wrapper-manager's `login already pending` reply) | `409 login_pending`; a two-step code already being verified is also `login_pending` | account screens |
 | Wrapper login timeout | `504` | `504 upstream_timeout` | account screens |
 | Wrapper login without a login API | not applicable (wrapper-manager always had one) | `501 login_unsupported` from login, two-step and logout when `wrapper.address` is a bare wrapper-lite; log in with its `--login` instead | account screens |
-| Wrapper logout | listed accounts to pick from | the request names the Apple ID; no wrapper lists its accounts | account screens |
+| Wrapper logout | listed accounts to pick from | the request names the Apple ID (`username`) or an account's id (`account_id`) | account screens |
 | Wrapper login password | trimmed | sent as typed; only an all-whitespace password is `400` | account screens |
 | Apple has no such id | `502` from `POST /quality` | `404 catalog_not_found` from `POST /quality`, `POST /lookup` and `GET /artists/{id}/albums`; other catalog failures stay `502 upstream_error` | quality and link-preview clients |
 | Quality of a song with no Enhanced HLS master | `502` | `200`, every quality `available: false` | quality clients |
@@ -126,9 +126,9 @@ needs the API changes below before it works against 2.0.
 | Logs paging | `after`, `next_cursor` | `cursor`, `next_cursor` | log viewers |
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
-| Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays, and `accounts` stays empty because no 2.0 wrapper names its accounts; `login_supported` says whether the wrapper has a login (wrapper-manager v2 or a wrapper amdl runs), and `managed` describes a wrapper amdl runs | account screens |
+| Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` and `accounts` removed (the accounts are `GET /accounts`); `regions` always an array; `login_supported` says whether the wrapper has a login (wrapper-manager v2 or a wrapper amdl runs), and `managed` describes a wrapper amdl runs | account screens |
 | Wrapper logged in | `status` on `GET /wrapper/status` (true when an account is logged in) | renamed `logged_in` | account screens, scripts that check the login |
-| Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `logged_in`, `regions`, `accounts`, `login_supported` | account screens that showed the count |
+| Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `logged_in`, `regions`, `login_supported` | account screens that showed the count |
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
 | Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
 | `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were file-only keys, and changing one was a `422` with a plain-text body | `400 invalid_request` naming the unknown field, like any removed key | settings screens |
@@ -145,6 +145,12 @@ needs the API changes below before it works against 2.0.
 | Job `overrides` in responses and events | could hold every field above; the token was redacted | holds only the four fields above | job detail clients |
 | Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | client generators that key on `info.version`; requests are unchanged |
 | `PUT /config` keys | runtime keys only; every other key `422 config_key_not_mutable` | every key except `server.listen`, `database.path` and `tools.ffmpeg`. Restart keys (`wrapper.address`, the wrapper timeouts, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size` and the three pool sizes) are saved, listed in the answer's `pending_restart` and applied by the next start; `catalog.default_storefront` and `wrapper.data_dir` apply at once. `wrapper.address` is refused (`config_key_not_mutable`, `details.reason` `managed_wrapper`) while amdl runs the wrapper itself | clients that relied on the 422 for those keys |
+| Wrapper status accounts | `accounts` on `GET /wrapper/status`, an array of account identifiers (always `[]` in the 2.0 release candidates) | removed; `GET /accounts` lists the Apple Music accounts with their switches and position, and `regions` lists each served storefront once | the console, `internal/client` (CLI, MCP server, TUI), the desktop app |
+| Library sync status | `GET /library-sync` returned `enabled`, `interval_minutes`, `anchor_size`, `last_poll_at`, `last_error`, `last_submitted`, `total_submitted` for the one account | `{enabled, interval_minutes, accounts: [...]}`: `enabled` is the master switch `library_sync.enabled`, and each account's entry carries `account_id`, `name`, `region`, its own `enabled` (the account's `library_sync` switch) and the former per-pass fields. A new account's switch starts off | the console, `internal/client` (CLI, MCP server, TUI), the desktop app |
+| Library sync reset | `POST /library-sync/reset` with no body cleared the one anchor | takes an optional `{"account": "<id>"}` (absent: the default account), clears that account's anchor and answers `{account, cleared, status}`; `404 account_not_found` | the console, `internal/client` (CLI, MCP server, TUI), the desktop app |
+| Apple library status | `GET /apple-library/status` returned `available`, `reason`, `state`, `current`, `last_sync`, `last_full_sync_at`, `next_sync_at`, `counts` and the two schedule keys | `{sync_interval_minutes, full_sync_hours, accounts: [...]}`; each entry has those per-account fields plus `account_id`, `name`, `region`, `default` and `enabled` (the account's `apple_library` switch), and `reason` gains `disabled`. `GET /apple-library/{kind}` and `/playlists/{id}/tracks` take `?account=` (absent: the default account) | the console, `internal/client` (CLI, MCP server, TUI), the desktop app |
+| Apple library sync | `POST /apple-library/sync {"mode"}` answered `202` with the status | takes `{"mode", "account"}` (absent: the default account) and answers `202` with that account's entry of the status | the console, `internal/client` (CLI, MCP server, TUI), the desktop app |
+| New for accounts | | `GET /accounts`, `PATCH /accounts/{account_id}`, `DELETE /accounts/{account_id}`; `POST /wrapper/logout` also accepts `account_id`; `409 account_limit_reached` (a wrapper-manager holds at most 10 accounts); album and playlist records carry `pinned_storefront` and pending adds `storefront`; `GET`, `POST` and `DELETE /wrapper/pairing` and `501 pairing_unsupported` (a wrapper behind a token-asking gateway is paired, not configured) | clients that walk the routes, error codes or record fields |
 | `GET /config` | the runtime keys | also the restart keys, as saved in the file, and a `pending_restart` array | clients that walk every key of `config` |
 | New | | `GET /system` (with `default_storefront` and `pending_restart`; it reports no signing mode, because the backend signs no token), `POST /system/restart` (stops and starts the backend in the same process), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search`, `GET /artists/{id}/albums` and `GET /albums/{id}` (catalog search, an artist's albums and an album's songs, marked with their `resource`), the `/library/*` record routes and the disk check (`POST /library/check`), web console at `/console/` (`/` redirects there) | none: additions only |
 
@@ -409,8 +415,8 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 ## Database
 
 Back up `amdl.db` first: the upgrade rewrites the 1.x tables and cannot be undone
-except from that copy. The first start runs one migration in one transaction
-(schema version 6, `PRAGMA user_version`):
+except from that copy. The first start runs the migrations, each in its own transaction
+(schema version 7, `PRAGMA user_version`):
 
 - every 1.x job becomes a run in `runs`, keeping its id, type, values and
   timestamps; `started_at` and `finished_at` are backfilled from its events
@@ -434,7 +440,14 @@ except from that copy. The first start runs one migration in one transaction
   change). The record reads `partial` until you resume it, which reads the playlist
   again and downloads only what is missing. Files from finished song, album and artist jobs (in `songs/`, `albums/`,
   `artists/`) do not count as downloaded;
-- the library-sync anchor is kept as it is.
+- the library-sync anchor is kept as it is. Migration 7 (accounts) adds the `accounts`
+  table and an `account_id` on the anchor and the Apple library cache, copies their rows
+  across with an empty `account_id`, and adds `pinned_storefront` to albums and playlists
+  and `storefront` to pending adds. The first account discovery hands that state to one
+  account (the one whose token amdl stored before, else the first the wrapper lists), makes
+  it the default and sets its `library_sync` switch to `library_sync.enabled` and its
+  `apple_library` switch on, so a library monitor that was syncing keeps syncing. An empty
+  pin reads in the default account's storefront, as before.
 
 A database written by a 2.0 release candidate (schema 2 to 5) is refused with a
 message; move it aside and start again. A 1.x build opening the migrated file finds no

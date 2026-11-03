@@ -11,7 +11,7 @@ func TestAccountSaysWhyTheLocalWrapperCannotDecrypt(t *testing.T) {
 	// While its guest boots, logs in, is stopped or failed, a wrapper amdl
 	// runs answers not ready and signed out (internal/wrapperhost Service).
 	down := func(mode, lastErr string) *client.WrapperStatus {
-		return &client.WrapperStatus{Regions: []string{}, Accounts: []string{}, LoginSupported: true,
+		return &client.WrapperStatus{Regions: []string{}, LoginSupported: true,
 			Managed: &client.ManagedWrapper{Mode: mode, Accel: "hvf", LastError: lastErr}}
 	}
 	for _, tc := range []struct{ mode, lastErr, word, next string }{
@@ -34,7 +34,7 @@ func TestAccountSaysWhyTheLocalWrapperCannotDecrypt(t *testing.T) {
 	if st := accountState(serving, ""); st.word != "Signed in" || st.problem != "" {
 		t.Errorf("a signed-in guest: %+v", st)
 	}
-	lite := &client.WrapperStatus{Ready: true, Regions: []string{}, Accounts: []string{}}
+	lite := &client.WrapperStatus{Ready: true, Regions: []string{}}
 	if st := accountState(lite, ""); st.signIn || !strings.Contains(st.note, "wrapper's own machine") {
 		t.Errorf("wrapper-lite cannot log in over the API: %+v", st)
 	}

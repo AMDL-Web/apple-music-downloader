@@ -38,6 +38,11 @@ type Deps struct {
 	Wrapper     WrapperService
 	Quality     QualityService
 	LibrarySync LibrarySyncService
+	// Accounts is the accounts table and its discovery (internal/accounts).
+	Accounts AccountsService
+	// Pairing is the wrapper pairing; nil answers the /wrapper/pairing
+	// routes 503 feature_unavailable.
+	Pairing PairingService
 	// AppleLibrary backs /apple-library and the in_apple_library mark on
 	// search hits.
 	AppleLibrary AppleLibraryService
@@ -63,9 +68,10 @@ type Deps struct {
 	// /system/restart); it must not block. Nil answers that route 503
 	// feature_unavailable.
 	Restart func()
-	// AccountStorefront is the storefront record runs read in
-	// (internal/media#Downloader.AccountStorefront); POST /lookup reads songs,
-	// albums and playlists there too. Nil reads them in the link's.
+	// AccountStorefront is the default account's storefront
+	// (internal/media#Downloader.AccountStorefront): POST /lookup reads a
+	// song, album or playlist whose storefront no account serves there, as
+	// its record's run would. Nil reads them in the link's.
 	AccountStorefront func(ctx context.Context) (string, error)
 }
 
@@ -84,6 +90,8 @@ type Server struct {
 	wrapper      WrapperService
 	quality      QualityService
 	librarySync  LibrarySyncService
+	accounts     AccountsService
+	pairing      PairingService
 	appleLibrary AppleLibraryService
 	catalog      CatalogService
 	// accountStorefront is Deps.AccountStorefront.
@@ -120,6 +128,7 @@ func New(deps Deps) (*Server, error) {
 		{"Wrapper", deps.Wrapper == nil},
 		{"Quality", deps.Quality == nil},
 		{"LibrarySync", deps.LibrarySync == nil},
+		{"Accounts", deps.Accounts == nil},
 		{"AppleLibrary", deps.AppleLibrary == nil},
 		{"Catalog", deps.Catalog == nil},
 	} {
@@ -130,7 +139,7 @@ func New(deps Deps) (*Server, error) {
 	s := &Server{
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
-		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, appleLibrary: deps.AppleLibrary,
+		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, accounts: deps.Accounts, pairing: deps.Pairing, appleLibrary: deps.AppleLibrary,
 		catalog: deps.Catalog, accountStorefront: deps.AccountStorefront, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
@@ -183,6 +192,9 @@ func (s *Server) routes() []route {
 		{http.MethodPut, "/api/v1/hooks/{name}", h(s.updateHook)},
 		{http.MethodDelete, "/api/v1/hooks/{name}", h(s.deleteHook)},
 		{http.MethodPost, "/api/v1/hooks/{name}/test", h(s.testHook)},
+		{http.MethodGet, "/api/v1/accounts", h(s.listAccounts)},
+		{http.MethodPatch, "/api/v1/accounts/{account_id}", h(s.updateAccount)},
+		{http.MethodDelete, "/api/v1/accounts/{account_id}", h(s.deleteAccount)},
 		{http.MethodGet, "/api/v1/library-sync", h(s.librarySyncStatus)},
 		{http.MethodPost, "/api/v1/library-sync/reset", h(s.librarySyncReset)},
 		// The literal status and sync segments are more specific than {kind}.
@@ -194,6 +206,9 @@ func (s *Server) routes() []route {
 		{http.MethodPost, "/api/v1/wrapper/login", h(s.wrapperLogin)},
 		{http.MethodPost, "/api/v1/wrapper/login/{login_id}/2fa", h(s.wrapperTwoStep)},
 		{http.MethodPost, "/api/v1/wrapper/logout", h(s.wrapperLogout)},
+		{http.MethodGet, "/api/v1/wrapper/pairing", h(s.wrapperPairing)},
+		{http.MethodPost, "/api/v1/wrapper/pairing", h(s.startWrapperPairing)},
+		{http.MethodDelete, "/api/v1/wrapper/pairing", h(s.deleteWrapperPairing)},
 		{http.MethodPost, "/api/v1/quality", h(s.queryQuality)},
 		{http.MethodPost, "/api/v1/lookup", h(s.lookupLink)},
 		{http.MethodGet, "/api/v1/search", h(s.search)},

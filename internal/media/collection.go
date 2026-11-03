@@ -32,11 +32,13 @@ type resolvedCollection struct {
 	ArtworkColors applemusic.ArtworkColors
 }
 
-// mediaUserToken returns the effective media-user-token (internal/usertoken):
-// the wrapper's when amdl can read it, else catalog.media_user_token from the
-// runtime snapshot this job runs under. A submission cannot supply its own.
+// mediaUserToken returns the effective media-user-token (internal/usertoken)
+// of the account that serves the storefront this job reads in, else the
+// default account's: the wrapper's when amdl can read it, else
+// catalog.media_user_token from the runtime snapshot this job runs under. A
+// submission cannot supply its own.
 func (d *Downloader) mediaUserToken() string {
-	return d.tokens.Token(d.cfg).Value
+	return d.tokens.TokenFor(d.cfg, d.storefront).Value
 }
 
 // resolveCollection reads the link's resource and the tracks it downloads.

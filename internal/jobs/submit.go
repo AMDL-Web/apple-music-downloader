@@ -114,27 +114,32 @@ func (m *Manager) SubmitBatchWith(ctx context.Context, urls []string, overrides 
 }
 
 // submitOne adds one validated URL. Caller holds submitMu.
+//
+// A record or pending add is pinned to the link's storefront when an account
+// serves it, else to none (the default account's); a record added before
+// keeps its pin.
 func (m *Manager) submitOne(ctx context.Context, url, key string, valid ValidationResult, overrides *config.DownloadOverrides, opts SubmitOptions, now time.Time, queueFull bool) domain.SubmitResult {
 	// A manual add resumes a paused record: the user asked for the download.
 	resume := false
+	pin := m.pinFor(valid.Storefront)
 	switch valid.Type {
 	case string(domain.ResourceAlbum):
 		return addResult(url, domain.ResourceAlbum, valid.ID)(m.addAlbum(ctx, db.AlbumAdd{
-			ID: valid.ID, WantedAll: true, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Now: now,
+			ID: valid.ID, WantedAll: true, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Storefront: pin, Now: now,
 		}, domain.TriggerManual))
 	case "song":
 		if valid.AlbumID != "" {
 			return addResult(url, domain.ResourceAlbum, valid.AlbumID)(m.addAlbum(ctx, db.AlbumAdd{
-				ID: valid.AlbumID, SongIDs: []string{valid.ID}, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Now: now,
+				ID: valid.AlbumID, SongIDs: []string{valid.ID}, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Storefront: pin, Now: now,
 			}, domain.TriggerManual))
 		}
-		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: valid.ID, Source: domain.SourceManual, Overrides: overrides, AddedAt: now})
+		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: valid.ID, Source: domain.SourceManual, Overrides: overrides, Storefront: pin, AddedAt: now})
 	case "artist":
-		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingArtist, CatalogID: valid.ID, Source: domain.SourceManual, Include: opts.ArtistInclude, Overrides: overrides, AddedAt: now})
+		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingArtist, CatalogID: valid.ID, Source: domain.SourceManual, Include: opts.ArtistInclude, Overrides: overrides, Storefront: pin, AddedAt: now})
 	case string(domain.ResourcePlaylist):
 		if strings.HasPrefix(valid.ID, "pl.") {
 			return addResult(url, domain.ResourcePlaylist, valid.ID)(m.addPlaylist(ctx, db.PlaylistAdd{
-				ID: valid.ID, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Now: now,
+				ID: valid.ID, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Storefront: pin, Now: now,
 			}))
 		}
 		if result, ok := m.addLibraryPlaylist(ctx, url, valid.ID, overrides, now); ok {
@@ -193,16 +198,28 @@ func (m *Manager) addPlaylist(ctx context.Context, add db.PlaylistAdd) (AddOutco
 
 // addLibraryPlaylist adds the songs of a playlist without a catalog id
 // (design §2.6) one by one, from the Apple library cache: it has no record of
-// its own. A song without a catalog id is skipped. It reports false when the
+// its own. The songs are read in the storefront of the account whose library
+// holds it. A song without a catalog id is skipped. It reports false when the
 // cache does not hold the playlist; the caller downloads it as a one-off run
 // then. TODO(P3): report the skipped songs.
 func (m *Manager) addLibraryPlaylist(ctx context.Context, url, playlistID string, overrides *config.DownloadOverrides, now time.Time) (domain.SubmitResult, bool) {
-	tracks, _, found, err := m.store.AppleLibraryPlaylistTracks(ctx, playlistID)
+	owner, found, err := m.store.AppleLibraryPlaylistOwner(ctx, playlistID)
 	if err != nil {
 		return storeFailure(url, "read the library playlist", err), true
 	}
 	if !found {
 		return domain.SubmitResult{}, false
+	}
+	tracks, _, found, err := m.store.AppleLibraryPlaylistTracks(ctx, owner, playlistID)
+	if err != nil {
+		return storeFailure(url, "read the library playlist", err), true
+	}
+	if !found {
+		return domain.SubmitResult{}, false
+	}
+	pin := ""
+	if a, err := m.store.GetAccount(ctx, owner); err == nil {
+		pin = m.pinFor(a.Region)
 	}
 	skipped := 0
 	for _, track := range tracks {
@@ -210,7 +227,7 @@ func (m *Manager) addLibraryPlaylist(ctx context.Context, url, playlistID string
 			skipped++
 			continue
 		}
-		if _, err := m.AddPending(ctx, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: track.CatalogID, Source: domain.SourceManual, Overrides: overrides, AddedAt: now}); err != nil {
+		if _, err := m.AddPending(ctx, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: track.CatalogID, Source: domain.SourceManual, Overrides: overrides, Storefront: pin, AddedAt: now}); err != nil {
 			return storeFailure(url, "add pending", err), true
 		}
 	}

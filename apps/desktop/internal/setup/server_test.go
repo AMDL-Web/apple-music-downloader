@@ -27,6 +27,7 @@ func fakeServer(t *testing.T, system, wrapper, config string) string {
 	mux.HandleFunc("/api/v1/system", answer(system))
 	mux.HandleFunc("/api/v1/wrapper/status", answer(wrapper))
 	mux.HandleFunc("/api/v1/config", answer(config))
+	mux.HandleFunc("/api/v1/accounts", answer(`{"accounts":[{"id":"a1","name":"a@b.c","region":"us","default":true,"state":"active"},{"id":"a2","name":"","region":"jp","state":"active"}]}`))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -43,7 +44,7 @@ func system(version string, ffmpeg bool, free int64) string {
 
 func TestDiagnoseAHealthyServer(t *testing.T) {
 	url := fakeServer(t, system("2.0.0", true, 2<<40),
-		`{"ready":true,"logged_in":true,"regions":["us","cn"],"accounts":["a@b.c"],"login_supported":true,"media_user_token":"...kg=="}`,
+		`{"ready":true,"logged_in":true,"regions":["us","jp"],"login_supported":true,"media_user_token":"...kg=="}`,
 		`{"config":{"catalog":{"media_user_token":""}}}`)
 	sv := Diagnose(context.Background(), url, "2.1.0")
 	for name, l := range map[string]Line{"reach": sv.Reach, "account": sv.Account, "token": sv.Token, "ffmpeg": sv.FFmpeg, "folder": sv.Folder} {
@@ -51,9 +52,18 @@ func TestDiagnoseAHealthyServer(t *testing.T) {
 			t.Errorf("%s: %+v", name, l)
 		}
 	}
-	if !strings.HasPrefix(sv.Reach.Text, "amdl 2.0.0 · ") || sv.Account.Text != "a@b.c · us, cn" ||
+	if !strings.HasPrefix(sv.Reach.Text, "amdl 2.0.0 · ") || sv.Account.Text != "a@b.c · United States, Japan" ||
 		sv.Token.Text != "From the wrapper · ends …kg==" || sv.FFmpeg.Text != "/usr/bin/ffmpeg" || sv.Folder.Text != "/volume1/music · 2.2 TB free" {
 		t.Errorf("texts: %+v", sv)
+	}
+}
+
+func TestAccountTextFallsBackToTheRegions(t *testing.T) {
+	if got := AccountText(nil, []string{"us", "jp"}); got != "United States, Japan" {
+		t.Errorf("regions: %q", got)
+	}
+	if got := AccountText(nil, nil); got != "Signed in" {
+		t.Errorf("nothing named: %q", got)
 	}
 }
 

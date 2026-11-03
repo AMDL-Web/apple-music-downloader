@@ -98,8 +98,8 @@ test('hooks: a failure in the last 24 h warns, never danger; 23 h 59 m vs 24 h',
 });
 
 test('library sync: Off, Needs token (its error not repeated), Error, Watching', () => {
-  const sync = (over = {}) => ok({ enabled: true, interval_minutes: 15, anchor_size: 412, last_submitted: 0, total_submitted: 37, last_poll_at: new Date(NOW - 6 * 60e3).toISOString(), ...over });
-  const noWrapperToken = ok({ ready: true, logged_in: true, regions: ['us'], accounts: [], media_user_token: '' });
+  const sync = ({ enabled = true, ...over } = {}) => ok({ enabled, interval_minutes: 15, accounts: [{ account_id: 'a', name: 'a@example.com', region: 'us', enabled: true, anchor_size: 412, last_submitted: 0, total_submitted: 37, last_poll_at: new Date(NOW - 6 * 60e3).toISOString(), ...over }] });
+  const noWrapperToken = ok({ ready: true, logged_in: true, regions: ['us'], media_user_token: '' });
   const view = (s, cfg = config(), wrapper = noWrapperToken) => domainView('library_sync', { librarySync: s, config: cfg, wrapper }, ctx());
   assert.equal(view(sync({ enabled: false })).tag.label, 'Off');
   assert.equal(view(sync({ enabled: false })).note, null, 'the figure already says what was recorded');
@@ -123,14 +123,14 @@ test('library sync: Off, Needs token (its error not repeated), Error, Watching',
 });
 
 test('library sync: the wrapper\'s token is enough, and the view waits for the wrapper status', () => {
-  const sync = ok({ enabled: true, interval_minutes: 15, anchor_size: 412, last_submitted: 0, total_submitted: 0, last_poll_at: new Date(NOW - 6 * 60e3).toISOString() });
+  const sync = ok({ enabled: true, interval_minutes: 15, accounts: [{ account_id: 'a', enabled: true, anchor_size: 412, last_submitted: 0, total_submitted: 0, last_poll_at: new Date(NOW - 6 * 60e3).toISOString() }] });
   const empty = config({ catalog: { media_user_token: '' } });
   const label = (wrapper, cfg = empty) => domainView('library_sync', { librarySync: sync, config: cfg, wrapper }, ctx()).tag.label;
   assert.equal(label(ok({ ready: true, media_user_token: '...a1b2' })), 'Watching', 'only the wrapper has a token');
   assert.equal(label(ok({ ready: true, media_user_token: '' })), 'Needs token');
   assert.equal(label(fail(503)), 'Needs token', 'an unreachable wrapper has no token to give');
   assert.equal(label(undefined, config({ catalog: { media_user_token: '...wxyz' } })), 'Watching', 'a saved token before the wrapper status answers');
-  const idle = (wrapper) => domainView('library_sync', { librarySync: ok({ ...sync.data, last_error: 'no media-user-token' }), config: empty, wrapper }, ctx());
+  const idle = (wrapper) => domainView('library_sync', { librarySync: ok({ ...sync.data, accounts: [{ ...sync.data.accounts[0], last_error: 'no media-user-token' }] }), config: empty, wrapper }, ctx());
   assert.equal(idle(undefined).state, 'loading', 'neither Needs token nor an Error while the wrapper status is pending');
   assert.equal(idle(undefined).tag, null);
   assert.equal(idle(ok({ ready: true, media_user_token: '...a1b2' })).tag.label, 'Error', 'with the wrapper token in use, last_error is a real failure');
@@ -138,7 +138,7 @@ test('library sync: the wrapper\'s token is enough, and the view waits for the w
 });
 
 test('account: Ready with storefronts, a warning when the default is not served, Unreachable, simulate neutral', () => {
-  const wrapper = (over = {}) => ok({ ready: true, logged_in: true, regions: ['cn', 'us'], accounts: ['a@example.com'], ...over });
+  const wrapper = (over = {}) => ok({ ready: true, logged_in: true, regions: ['cn', 'us'], ...over });
   const view = (w, c = ctx(), sys = system()) => domainView('account', { wrapper: w, system: ok(sys) }, c);
   const ready = view(wrapper());
   assert.equal(ready.tag.label, 'Ready');
@@ -165,7 +165,7 @@ test('account: Ready with storefronts, a warning when the default is not served,
 
 test('account: a wrapper amdl runs says what it does instead of serving, never "No account"', () => {
   const managed = (mode, over = {}) =>
-    ok({ ready: false, logged_in: false, regions: [], accounts: [], login_supported: true, managed: { mode, accel: 'tcg', accel_fallback: false, qemu: 'qemu-system-x86_64', guest: 'abc', login_residue: false, ...over } });
+    ok({ ready: false, logged_in: false, regions: [], login_supported: true, managed: { mode, accel: 'tcg', accel_fallback: false, qemu: 'qemu-system-x86_64', guest: 'abc', login_residue: false, ...over } });
   const view = (w) => domainView('account', { wrapper: w, system: ok(system()) }, ctx());
   const starting = view(managed('starting'));
   assert.equal(starting.tag.label, 'Starting');
@@ -237,8 +237,8 @@ test('no note, figure or summary says "0", "—" or nothing for an all-zero serv
   const zero = {
     system: ok(system({ jobs: { workers: 3, queue_depth: 0, queue_capacity: 256, recovery_backlog: 0 } })),
     health: ok({ status: 'ok' }),
-    wrapper: ok({ ready: true, logged_in: true, regions: [], accounts: [] }),
-    librarySync: ok({ enabled: true, interval_minutes: 15, anchor_size: 0, last_submitted: 0, total_submitted: 0 }),
+    wrapper: ok({ ready: true, logged_in: true, regions: [] }),
+    librarySync: ok({ enabled: true, interval_minutes: 15, accounts: [{ account_id: 'a', enabled: true, anchor_size: 0, last_submitted: 0, total_submitted: 0 }] }),
     hooks: ok({ enabled: true, entries: [] }),
     stats: ok({ totals: { tracks_completed: 0, bytes_written: 0, duration_ms: 0 }, daily: [], codecs: [], hooks: [] }),
     logs: ok({ entries: [], cursor: 0, full: false, last: null }),
@@ -265,7 +265,7 @@ test('accessible names join label, tag and figure; Overview lists only what need
     system: ok(system({ storage: [disk(50 * GB)] })),
     health: ok({ status: 'ok' }),
     wrapper: { data: undefined, error: { status: 503, code: 'wrapper_unavailable', message: raw }, at: NOW, okAt: 0 },
-    librarySync: ok({ enabled: true, interval_minutes: 15, anchor_size: 1 }),
+    librarySync: ok({ enabled: true, interval_minutes: 15, accounts: [{ account_id: 'a', enabled: true, anchor_size: 1 }] }),
     config: config({ catalog: { media_user_token: '' } }),
   };
   const rows = attentionRows(s, ctx(), SETTINGS_SECTIONS);

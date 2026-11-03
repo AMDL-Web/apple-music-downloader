@@ -13,9 +13,10 @@ import (
 
 // Endpoint is the wrapper's GET /token source (see the package comment).
 type Endpoint struct {
-	// Fetch asks the wrapper for its token, bounded by the wrapper client's
-	// request timeout (wrapper.Client.MusicToken).
-	Fetch func(context.Context) (wrapper.TokenReply, error)
+	// Fetch asks the wrapper for an account's token, bounded by the wrapper
+	// client's request timeout (wrapper.Client.MusicToken): instance is a
+	// wrapper-manager's instance id, empty for the wrapper's one account.
+	Fetch func(ctx context.Context, instance string) (wrapper.TokenReply, error)
 	// Dir holds amdl's copy of the token (StoreDir).
 	Dir string
 	// Address is wrapper.address; a stored copy from another address is not
@@ -73,14 +74,20 @@ type remote struct {
 	saveFailing bool
 }
 
-func newRemote(e Endpoint) *remote {
+// newRemote is the GET /token source of one account: instance "" for the
+// implicit account, else its wrapper-manager instance id.
+func newRemote(e Endpoint, accountID, instance string) *remote {
 	logger := e.Logger
 	if logger == nil {
 		logger = slog.Default().With("component", "usertoken")
 	}
+	if accountID != implicitID {
+		logger = logger.With("account", accountID)
+	}
+	fetch := e.Fetch
 	r := &remote{
-		fetch:            e.Fetch,
-		store:            tokenStore{dir: e.Dir},
+		fetch:            func(ctx context.Context) (wrapper.TokenReply, error) { return fetch(ctx, instance) },
+		store:            tokenStore{dir: e.Dir, name: storeFileName(accountID)},
 		address:          e.Address,
 		logger:           logger,
 		now:              time.Now,

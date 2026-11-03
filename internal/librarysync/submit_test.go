@@ -29,7 +29,7 @@ func TestTransientResolveFailureKeepsAnchorAndRetries(t *testing.T) {
 	jobs := &fakeSubmitter{}
 	w := newWatcher(t, lib, store, jobs, nil)
 
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 1 || jobs.batches[0][0] != "l.album0" {
 		t.Fatalf("batches = %v, want only album0 submitted while album1 fails", jobs.batches)
@@ -37,13 +37,13 @@ func TestTransientResolveFailureKeepsAnchorAndRetries(t *testing.T) {
 	if store.writes != 0 || !reflect.DeepEqual(store.anchor, initial) {
 		t.Fatalf("anchor rewritten (%d writes, head %q) although album1 was not submitted", store.writes, store.anchor[0].SongID)
 	}
-	status := w.Status()
+	status := w.statusOf(t)
 	if !strings.Contains(status.LastError, "l.album1") || status.LastSubmitted != 1 {
 		t.Fatalf("status = %+v, want last_error naming l.album1 and last_submitted 1", status)
 	}
 
 	lib.failURL = nil
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 
 	if len(jobs.batches) != 2 || !slices.Contains(jobs.batches[1], "l.album1") {
 		t.Fatalf("second pass batches = %v, want album1 submitted", jobs.batches)
@@ -51,7 +51,7 @@ func TestTransientResolveFailureKeepsAnchorAndRetries(t *testing.T) {
 	if store.anchor[0].SongID != "i.song0" {
 		t.Fatalf("anchor head = %q after a clean pass, want i.song0", store.anchor[0].SongID)
 	}
-	if status := w.Status(); status.LastError != "" {
+	if status := w.statusOf(t); status.LastError != "" {
 		t.Fatalf("last_error = %q after a clean pass, want empty", status.LastError)
 	}
 }
@@ -68,21 +68,21 @@ func TestPersistentClientErrorIsSkippedAfterBoundedPasses(t *testing.T) {
 	w := newWatcher(t, lib, store, jobs, nil)
 
 	for pass := 1; pass < maxClientErrorPasses; pass++ {
-		w.RunOnce(context.Background())
+		w.RunOnce(context.Background(), testAccount)
 		if store.writes != 0 {
 			t.Fatalf("pass %d rewrote the anchor while album1 is still pending", pass)
 		}
 	}
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 	if store.writes != 0 {
 		t.Fatal("anchor rewritten while album0 (transient) is still pending")
 	}
-	if status := w.Status(); strings.Contains(status.LastError, "l.album1") || !strings.Contains(status.LastError, "l.album0") {
+	if status := w.statusOf(t); strings.Contains(status.LastError, "l.album1") || !strings.Contains(status.LastError, "l.album0") {
 		t.Fatalf("last_error = %q after %d passes, want album1 given up and album0 still pending", status.LastError, maxClientErrorPasses)
 	}
 
 	lib.failURL = nil
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 	if store.writes != 1 || store.anchor[0].SongID != "i.song0" {
 		t.Fatalf("anchor writes = %d head = %q, want the anchor advanced once album0 resolves", store.writes, store.anchor[0].SongID)
 	}
@@ -102,10 +102,10 @@ func TestClientErrorThatClearsIsSubmitted(t *testing.T) {
 	w := newWatcher(t, lib, store, jobs, nil)
 
 	for pass := 1; pass < maxClientErrorPasses; pass++ {
-		w.RunOnce(context.Background())
+		w.RunOnce(context.Background(), testAccount)
 	}
 	lib.clientErrorURL = nil
-	w.RunOnce(context.Background())
+	w.RunOnce(context.Background(), testAccount)
 	if last := jobs.batches[len(jobs.batches)-1]; !slices.Contains(last, "l.album1") {
 		t.Fatalf("last batch = %v, want album1 submitted once its lookup works", last)
 	}
@@ -127,19 +127,19 @@ func TestClientErrorCountResetsBetweenPasses(t *testing.T) {
 			w := newWatcher(t, lib, store, &fakeSubmitter{}, nil)
 
 			for pass := 1; pass < maxClientErrorPasses; pass++ {
-				w.RunOnce(context.Background())
+				w.RunOnce(context.Background(), testAccount)
 			}
 			lib.clientErrorURL = nil
 			if interruption == "transient error" {
 				lib.failURL["l.album1"] = true
 			}
-			w.RunOnce(context.Background())
+			w.RunOnce(context.Background(), testAccount)
 			delete(lib.failURL, "l.album1")
 			lib.clientErrorURL = map[string]bool{"l.album1": true}
 			for pass := 1; pass < maxClientErrorPasses; pass++ {
-				w.RunOnce(context.Background())
+				w.RunOnce(context.Background(), testAccount)
 			}
-			if status := w.Status(); !strings.Contains(status.LastError, "l.album1") || store.writes != 0 {
+			if status := w.statusOf(t); !strings.Contains(status.LastError, "l.album1") || store.writes != 0 {
 				t.Fatalf("last_error = %q, anchor writes = %d; want album1 still pending after a broken run of client errors", status.LastError, store.writes)
 			}
 		})
@@ -173,7 +173,7 @@ func TestAddOutcomeKeepsAnchorOnlyWhenTheAddFailed(t *testing.T) {
 			}
 			w := newWatcher(t, lib, store, submitter, nil)
 
-			w.RunOnce(context.Background())
+			w.RunOnce(context.Background(), testAccount)
 
 			if len(submitter.batches) != 1 {
 				t.Fatalf("batches = %v, want one add", submitter.batches)
@@ -182,7 +182,7 @@ func TestAddOutcomeKeepsAnchorOnlyWhenTheAddFailed(t *testing.T) {
 			if advanced != tt.wantAdvanced {
 				t.Fatalf("anchor advanced = %v (head %q), want %v", advanced, store.anchor[0].SongID, tt.wantAdvanced)
 			}
-			lastError := w.Status().LastError
+			lastError := w.statusOf(t).LastError
 			if tt.wantAdvanced && lastError != "" {
 				t.Fatalf("last_error = %q, want a clean pass", lastError)
 			}

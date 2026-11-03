@@ -212,10 +212,19 @@ func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []str
 // digits, so a count changing moves neither the other segments nor the
 // track's edge.
 func segmentedRoom(c *ui.Context, k *Tokens, key string, selected *int, labels, room []string, colors map[int]ui.Color) {
+	segmentedTips(c, k, key, selected, labels, room, colors, nil)
+}
+
+// segmentedTips is segmentedRoom with a tooltip on each segment that has
+// one in tips.
+func segmentedTips(c *ui.Context, k *Tokens, key string, selected *int, labels, room []string, colors map[int]ui.Color, tips []string) {
 	s := ui.SegmentedBase(c.Key(key), selected, len(labels))
 	s.Track.Padding(padControl).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line).Children(func() {
 		for i, l := range labels {
 			seg := s.Segment(i).PaddingX(10).PaddingY(2).Radius(radiusInner)
+			if i < len(tips) && tips[i] != "" {
+				seg.Tooltip(tips[i])
+			}
 			fg := k.Muted
 			if col, ok := colors[i]; ok {
 				fg = col

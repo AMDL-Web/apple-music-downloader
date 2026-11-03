@@ -19,6 +19,9 @@ type AppleLibraryQuery struct {
 	// Q keeps items whose name, artist or album contains it.
 	Q             string
 	Limit, Offset int
+	// Account is the account (an Account.id) whose copy to read; "" is the
+	// default account's.
+	Account string
 }
 
 // AppleLibraryPage is the AppleLibraryPage schema. SyncedAt is nil until the
@@ -39,18 +42,30 @@ type AppleLibraryTracks struct {
 	ReadAt     *time.Time                 `json:"read_at,omitempty"`
 }
 
-// AppleLibraryStatus is the AppleLibraryStatus schema.
+// AppleLibraryStatus is the AppleLibraryStatus schema: the schedule shared by
+// every account and one entry per account, the default first.
 type AppleLibraryStatus struct {
-	Available           bool                  `json:"available"`
-	Reason              string                `json:"reason,omitempty"`
-	State               string                `json:"state"`
-	Current             *AppleLibraryProgress `json:"current,omitempty"`
-	LastSync            *AppleLibraryRun      `json:"last_sync,omitempty"`
-	LastFullSyncAt      *time.Time            `json:"last_full_sync_at,omitempty"`
-	NextSyncAt          *time.Time            `json:"next_sync_at,omitempty"`
-	Counts              map[string]int        `json:"counts"`
-	SyncIntervalMinutes int                   `json:"sync_interval_minutes"`
-	FullSyncHours       int                   `json:"full_sync_hours"`
+	SyncIntervalMinutes int                         `json:"sync_interval_minutes"`
+	FullSyncHours       int                         `json:"full_sync_hours"`
+	Accounts            []AppleLibraryAccountStatus `json:"accounts"`
+}
+
+// AppleLibraryAccountStatus is the AppleLibraryAccountStatus schema: one
+// account's cache and sync. Enabled is the account's apple_library switch.
+type AppleLibraryAccountStatus struct {
+	AccountID      string                `json:"account_id"`
+	Name           string                `json:"name"`
+	Region         string                `json:"region"`
+	Default        bool                  `json:"default"`
+	Enabled        bool                  `json:"enabled"`
+	Available      bool                  `json:"available"`
+	Reason         string                `json:"reason,omitempty"`
+	State          string                `json:"state"`
+	Current        *AppleLibraryProgress `json:"current,omitempty"`
+	LastSync       *AppleLibraryRun      `json:"last_sync,omitempty"`
+	LastFullSyncAt *time.Time            `json:"last_full_sync_at,omitempty"`
+	NextSyncAt     *time.Time            `json:"next_sync_at,omitempty"`
+	Counts         map[string]int        `json:"counts"`
 }
 
 // AppleLibraryProgress is the AppleLibrarySyncProgress schema.
@@ -97,29 +112,45 @@ func (c *Client) AppleLibrary(ctx context.Context, kind string, q AppleLibraryQu
 	if q.Offset > 0 {
 		v.Set("offset", strconv.Itoa(q.Offset))
 	}
+	if q.Account != "" {
+		v.Set("account", q.Account)
+	}
 	var p AppleLibraryPage
 	err := c.do(ctx, http.MethodGet, "/api/v1/apple-library/"+url.PathEscape(kind), v, nil, &p)
 	return p, err
 }
 
 // AppleLibraryPlaylistTracks reads a cached library playlist's tracks: GET
-// /api/v1/apple-library/playlists/{playlist_id}/tracks.
-func (c *Client) AppleLibraryPlaylistTracks(ctx context.Context, playlistID string) (AppleLibraryTracks, error) {
+// /api/v1/apple-library/playlists/{playlist_id}/tracks, from the account's
+// copy ("" is the default account's).
+func (c *Client) AppleLibraryPlaylistTracks(ctx context.Context, playlistID, account string) (AppleLibraryTracks, error) {
+	var v url.Values
+	if account != "" {
+		v = url.Values{"account": {account}}
+	}
 	var t AppleLibraryTracks
-	err := c.do(ctx, http.MethodGet, "/api/v1/apple-library/playlists/"+url.PathEscape(playlistID)+"/tracks", nil, nil, &t)
+	err := c.do(ctx, http.MethodGet, "/api/v1/apple-library/playlists/"+url.PathEscape(playlistID)+"/tracks", v, nil, &t)
 	return t, err
 }
 
-// SyncAppleLibrary starts a sync (mode full or incremental; "" is full) and
-// returns the status with the sync as Current: POST /api/v1/apple-library/sync.
-// A sync already under way fails with code apple_library_sync_running.
-func (c *Client) SyncAppleLibrary(ctx context.Context, mode string) (AppleLibraryStatus, error) {
-	var body any
+// SyncAppleLibrary starts a sync of an account's copy ("" is the default
+// account; mode full or incremental, "" is full) and returns that account's
+// entry with the sync as Current: POST /api/v1/apple-library/sync. A sync
+// already under way fails with code apple_library_sync_running.
+func (c *Client) SyncAppleLibrary(ctx context.Context, mode, account string) (AppleLibraryAccountStatus, error) {
+	body := map[string]string{}
 	if mode != "" {
-		body = map[string]string{"mode": mode}
+		body["mode"] = mode
 	}
-	var s AppleLibraryStatus
-	err := c.do(ctx, http.MethodPost, "/api/v1/apple-library/sync", nil, body, &s, http.StatusAccepted)
+	if account != "" {
+		body["account"] = account
+	}
+	var s AppleLibraryAccountStatus
+	var send any
+	if len(body) > 0 {
+		send = body
+	}
+	err := c.do(ctx, http.MethodPost, "/api/v1/apple-library/sync", nil, send, &s, http.StatusAccepted)
 	return s, err
 }
 

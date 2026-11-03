@@ -16,11 +16,11 @@ import (
 // fakeAppleLibrary answers membership from a fixed map; the other methods are
 // not used by the routes that take it.
 type fakeAppleLibrary struct {
-	applelibrary.Engine
+	applelibrary.Set
 	in map[string]map[string]bool
 }
 
-func (f *fakeAppleLibrary) Membership(_ context.Context, kind string, ids []string) map[string]bool {
+func (f *fakeAppleLibrary) Membership(_ context.Context, _, kind string, ids []string) map[string]bool {
 	if f.in[kind] == nil {
 		return nil
 	}
@@ -67,7 +67,26 @@ type refusedToken struct{}
 func (refusedToken) Error() string           { return "403 Forbidden" }
 func (refusedToken) UserTokenRejected() bool { return true }
 
-func newAppleLibraryServer(t *testing.T, token string) (*Server, *applelibrary.Engine, *pagedApple) {
+// defaultLibrary drives the default account's engine of a Set.
+type defaultLibrary struct{ set *applelibrary.Set }
+
+func (d defaultLibrary) SyncNow(ctx context.Context, mode string) (applelibrary.Run, error) {
+	return d.set.SyncNow(ctx, "", mode)
+}
+
+func (d defaultLibrary) Running() string { return d.set.Running(context.Background(), "") }
+
+// firstAccount is the first account entry of an Apple library status body.
+func firstAccount(t *testing.T, got map[string]any) map[string]any {
+	t.Helper()
+	accounts, _ := got["accounts"].([]any)
+	if len(accounts) == 0 {
+		t.Fatalf("status has no accounts: %v", got)
+	}
+	return accounts[0].(map[string]any)
+}
+
+func newAppleLibraryServer(t *testing.T, token string) (*Server, defaultLibrary, *pagedApple) {
 	t.Helper()
 	cfg := config.Default()
 	cfg.Catalog.MediaUserToken = token
@@ -91,9 +110,9 @@ func newAppleLibraryServer(t *testing.T, token string) (*Server, *applelibrary.E
 		tracks: map[string][]applemusic.LibraryItem{"p.1": songs[:3]},
 	}
 	server := newServer(t, Deps{Config: store})
-	engine := applelibrary.New(store, nil, apple, server.store, slog.Default())
-	server.appleLibrary = engine
-	return server, engine, apple
+	set := applelibrary.NewSet(store, nil, apple, server.store, server.accounts, slog.Default())
+	server.appleLibrary = set
+	return server, defaultLibrary{set}, apple
 }
 
 func TestAppleLibraryRoutesServeTheCache(t *testing.T) {
@@ -149,7 +168,7 @@ func TestAppleLibraryRoutesServeTheCache(t *testing.T) {
 	assertErrorCode(t, requestJSON(t, handler, http.MethodGet, "/api/v1/apple-library/playlists/p.nope/tracks", ""), http.StatusNotFound, CodeCatalogNotFound)
 
 	recorder = requestJSON(t, handler, http.MethodGet, "/api/v1/apple-library/status", "")
-	got = decodeBody(t, recorder.Body.Bytes())
+	got = firstAccount(t, decodeBody(t, recorder.Body.Bytes()))
 	counts := got["counts"].(map[string]any)
 	if got["available"] != true || got["state"] != "idle" || counts["songs"] != float64(130) || counts["albums"] != float64(2) {
 		t.Fatalf("status = %v", got)
@@ -190,7 +209,7 @@ func TestAppleLibraryUnavailableWithoutTokenOrWhenRefused(t *testing.T) {
 		t.Fatalf("details = %v", details)
 	}
 	assertErrorCode(t, requestJSON(t, handler, http.MethodPost, "/api/v1/apple-library/sync", ""), http.StatusServiceUnavailable, CodeAppleLibraryUnavailable)
-	got := decodeBody(t, requestJSON(t, handler, http.MethodGet, "/api/v1/apple-library/status", "").Body.Bytes())
+	got := firstAccount(t, decodeBody(t, requestJSON(t, handler, http.MethodGet, "/api/v1/apple-library/status", "").Body.Bytes()))
 	if got["available"] != false || got["reason"] != "no_token" {
 		t.Fatalf("status = %v", got)
 	}

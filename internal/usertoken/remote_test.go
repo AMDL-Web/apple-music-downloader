@@ -67,7 +67,7 @@ func (f *fakeWrapper) set(r ...fakeReply) {
 	f.replies = r
 }
 
-func (f *fakeWrapper) fetch(context.Context) (wrapper.TokenReply, error) {
+func (f *fakeWrapper) fetch(context.Context, string) (wrapper.TokenReply, error) {
 	n := int(f.calls.Add(1))
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -77,14 +77,14 @@ func (f *fakeWrapper) fetch(context.Context) (wrapper.TokenReply, error) {
 
 // endpointProvider is a Provider with GET /token answered by fetch, its store
 // in dir and every wait short unless a test lengthens it.
-func endpointProvider(t *testing.T, fetch func(context.Context) (wrapper.TokenReply, error), dir, address string, logs *lockedBuffer) (*Provider, *remote) {
+func endpointProvider(t *testing.T, fetch func(context.Context, string) (wrapper.TokenReply, error), dir, address string, logs *lockedBuffer) (*Provider, *remote) {
 	t.Helper()
-	p := New(nil)
+	p := New()
 	p.UseEndpoint(Endpoint{
 		Fetch: fetch, Dir: dir, Address: address,
 		Logger: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
-	r := p.remote.Load()
+	r := p.remotes[implicitID]
 	r.jitter = func() time.Duration { return 0 }
 	r.floor, r.ceiling = time.Hour, time.Hour
 	r.loggedOutRetry, r.unsupportedRetry = time.Hour, time.Hour
@@ -140,7 +140,7 @@ func TestEndpointTokenIsUsedAndStoredPrivately(t *testing.T) {
 	w.set(ok(endpointTok, 0))
 	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
 	runLoop(t, p)
-	waitFor(t, "the /token token", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper}))
+	waitFor(t, "the /token token", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper, implicitID}))
 
 	st, err := os.Stat(filepath.Join(dir, StoreFileName))
 	if err != nil {
@@ -173,7 +173,7 @@ func TestEndpointBeatsDataDirFile(t *testing.T) {
 		t.Fatalf("before any /token answer: %d bytes, want the data_dir file", len(got.Value))
 	}
 	runLoop(t, p)
-	waitFor(t, "/token to win over data_dir", tokenIs(p, cfgWith(configTok, dataDir), Token{endpointTok, SourceWrapper}))
+	waitFor(t, "/token to win over data_dir", tokenIs(p, cfgWith(configTok, dataDir), Token{endpointTok, SourceWrapper, implicitID}))
 }
 
 func TestStoredCopyServesARestart(t *testing.T) {
@@ -183,13 +183,13 @@ func TestStoredCopyServesARestart(t *testing.T) {
 	first.set(ok(endpointTok, 0))
 	p, _ := endpointProvider(t, first.fetch, dir, testAddress, &logs)
 	runLoop(t, p)
-	waitFor(t, "the first run's token", tokenIs(p, cfgWith("", ""), Token{endpointTok, SourceWrapper}))
+	waitFor(t, "the first run's token", tokenIs(p, cfgWith("", ""), Token{endpointTok, SourceWrapper, implicitID}))
 
 	// The second run's wrapper is restarting: nothing answers.
 	down := &fakeWrapper{}
 	down.set(fakeReply{err: errors.New("connection refused")})
 	again, _ := endpointProvider(t, down.fetch, dir, testAddress, &logs)
-	if got := again.Token(cfgWith(configTok, "")); got != (Token{endpointTok, SourceWrapper}) {
+	if got := again.Token(cfgWith(configTok, "")); got != (Token{endpointTok, SourceWrapper, implicitID}) {
 		t.Fatalf("after a restart: {%d bytes, %q}, want the stored copy", len(got.Value), got.Source)
 	}
 	runLoop(t, again)
@@ -224,13 +224,13 @@ func TestLoggedOutDropsTheStoredCopy(t *testing.T) {
 		t.Fatal("the stored copy was not loaded")
 	}
 	runLoop(t, p)
-	waitFor(t, "the config fallback", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig}))
+	waitFor(t, "the config fallback", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig, implicitID}))
 	// The token stops being used first; the copy goes and the logout is
 	// logged right after.
 	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
 	waitFor(t, "the logout's log line", func() bool { return strings.Contains(logs.String(), "no logged-in account") })
 	again, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
-	if got := again.Token(cfgWith("", "")); got != (Token{}) {
+	if got := again.Token(cfgWith("", "")); got != (Token{Account: implicitID}) {
 		t.Fatal("a restart brought the logged-out token back")
 	}
 	assertNoToken(t, &logs, endpointTok)
@@ -268,7 +268,7 @@ func TestRefetchesAndPicksUpTheNewToken(t *testing.T) {
 	p, r := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
 	r.floor = 20 * time.Millisecond
 	runLoop(t, p)
-	waitFor(t, "the refreshed token", tokenIs(p, cfgWith("", ""), Token{newerTok, SourceWrapper}))
+	waitFor(t, "the refreshed token", tokenIs(p, cfgWith("", ""), Token{newerTok, SourceWrapper, implicitID}))
 	assertNoToken(t, &logs, endpointTok, newerTok)
 }
 
@@ -301,7 +301,7 @@ func TestRefreshSoonWaitsOutTheSpacing(t *testing.T) {
 }
 
 func TestWaitAfterToken(t *testing.T) {
-	r := newRemote(Endpoint{Fetch: (&fakeWrapper{}).fetch, Dir: t.TempDir()})
+	r := newRemote(Endpoint{Fetch: (&fakeWrapper{}).fetch, Dir: t.TempDir()}, implicitID, "")
 	r.jitter = func() time.Duration { return 7 * time.Second }
 	now := time.Unix(1_800_000_000, 0)
 	tests := []struct {
@@ -358,17 +358,6 @@ func TestFailureBacksOffAndKeepsTheToken(t *testing.T) {
 	assertNoToken(t, &logs, endpointTok)
 }
 
-func TestManagedProviderIgnoresTheEndpoint(t *testing.T) {
-	var calls int
-	p := New(managedReader(wrapperTok, nil, &calls))
-	p.UseEndpoint(Endpoint{Fetch: (&fakeWrapper{}).fetch, Dir: t.TempDir()})
-	if p.remote.Load() != nil {
-		t.Fatal("a managed provider took an endpoint")
-	}
-	p.RefreshSoon()
-	p.RunEndpoint(context.Background()) // returns at once
-}
-
 // TestRealClientAgainstAWrapper drives the provider through wrapper.Client
 // and an HTTP wrapper: a 200, then a logout's 503.
 func TestRealClientAgainstAWrapper(t *testing.T) {
@@ -400,9 +389,9 @@ func TestRealClientAgainstAWrapper(t *testing.T) {
 	p, r := endpointProvider(t, client.MusicToken, dir, srv.URL, &logs)
 	r.floor, r.loggedOutRetry = 20*time.Millisecond, 20*time.Millisecond
 	runLoop(t, p)
-	waitFor(t, "the token over HTTP", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper}))
+	waitFor(t, "the token over HTTP", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper, implicitID}))
 	loggedIn.Store(false)
-	waitFor(t, "the logout", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig}))
+	waitFor(t, "the logout", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig, implicitID}))
 	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
 	assertNoToken(t, &logs, endpointTok)
 }
@@ -437,7 +426,7 @@ func TestUnwritableStoreWarnsOnce(t *testing.T) {
 	w.set(ok(endpointTok, 0))
 	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
 	runLoop(t, p)
-	waitFor(t, "the /token token", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper}))
+	waitFor(t, "the /token token", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper, implicitID}))
 	for i := int32(2); i <= 3; i++ {
 		p.RefreshSoon()
 		waitFor(t, "another fetch", func() bool { return w.calls.Load() >= i })

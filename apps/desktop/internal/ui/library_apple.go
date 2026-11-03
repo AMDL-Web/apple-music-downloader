@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"amdl/apps/desktop/internal/region"
 	"amdl/apps/desktop/internal/store"
 	"amdl/apps/desktop/internal/widgets"
 	"amdl/internal/client"
@@ -15,10 +16,10 @@ import (
 // now.
 func (a *App) appleSyncBar(c *ui.Context, k *Tokens, compact bool) {
 	s := a.Store
-	l := &s.Library
-	syncing := l.AppleSync != nil && l.AppleSync.Current != nil
+	st := s.Library.AppleEntry()
+	syncing := st != nil && st.Current != nil
 	if !compact {
-		if st := l.AppleSync; st != nil && st.LastSync != nil && st.LastSync.FinishedAt != nil {
+		if st != nil && st.LastSync != nil && st.LastSync.FinishedAt != nil {
 			ui.Text(c, "Synced "+ago(*st.LastSync.FinishedAt)).FontSize(12).TextColor(k.Muted).SingleLine()
 		}
 	}
@@ -40,6 +41,8 @@ func (a *App) appleList(c *ui.Context, k *Tokens) {
 		if f.apple != prev {
 			s.SetAppleKind(store.AppleKinds[f.apple])
 		}
+		ui.Spacer(c)
+		a.appleAccounts(c, k)
 	})
 	switch {
 	case l.AppleStatus == store.SearchFailed:
@@ -57,6 +60,46 @@ func (a *App) appleList(c *ui.Context, k *Tokens) {
 			a.appleRow(c, k, it)
 		}
 	}).Grow(1).Background(k.Ground)
+}
+
+// appleAccounts switches between the accounts whose Apple library amdl
+// copies, by region, once there are two of them.
+func (a *App) appleAccounts(c *ui.Context, k *Tokens) {
+	l := &a.Store.Library
+	on := l.AppleAccounts()
+	if len(on) < 2 {
+		return
+	}
+	labels, names := appleAccountLabels(on)
+	sel := 0
+	for i, e := range on {
+		if e.AccountID == l.AppleAccount {
+			sel = i
+		}
+	}
+	prev := sel
+	segmentedTips(c, k, "apple-account", &sel, labels, labels, nil, names)
+	if sel != prev {
+		a.Store.SetAppleAccount(on[sel].AccountID)
+	}
+}
+
+// appleAccountLabels are the segments' words, the region's name, and each
+// one's Apple ID for its tooltip. Accounts of one region are told apart by
+// their Apple IDs.
+func appleAccountLabels(on []client.AppleLibraryAccountStatus) (labels, names []string) {
+	seen := map[string]int{}
+	for _, e := range on {
+		seen[region.Name(e.Region)]++
+	}
+	for i, e := range on {
+		text := region.Name(e.Region)
+		if text == "" || seen[text] > 1 {
+			text = region.Label(e.Name, "", fmt.Sprintf("Account %d", i+1))
+		}
+		labels, names = append(labels, text), append(names, e.Name)
+	}
+	return labels, names
 }
 
 func (a *App) appleRow(c *ui.Context, k *Tokens, it domain.AppleLibraryItem) {

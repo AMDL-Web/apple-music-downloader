@@ -199,7 +199,7 @@ func TestLookupPlaylistPrefersWrapperToken(t *testing.T) {
 	catalog := &fakeCatalog{t: t, playlist: playlist}
 	cfg := config.Default()
 	cfg.Catalog.MediaUserToken = "settings-token-secret"
-	handler := (&Server{cfg: config.NewStore(cfg), catalog: catalog, tokens: usertoken.New(func() (string, error) { return wrapperToken, nil })}).Routes()
+	handler := (&Server{cfg: config.NewStore(cfg), catalog: catalog, tokens: usertoken.NewReading(func(string) (string, error) { return wrapperToken, nil })}).Routes()
 	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc"}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())

@@ -119,7 +119,8 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), lookupTimeout)
 	defer cancel()
-	resp, err := s.previewLink(ctx, s.readStorefront(ctx, parsed), s.tokens.Token(cfg).Value)
+	read := s.readStorefront(ctx, parsed)
+	resp, err := s.previewLink(ctx, read, s.tokens.TokenFor(cfg, read.Storefront).Value)
 	switch {
 	case err == nil:
 		resp.lookupLinkFields = link
@@ -132,12 +133,12 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// readStorefront returns parsed with the storefront its download reads in: the
-// account's for a song, album or playlist, so the preview shows what the run
-// gets (or that it gets nothing), and the link's for a station or when the
-// account storefront cannot be read.
+// readStorefront returns parsed with the storefront its download reads in,
+// so the preview shows what the run gets (or that it gets nothing): the
+// link's for a station, or when an account serves it; the default account's
+// for another song, album or playlist; the link's when that cannot be read.
 func (s *Server) readStorefront(ctx context.Context, parsed applemusic.ParsedURL) applemusic.ParsedURL {
-	if s.accountStorefront == nil {
+	if s.accountStorefront == nil || s.tokens.Serves(parsed.Storefront) {
 		return parsed
 	}
 	switch parsed.Type {

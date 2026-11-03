@@ -44,6 +44,8 @@ const (
 	CodeDuplicateActive   ErrorCode = "duplicate_active"
 	CodeAlreadyLoggedIn   ErrorCode = "already_logged_in"
 	CodeLoginPending      ErrorCode = "login_pending"
+	// CodeAccountLimit: the wrapper holds its most accounts (10).
+	CodeAccountLimit ErrorCode = "account_limit_reached"
 	// CodeAppleLibrarySyncRunning: POST /apple-library/sync while a pass runs.
 	CodeAppleLibrarySyncRunning ErrorCode = "apple_library_sync_running"
 	CodeHookReadOnly            ErrorCode = "hook_read_only"
@@ -69,6 +71,9 @@ const (
 	CodeStoreError    ErrorCode = "store_error"
 	// 501
 	CodeLoginUnsupported ErrorCode = "login_unsupported"
+	// CodePairingUnsupported: the wrapper has no pairing (it takes requests
+	// without a token).
+	CodePairingUnsupported ErrorCode = "pairing_unsupported"
 	// 502
 	CodeUpstreamError ErrorCode = "upstream_error"
 	// 503

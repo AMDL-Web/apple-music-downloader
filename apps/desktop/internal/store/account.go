@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"amdl/internal/client"
@@ -81,7 +82,7 @@ func (s *Store) loginStep(path string, body any) {
 				*l = Login{}
 				s.setNotice("Signed in to Apple Music", false)
 			}
-			s.refreshServer()
+			s.refreshAccounts()
 		})
 	}()
 }
@@ -102,7 +103,125 @@ func (s *Store) Logout(user string) {
 				return
 			}
 			s.setNotice("Signed out of Apple Music", false)
+			s.refreshAccounts()
+		})
+	}()
+}
+
+// AccountsSettle is how long after a login, log out or removal the backend
+// has found the wrapper's accounts again, when the list is read once more.
+var AccountsSettle = 1500 * time.Millisecond
+
+// refreshAccounts reads the server's state now, and again once the backend
+// has had time to find the wrapper's accounts.
+func (s *Store) refreshAccounts() {
+	s.refreshServer()
+	if s.ctx == nil {
+		return
+	}
+	ctx := s.ctx
+	time.AfterFunc(AccountsSettle, func() { s.postIf(ctx, s.refreshServer) })
+}
+
+// AccountChanging reports whether a change to an account waits for its
+// answer.
+func (s *Store) AccountChanging() bool { return s.accountOps > 0 }
+
+// account is the listed account id, or nil.
+func (s *Store) account(id string) *client.Account {
+	for i := range s.Server.Accounts {
+		if s.Server.Accounts[i].ID == id {
+			return &s.Server.Accounts[i]
+		}
+	}
+	return nil
+}
+
+// SetAccountLibrarySync switches the library sync of account id.
+func (s *Store) SetAccountLibrarySync(id string, on bool) {
+	s.switchAccount(id, client.AccountPatch{LibrarySync: &on}, func(a *client.Account, v bool) { a.LibrarySync = v }, on)
+}
+
+// SetAccountAppleLibrary switches the Apple library copy of account id.
+func (s *Store) SetAccountAppleLibrary(id string, on bool) {
+	s.switchAccount(id, client.AccountPatch{AppleLibrary: &on}, func(a *client.Account, v bool) { a.AppleLibrary = v }, on)
+}
+
+// switchAccount shows a switch's new state at once and sends it; a refusal
+// puts the switch back.
+func (s *Store) switchAccount(id string, p client.AccountPatch, set func(*client.Account, bool), on bool) {
+	a := s.account(id)
+	if s.client == nil || a == nil {
+		return
+	}
+	set(a, on)
+	s.updateAccount(id, p, func() {
+		if a := s.account(id); a != nil {
+			set(a, !on)
+		}
+	})
+}
+
+// SetDefaultAccount makes account id the default: the first of the list.
+func (s *Store) SetDefaultAccount(id string) {
+	if s.client == nil || s.account(id) == nil {
+		return
+	}
+	prev := append([]client.Account(nil), s.Server.Accounts...)
+	list := s.Server.Accounts
+	for i := range list {
+		if list[i].ID == id {
+			a := list[i]
+			copy(list[1:i+1], list[:i])
+			list[0] = a
+			break
+		}
+	}
+	for i := range list {
+		list[i].Position, list[i].Default = i, i == 0
+	}
+	zero := 0
+	s.updateAccount(id, client.AccountPatch{Position: &zero}, func() { s.Server.Accounts = prev })
+}
+
+func (s *Store) updateAccount(id string, p client.AccountPatch, revert func()) {
+	c, ctx := s.client, s.ctx
+	s.accountOps++
+	go func() {
+		got, err := c.UpdateAccount(ctx, id, p)
+		s.postIf(ctx, func() {
+			s.accountOps--
+			if err != nil {
+				revert()
+				s.setNotice("The account did not change: "+Reason(err), true)
+			} else if a := s.account(id); a != nil {
+				*a = got
+			}
 			s.refreshServer()
+		})
+	}()
+}
+
+// DeleteAccount logs account id out of the wrapper and forgets it; what it
+// downloaded stays. label names it in the notice.
+func (s *Store) DeleteAccount(id, label string) {
+	c, ctx := s.client, s.ctx
+	if c == nil {
+		return
+	}
+	s.accountOps++
+	go func() {
+		_, err := c.DeleteAccount(ctx, id)
+		s.postIf(ctx, func() {
+			s.accountOps--
+			if err != nil {
+				s.setNotice(label+" was not removed: "+Reason(err), true)
+				s.refreshServer()
+				return
+			}
+			s.Server.Accounts = slices.DeleteFunc(s.Server.Accounts, func(a client.Account) bool { return a.ID == id })
+			s.setNotice("Removed "+label, false)
+			s.refreshAccounts()
 		})
 	}()
 }

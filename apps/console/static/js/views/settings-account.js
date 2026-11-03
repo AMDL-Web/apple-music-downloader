@@ -13,6 +13,7 @@ import { wrapperErrorText, wrapperUnreachable, managedMode, WRAPPER_LOGS } from 
 import { useApp, Button, Notice, Icon } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { useStatus, refreshStatus } from '../ui/system-status.js';
+import { accountLabel, accountList } from '../lib/accounts.js';
 
 /** A failed wrapper call as a notice: the message, then the server's text in mono. */
 function WrapperError({ error, step, role = 'danger' }) {
@@ -25,8 +26,14 @@ function WrapperError({ error, step, role = 'danger' }) {
 }
 
 export function AccountPanel({ children }) {
-  const res = useStatus(['wrapper']).wrapper;
-  const reload = () => refreshStatus('wrapper');
+  const { wrapper: res, accounts: accountsRes } = useStatus(['wrapper', 'accounts']);
+  // The account list follows a login or logout a moment later (the backend
+  // discovers the wrapper's accounts after it).
+  const reload = () => {
+    refreshStatus('wrapper');
+    refreshStatus('accounts');
+    setTimeout(() => refreshStatus('accounts'), 1500);
+  };
   // Login needs the session service; say why it cannot be used instead of failing late.
   const down = res && res.error ? wrapperUnreachable(res.error) : null;
   // null: no dialog; '': ask for the Apple ID; else the account to log out.
@@ -40,7 +47,7 @@ export function AccountPanel({ children }) {
   }
 
   const w = res && !res.error ? res.data : null;
-  const accounts = w && Array.isArray(w.accounts) ? w.accounts : [];
+  const accounts = accountsRes && !accountsRes.error ? accountList(accountsRes.data) : [];
   const canLogin = !w || w.login_supported !== false;
   const managed = w && w.managed ? w.managed : null;
   const mode = managedMode(w);
@@ -67,9 +74,9 @@ export function AccountPanel({ children }) {
           ${accounts.length
             ? html`<ul class="account-rows">
                 ${accounts.map(
-                  (a) => html`<li key=${a} class="account-row">
-                    <span class="account-name mono">${a}</span>
-                    ${canLogin ? html`<${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout(a)}>Log out</${Button}>` : null}
+                  (a) => html`<li key=${a.id} class="account-row">
+                    <span class="account-name mono">${accountLabel(a) || a.id}</span>
+                    ${canLogin ? html`<${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout(a.name || '')}>Log out</${Button}>` : null}
                   </li>`,
                 )}
               </ul>`

@@ -11,13 +11,13 @@ import (
 )
 
 // Catalog is the catalog reads the resolver makes to turn a pending add into
-// records. Every read is made in the account storefront (design §3.2): a song
-// or an artist that storefront does not have is a non-retryable error
-// (IsNonRetryable), and the add fails at once.
+// records. Every read is made in the add's storefront, else the default
+// account's: a song or an artist that storefront does not have is a
+// non-retryable error (IsNonRetryable), and the add fails at once.
 type Catalog interface {
-	// AccountStorefront is the storefront of the account amdl downloads
-	// with: the media-user-token's, else the wrapper's region, else
-	// catalog.default_storefront.
+	// AccountStorefront is the storefront of the default account: its
+	// region, else its media-user-token's, else the wrapper's single region,
+	// else catalog.default_storefront.
 	AccountStorefront(ctx context.Context) (string, error)
 	// SongAlbumID is the catalog id of the album a song is placed in.
 	SongAlbumID(ctx context.Context, storefront, songID string) (string, error)
@@ -152,9 +152,19 @@ func (m *Manager) resolveRow(ctx context.Context, row domain.PendingAdd) error {
 	album := func(id string, wantedAll bool, songIDs []string, source domain.RecordSource) error {
 		_, _, err := m.addAlbum(ctx, db.AlbumAdd{
 			ID: id, WantedAll: wantedAll, SongIDs: songIDs, Source: source, Priority: row.Priority,
-			Overrides: row.Overrides, Paused: paused, Now: now,
+			Overrides: row.Overrides, Paused: paused, Storefront: row.Storefront, Now: now,
 		}, triggerFor(source))
 		return err
+	}
+	storefront := func(catalog Catalog) (string, error) {
+		if row.Storefront != "" {
+			return row.Storefront, nil
+		}
+		sf, err := catalog.AccountStorefront(ctx)
+		if err != nil {
+			return "", fmt.Errorf("read the account storefront: %w", err)
+		}
+		return sf, nil
 	}
 	switch row.Kind {
 	case domain.PendingAlbum:
@@ -163,7 +173,8 @@ func (m *Manager) resolveRow(ctx context.Context, row domain.PendingAdd) error {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if _, err := m.store.AddPlaylist(ctx, db.PlaylistAdd{
-			ID: row.CatalogID, Source: row.Source, Priority: row.Priority, Overrides: row.Overrides, Paused: paused, Now: now,
+			ID: row.CatalogID, Source: row.Source, Priority: row.Priority, Overrides: row.Overrides, Paused: paused,
+			Storefront: row.Storefront, Now: now,
 		}); err != nil {
 			return err
 		}
@@ -176,12 +187,12 @@ func (m *Manager) resolveRow(ctx context.Context, row domain.PendingAdd) error {
 			if catalog == nil {
 				return errNoCatalog
 			}
-			storefront, err := catalog.AccountStorefront(ctx)
+			sf, err := storefront(catalog)
 			if err != nil {
-				return fmt.Errorf("read the account storefront: %w", err)
+				return err
 			}
-			if albumID, err = catalog.SongAlbumID(ctx, storefront, row.CatalogID); err != nil {
-				return fmt.Errorf("read song %s in storefront %s: %w", row.CatalogID, storefront, err)
+			if albumID, err = catalog.SongAlbumID(ctx, sf, row.CatalogID); err != nil {
+				return fmt.Errorf("read song %s in storefront %s: %w", row.CatalogID, sf, err)
 			}
 		}
 		return album(albumID, false, []string{row.CatalogID}, row.Source)
@@ -190,17 +201,17 @@ func (m *Manager) resolveRow(ctx context.Context, row domain.PendingAdd) error {
 		if catalog == nil {
 			return errNoCatalog
 		}
-		storefront, err := catalog.AccountStorefront(ctx)
+		sf, err := storefront(catalog)
 		if err != nil {
-			return fmt.Errorf("read the account storefront: %w", err)
+			return err
 		}
 		include := row.Include
 		if include == "" {
 			include = "all"
 		}
-		albumIDs, err := catalog.ArtistAlbumIDs(ctx, storefront, row.CatalogID, include)
+		albumIDs, err := catalog.ArtistAlbumIDs(ctx, sf, row.CatalogID, include)
 		if err != nil {
-			return fmt.Errorf("read the albums of artist %s in storefront %s: %w", row.CatalogID, storefront, err)
+			return fmt.Errorf("read the albums of artist %s in storefront %s: %w", row.CatalogID, sf, err)
 		}
 		source := row.Source
 		if source == domain.SourceManual {

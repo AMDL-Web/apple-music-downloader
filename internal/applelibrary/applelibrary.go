@@ -1,7 +1,10 @@
-// Package applelibrary keeps a local copy of the signed-in user's Apple Music
-// account library (albums, songs, playlists with their tracks, artists) in the
-// SQLite store, so GET /api/v1/apple-library and the in_apple_library mark on
-// search hits never wait on Apple. It is not the on-disk library layout.
+// Package applelibrary keeps a local copy of each account's Apple Music
+// library (albums, songs, playlists with their tracks, artists) in the SQLite
+// store, so GET /api/v1/apple-library and the in_apple_library mark on search
+// hits never wait on Apple. It is not the on-disk library layout. Set runs
+// one Engine per account; an account syncs while its apple_library switch is
+// on and it is active (internal/accounts), on the schedule the
+// apple_library.* keys set for every account.
 //
 // # Syncing without a change feed
 //
@@ -66,6 +69,9 @@ const (
 const (
 	ReasonNoToken      = "no_token"
 	ReasonTokenRefused = "token_refused"
+	// ReasonDisabled is an account whose apple_library switch is off or
+	// that the wrapper no longer holds.
+	ReasonDisabled = "disabled"
 )
 
 // ErrRunning is returned by Trigger while a pass runs.
@@ -76,8 +82,11 @@ var ErrRunning = errors.New("an Apple library sync is already running")
 type UnavailableError struct{ Reason string }
 
 func (e UnavailableError) Error() string {
-	if e.Reason == ReasonTokenRefused {
+	switch e.Reason {
+	case ReasonTokenRefused:
 		return "Apple refused the media-user-token, so the Apple Music library cannot be read"
+	case ReasonDisabled:
+		return "this account's Apple library is off: turn it on in the account's settings"
 	}
 	return "no media-user-token: the Apple Music library cannot be read without one (sign in to the wrapper)"
 }
@@ -113,18 +122,17 @@ type Progress struct {
 	Requests  int       `json:"requests"`
 }
 
-// Status is the AppleLibraryStatus schema.
+// Status is one account's sync state, the fields of the
+// AppleLibraryAccountStatus schema that Engine knows.
 type Status struct {
-	Available           bool           `json:"available"`
-	Reason              string         `json:"reason,omitempty"`
-	State               string         `json:"state"`
-	Current             *Progress      `json:"current,omitempty"`
-	LastSync            *Run           `json:"last_sync,omitempty"`
-	LastFullSyncAt      *time.Time     `json:"last_full_sync_at,omitempty"`
-	NextSyncAt          *time.Time     `json:"next_sync_at,omitempty"`
-	Counts              map[string]int `json:"counts"`
-	SyncIntervalMinutes int            `json:"sync_interval_minutes"`
-	FullSyncHours       int            `json:"full_sync_hours"`
+	Available      bool           `json:"available"`
+	Reason         string         `json:"reason,omitempty"`
+	State          string         `json:"state"`
+	Current        *Progress      `json:"current,omitempty"`
+	LastSync       *Run           `json:"last_sync,omitempty"`
+	LastFullSyncAt *time.Time     `json:"last_full_sync_at,omitempty"`
+	NextSyncAt     *time.Time     `json:"next_sync_at,omitempty"`
+	Counts         map[string]int `json:"counts"`
 }
 
 // Query selects a page of one kind; see db.AppleLibraryQuery.
@@ -175,14 +183,19 @@ const (
 	failureBackoff = 10 * time.Minute
 )
 
-// Engine syncs the cache on the schedule in the live config and on request.
+// Engine syncs one account's cache on the schedule in the live config and on
+// request.
 type Engine struct {
-	cfg    *config.Store
-	tokens *usertoken.Provider
-	apple  Apple
-	store  *db.Store
-	logger *slog.Logger
-	now    func() time.Time
+	cfg     *config.Store
+	tokens  *usertoken.Provider
+	apple   Apple
+	store   *db.Store
+	logger  *slog.Logger
+	now     func() time.Time
+	account string
+	// enabled reports whether the account's switch is on and it is active;
+	// nil means always.
+	enabled func() bool
 
 	mu      sync.Mutex
 	base    context.Context
@@ -199,11 +212,19 @@ type Engine struct {
 	passes   sync.WaitGroup
 }
 
-// New builds the engine. tokens picks the media-user-token; nil uses
+// New builds the engine of the token provider's default account (an Engine
+// of a Set has its own account). tokens picks the media-user-token; nil uses
 // catalog.media_user_token alone. It does no I/O; Run runs the schedule.
 func New(cfg *config.Store, tokens *usertoken.Provider, apple Apple, store *db.Store, logger *slog.Logger) *Engine {
-	return &Engine{cfg: cfg, tokens: tokens, apple: apple, store: store, logger: logger, now: time.Now, capNoted: map[string]bool{}}
+	return newAccountEngine(cfg, tokens, apple, store, logger, tokens.DefaultAccount(), nil)
 }
+
+func newAccountEngine(cfg *config.Store, tokens *usertoken.Provider, apple Apple, store *db.Store, logger *slog.Logger, account string, enabled func() bool) *Engine {
+	return &Engine{cfg: cfg, tokens: tokens, apple: apple, store: store, logger: logger, now: time.Now, capNoted: map[string]bool{},
+		account: account, enabled: enabled}
+}
+
+func (e *Engine) isEnabled() bool { return e.enabled == nil || e.enabled() }
 
 // Run drives the schedule until ctx is cancelled and returns once every pass,
 // a manual one included, has stopped. The caller runs it on its own goroutine
@@ -246,13 +267,13 @@ func (e *Engine) load(ctx context.Context) {
 		return
 	}
 	e.loaded = true
-	if raw, err := e.store.AppleLibraryMeta(ctx, metaLastRun); err == nil && raw != "" {
+	if raw, err := e.store.AppleLibraryMeta(ctx, e.account, metaLastRun); err == nil && raw != "" {
 		var run Run
 		if json.Unmarshal([]byte(raw), &run) == nil {
 			e.lastRun = &run
 		}
 	}
-	if raw, err := e.store.AppleLibraryMeta(ctx, metaLastFullAt); err == nil && raw != "" {
+	if raw, err := e.store.AppleLibraryMeta(ctx, e.account, metaLastFullAt); err == nil && raw != "" {
 		if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
 			e.lastFullAt = &t
 		}
@@ -263,6 +284,9 @@ func (e *Engine) load(ctx context.Context) {
 // whatever full_sync_hours says, since until then there is nothing to browse.
 func (e *Engine) due() string {
 	cfg := e.cfg.Get().AppleLibrary
+	if !e.isEnabled() {
+		return ""
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.running != nil {
@@ -285,7 +309,7 @@ func (e *Engine) due() string {
 	return ""
 }
 
-func (e *Engine) token() string { return e.tokens.Token(e.cfg.Get()).Value }
+func (e *Engine) token() string { return e.tokens.Account(e.cfg.Get(), e.account).Value }
 
 func (e *Engine) isRefused(token string) bool {
 	e.mu.Lock()
@@ -309,6 +333,9 @@ func (e *Engine) begin(mode, trigger string) error {
 // UnavailableError without a usable token.
 func (e *Engine) Trigger(ctx context.Context, mode string) (Status, error) {
 	e.load(ctx)
+	if !e.isEnabled() {
+		return e.Status(ctx), UnavailableError{Reason: ReasonDisabled}
+	}
 	token := e.token()
 	if token == "" {
 		return e.Status(ctx), UnavailableError{Reason: ReasonNoToken}
@@ -331,6 +358,9 @@ func (e *Engine) Trigger(ctx context.Context, mode string) (Status, error) {
 // returns it; ErrRunning while another pass runs.
 func (e *Engine) SyncNow(ctx context.Context, mode string) (Run, error) {
 	e.load(ctx)
+	if !e.isEnabled() {
+		return Run{}, UnavailableError{Reason: ReasonDisabled}
+	}
 	token := e.token()
 	if token == "" {
 		return Run{}, UnavailableError{Reason: ReasonNoToken}
@@ -358,7 +388,7 @@ func (e *Engine) Status(ctx context.Context) Status {
 	e.load(ctx)
 	cfg := e.cfg.Get().AppleLibrary
 	token := e.token()
-	counts, err := e.store.AppleLibraryCounts(ctx)
+	counts, err := e.store.AppleLibraryCounts(ctx, e.account)
 	if err != nil {
 		counts = map[string]int{}
 	}
@@ -369,9 +399,10 @@ func (e *Engine) Status(ctx context.Context) Status {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	st := Status{Available: true, State: "idle", Counts: counts, LastFullSyncAt: e.lastFullAt,
-		SyncIntervalMinutes: cfg.SyncIntervalMinutes, FullSyncHours: cfg.FullSyncHours}
+	st := Status{Available: true, State: "idle", Counts: counts, LastFullSyncAt: e.lastFullAt}
 	switch {
+	case !e.isEnabled():
+		st.Available, st.Reason = false, ReasonDisabled
 	case token == "":
 		st.Available, st.Reason = false, ReasonNoToken
 	case e.refused == sha256.Sum256([]byte(token)):
@@ -388,7 +419,9 @@ func (e *Engine) Status(ctx context.Context) Status {
 		p := *e.running
 		st.Current, st.State = &p, "running"
 	}
-	st.NextSyncAt = e.nextSyncLocked(cfg)
+	if st.Available {
+		st.NextSyncAt = e.nextSyncLocked(cfg)
+	}
 	return st
 }
 
@@ -420,6 +453,7 @@ func (e *Engine) nextSyncLocked(cfg config.AppleLibraryConfig) *time.Time {
 // UnavailableError only when nothing is cached and no usable token can fill
 // the cache.
 func (e *Engine) List(ctx context.Context, q Query) (Page, error) {
+	q.AccountID = e.account
 	items, total, err := e.store.ListAppleLibrary(ctx, q)
 	if err != nil {
 		return Page{}, err
@@ -437,7 +471,7 @@ func (e *Engine) List(ctx context.Context, q Query) (Page, error) {
 
 // PlaylistTracks returns a cached playlist's tracks in order.
 func (e *Engine) PlaylistTracks(ctx context.Context, playlistID string) (Tracks, error) {
-	tracks, readAt, found, err := e.store.AppleLibraryPlaylistTracks(ctx, playlistID)
+	tracks, readAt, found, err := e.store.AppleLibraryPlaylistTracks(ctx, e.account, playlistID)
 	if err != nil {
 		return Tracks{}, err
 	}
@@ -463,7 +497,7 @@ func (e *Engine) Membership(ctx context.Context, kind string, catalogIDs []strin
 	if len(catalogIDs) == 0 || state.FullAt == nil {
 		return nil
 	}
-	in, err := e.store.AppleLibraryMembership(ctx, kind, catalogIDs)
+	in, err := e.store.AppleLibraryMembership(ctx, e.account, kind, catalogIDs)
 	if err != nil {
 		e.logger.Warn("apple library membership lookup failed", "kind", kind, "error", err)
 		return nil
@@ -481,7 +515,7 @@ func (e *Engine) Membership(ctx context.Context, kind string, catalogIDs []strin
 
 func (e *Engine) kindState(ctx context.Context, kind string) kindState {
 	var st kindState
-	if raw, err := e.store.AppleLibraryMeta(ctx, "kind:"+kind); err == nil && raw != "" {
+	if raw, err := e.store.AppleLibraryMeta(ctx, e.account, "kind:"+kind); err == nil && raw != "" {
 		_ = json.Unmarshal([]byte(raw), &st) // a damaged value reads as never synced
 	}
 	return st
@@ -492,7 +526,7 @@ func (e *Engine) saveKindState(ctx context.Context, kind string, st kindState) e
 	if err != nil {
 		return err
 	}
-	return e.store.SetAppleLibraryMeta(ctx, "kind:"+kind, string(raw))
+	return e.store.SetAppleLibraryMeta(ctx, e.account, "kind:"+kind, string(raw))
 }
 
 func newRunID() string {

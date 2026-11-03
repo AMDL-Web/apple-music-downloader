@@ -208,10 +208,11 @@ CORS 头。
 | **链接预览** | `POST /lookup`：不建作业，预览链接的标题、艺人和封面，以及它的记录 |
 | **搜索** | `GET /search`：在曲库里搜歌曲、专辑、歌单和艺人 · `GET /artists/{id}/albums`：分页列出艺人的专辑 · `GET /albums/{id}`：专辑的歌曲列表，逐首标出在专辑记录里的状态 |
 | **音质探测** | `POST /quality`：不建作业，探测链接的编码和音质 |
-| **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
+| **账户** | `GET /accounts` · `PATCH /accounts/{account_id}`：资料库开关与顺序 · `DELETE /accounts/{account_id}`：登出该账户并删除它的记录 |
+| **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` · `GET /wrapper/pairing` · `POST /wrapper/pairing` · `DELETE /wrapper/pairing` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
-| **资料库同步** | `GET /library-sync` · `POST /library-sync/reset` |
-| **Apple 资料库** | `GET /apple-library/{kind}`：从本地副本读你的 Apple Music 账户资料库 · `GET /apple-library/playlists/{id}/tracks` · `POST /apple-library/sync` · `GET /apple-library/status` |
+| **资料库同步** | `GET /library-sync`：总开关与每个账户一项 · `POST /library-sync/reset`：重置某个账户的锚点 |
+| **Apple 资料库** | `GET /apple-library/{kind}`：从本地副本读某个账户的 Apple Music 资料库（`?account=`）· `GET /apple-library/playlists/{id}/tracks` · `POST /apple-library/sync` · `GET /apple-library/status`：每个账户一项 |
 | **系统** | `GET /health` · `GET /system` · `POST /system/restart` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
 
 提交一张专辑并跟踪进度：
@@ -250,7 +251,7 @@ wrapper、wrapper 提供 `GET /token`（amdl 维护的 wrapper-lite 分支），
 ## 限制
 
 - **只支持音频。** 不支持音乐视频：在 L3 下流水线只能拿到低分辨率视频。
-- **单用户，无账号，无鉴权。** 所有接口都是开放的，这是有意为之。请在前面放反向代理或网关做访问控制。
+- **单用户，无用户账号，无鉴权。** 所有接口都是开放的，这是有意为之。请在前面放反向代理或网关做访问控制。
 - **电台是滚动列表。** 电台解析出的是 Apple 此刻提供的曲目，不是固定曲目表。Apple Music 1
   这类直播电台会明确报错。
 - **曲库接口没有公开文档。** Enhanced HLS 清单和动态封面来自 `amp-api.music.apple.com`，

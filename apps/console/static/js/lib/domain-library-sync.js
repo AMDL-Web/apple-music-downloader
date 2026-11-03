@@ -7,6 +7,7 @@ import { keysToLabels } from './settings-draft.js';
 import { nextCheckFraction, nextCheckIn } from './sysdata.js';
 import { settingsHash } from './route.js';
 import { tokenState } from './user-token.js';
+import { flattenLibrarySync } from './accounts.js';
 
 /**
  * Library sync's state, shared with Overview: Off, Needs token (on, but
@@ -27,7 +28,8 @@ export function librarySync(s, ctx) {
   const e = s.librarySync;
   const v = frame('library_sync', e, ctx);
   if (v.state !== 'ok') return v;
-  const sync = e.data;
+  // GET /library-sync lists one entry per account; the head shows them summed.
+  const sync = flattenLibrarySync(e.data);
   // Until the config and the wrapper status say whether there is a token, the
   // view stays loading rather than show Needs token, or an idle watcher's
   // last_error as an Error, for a moment.

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"amdl/configs"
+	"amdl/internal/accounts"
 	"amdl/internal/api"
 	"amdl/internal/applelibrary"
 	"amdl/internal/applemusic"
@@ -62,10 +63,6 @@ type Options struct {
 	// (internal/wrapperhost): the wrapper routes log in through it and
 	// wrapper status reports it. The caller points wrapper.address at it.
 	WrapperHost *wrapperhost.Supervisor
-	// WrapperToken reads the media-user-token of the wrapper this process
-	// runs (wrapperhost.Home.MusicToken), set together with WrapperHost; it
-	// takes the place of wrapper.data_dir (internal/usertoken).
-	WrapperToken func() (string, error)
 }
 
 // loggedError is an error Run has already written to the configured log.
@@ -147,13 +144,9 @@ func Run(ctx context.Context, opts Options) (err error) {
 		logger.Warn("environment variable is no longer read; set its key in config.yaml",
 			"variable", name, "see", config.UpgradeGuide)
 	}
-	if opts.WrapperToken != nil && cfg.Wrapper.DataDir != "" {
-		logger.Info("wrapper.data_dir ignored: this process runs its own wrapper and reads its token directly",
-			"data_dir", cfg.Wrapper.DataDir)
-	}
 	// One token provider serves downloads, lookups, wrapper status and library
-	// sync, so all of them use the same media-user-token.
-	tokens := usertoken.New(opts.WrapperToken)
+	// sync, so all of them pick the same account's media-user-token.
+	tokens := usertoken.New()
 
 	hooksCfg, err := hooks.LoadConfig(opts.HooksPath)
 	if err != nil {
@@ -193,11 +186,20 @@ func Run(ctx context.Context, opts Options) (err error) {
 	} else {
 		media.CleanupStaleResume(cfg.Download.TempDir, owners, logSystem.Logger.With("component", "media"))
 	}
-	wrapperClient, err := wrapper.NewClient(cfg.Wrapper)
+	// A wrapper behind a gateway takes requests with the bearer token amdl
+	// got by pairing (POST /api/v1/wrapper/pairing); without one it sends none.
+	pairing, err := wrapper.NewPairing(cfg.Wrapper.Address, cfg.Wrapper.Timeout(), wrapper.PairingDir(cfg.Database.Path),
+		logSystem.Logger.With("component", "wrapper"))
+	if err != nil {
+		return fmt.Errorf("set up wrapper pairing: %w", err)
+	}
+	defer pairing.Close()
+	wrapperClient, err := wrapper.NewClient(cfg.Wrapper, wrapper.WithPairing(pairing))
 	if err != nil {
 		return fmt.Errorf("set up wrapper client: %w", err)
 	}
 	defer closeLogged(logger, "close wrapper client", wrapperClient.Close)
+	wrapperSvc := wrapperService(wrapperClient, opts.WrapperHost)
 	tokens.UseEndpoint(usertoken.Endpoint{
 		Fetch:   wrapperClient.MusicToken,
 		Dir:     usertoken.StoreDir(cfg.Database.Path),
@@ -217,11 +219,20 @@ func Run(ctx context.Context, opts Options) (err error) {
 	manager.SetHooks(hookDispatcher)
 	manager.SetConfig(cfgStore.Get)
 	manager.SetCatalog(downloader)
+	manager.SetStorefronts(tokens)
+	accountService := accounts.New(store, wrapperSvc, tokens, cfgStore.Get, logSystem.Logger.With("component", "accounts"))
+	// Tokens and storefronts are known before the first discovery answers.
+	// Startup store work runs to completion even if a signal has already
+	// arrived, as recovery below does.
+	if err := accountService.Load(context.WithoutCancel(ctx)); err != nil {
+		return fmt.Errorf("read the accounts: %w", err)
+	}
 	// The library watcher adds album records through the same manager as the
 	// REST API, so their runs are ordinary runs (same picker, same hooks).
-	libraryWatcher := librarysync.New(cfgStore, tokens, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
+	libraryWatcher := librarysync.New(cfgStore, tokens, accountService, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
 	// The Apple library cache never submits anything; it only reads.
-	appleLibrary := applelibrary.New(cfgStore, tokens, catalog, store, logSystem.Logger.With("component", "applelibrary"))
+	appleLibrary := applelibrary.NewSet(cfgStore, tokens, catalog, store, accountService, logSystem.Logger.With("component", "applelibrary"))
+	accountService.OnChange(func() { appleLibrary.Refresh(context.Background()) })
 
 	listener := opts.Listener
 	if listener == nil {
@@ -255,7 +266,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 	apiServer, err := api.New(api.Deps{
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
-		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
+		Wrapper: wrapperSvc, Quality: qualityService, LibrarySync: libraryWatcher, Accounts: accountService, Pairing: pairing,
 		AppleLibrary: appleLibrary, Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
 		WrapperManaged: opts.WrapperHost != nil, AccountStorefront: downloader.AccountStorefront,
 		Restart: func() {
@@ -303,6 +314,8 @@ func Run(ctx context.Context, opts Options) (err error) {
 	background.Go(func() { libraryWatcher.Run(backgroundCtx) })
 	background.Go(func() { appleLibrary.Run(backgroundCtx) })
 	background.Go(func() { tokens.RunEndpoint(backgroundCtx) })
+	background.Go(func() { accountService.Run(backgroundCtx) })
+	background.Go(func() { pairing.Run(backgroundCtx) })
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.Serve(listener) }()
 	if opts.Console != nil {

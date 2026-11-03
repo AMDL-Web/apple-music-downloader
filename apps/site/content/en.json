@@ -106,7 +106,7 @@
       "points": [
         "Jobs survive a restart and pick up where they stopped.",
         "Downloads, decryption and wrapper calls share process-wide pools.",
-        "No accounts or auth, on purpose: put a reverse proxy in front."
+        "No user accounts or auth, on purpose: put a reverse proxy in front."
       ],
       "codeTitle": "Submit an album, follow it"
     },

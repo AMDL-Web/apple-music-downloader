@@ -1,6 +1,7 @@
 package api
 
 import (
+	"amdl/internal/accounts"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -34,6 +35,12 @@ type fakeWrapperService struct {
 	password     string
 	loginID      string
 	twoStepCode  string
+	loggedOutIDs []string
+}
+
+func (f *fakeWrapperService) LogoutAccount(_ context.Context, id string) error {
+	f.loggedOutIDs = append(f.loggedOutIDs, id)
+	return f.logoutErr
 }
 
 func (f *fakeWrapperService) Status(context.Context) (wrapper.Status, error) {
@@ -136,8 +143,11 @@ func newServer(t *testing.T, deps Deps) *Server {
 	if deps.Catalog == nil {
 		deps.Catalog = &fakeCatalog{t: t}
 	}
+	if deps.Accounts == nil {
+		deps.Accounts = accounts.New(deps.Store, deps.Wrapper, deps.Tokens, deps.Config.Get, slog.Default())
+	}
 	if deps.AppleLibrary == nil {
-		deps.AppleLibrary = applelibrary.New(deps.Config, deps.Tokens, nil, deps.Store, slog.Default())
+		deps.AppleLibrary = applelibrary.NewSet(deps.Config, deps.Tokens, nil, deps.Store, deps.Accounts, slog.Default())
 	}
 	server, err := New(deps)
 	if err != nil {

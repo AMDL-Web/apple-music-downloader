@@ -239,10 +239,11 @@ is the API's only browser client: responses carry no CORS headers.
 | **Lookup** | `POST /lookup`: preview a link's title, artist and cover, and its record, without creating a job |
 | **Search** | `GET /search`: search the catalog for songs, albums, playlists and artists · `GET /artists/{id}/albums`: an artist's albums, page by page · `GET /albums/{id}`: an album's songs, each with its state in the album's record |
 | **Quality** | `POST /quality`: probe a link's codecs and audio quality without creating a job |
-| **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
+| **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` · `GET /wrapper/pairing` · `POST /wrapper/pairing` · `DELETE /wrapper/pairing` |
+| **Accounts** | `GET /accounts` · `PATCH /accounts/{account_id}`: library switches and position · `DELETE /accounts/{account_id}`: log the account out and drop its rows |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
-| **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
-| **Apple library** | `GET /apple-library/{kind}`: your Apple Music account library from a local copy · `GET /apple-library/playlists/{id}/tracks` · `POST /apple-library/sync` · `GET /apple-library/status` |
+| **Library sync** | `GET /library-sync`: master switch and one entry per account · `POST /library-sync/reset`: one account's anchor |
+| **Apple library** | `GET /apple-library/{kind}`: an account's Apple Music library from a local copy (`?account=`) · `GET /apple-library/playlists/{id}/tracks` · `POST /apple-library/sync` · `GET /apple-library/status`: one entry per account |
 | **System** | `GET /health` · `GET /system` · `POST /system/restart` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
 
 Submit an album and follow it:
@@ -287,7 +288,7 @@ Both are off by default. See [docs/automation.md](docs/automation.md).
 
 - **Audio only.** Music videos are not supported: under L3 the pipeline can only reach
   low-resolution video.
-- **One user, no accounts, no auth.** Every endpoint is open on purpose. Put access control
+- **One user, no user accounts, no auth.** Every endpoint is open on purpose. Put access control
   in a reverse proxy or gateway in front of it.
 - **Radio is a rolling list.** A station resolves to the tracks Apple offers now, not a
   fixed tracklist. Live stations such as Apple Music 1 fail with an explicit error.

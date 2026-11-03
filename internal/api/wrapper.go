@@ -17,10 +17,12 @@ type WrapperService interface {
 	StartLogin(context.Context, string, string) (wrapper.LoginResult, error)
 	SubmitTwoStepCode(context.Context, string, string) (wrapper.LoginResult, error)
 	Logout(context.Context, string) error
+	// LogoutAccount logs out a wrapper-manager instance by its id.
+	LogoutAccount(context.Context, string) error
 }
 
 // wrapperStatusResponse is the WrapperStatus schema: the wrapper's own status
-// plus the media-user-token amdl reads from it, masked.
+// plus the default account's media-user-token amdl reads from it, masked.
 type wrapperStatusResponse struct {
 	wrapper.Status
 	MediaUserToken string `json:"media_user_token"`
@@ -38,7 +40,7 @@ func (s *Server) wrapperStatus(w http.ResponseWriter, r *http.Request) {
 // wrapperToken is the wrapper's media-user-token masked as GET /config masks
 // the configured one, or "" when amdl cannot read one.
 func (s *Server) wrapperToken() string {
-	v, err := s.tokens.Wrapper(s.currentConfig())
+	v, err := s.tokens.Wrapper(s.currentConfig(), s.tokens.DefaultAccount())
 	if err != nil {
 		return ""
 	}
@@ -70,6 +72,7 @@ func (s *Server) wrapperLogin(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusAccepted
 	} else {
 		s.tokens.RefreshSoon()
+		s.nudgeAccounts()
 	}
 	writeJSON(w, status, result)
 }
@@ -92,27 +95,47 @@ func (s *Server) wrapperTwoStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.tokens.RefreshSoon()
+	s.nudgeAccounts()
 	writeJSON(w, http.StatusOK, result)
 }
 
+// wrapperLogout logs an account out by its Apple ID (username) or its
+// account id (account_id, a wrapper-manager instance id); exactly one is
+// given. The account's row and library state stay (DELETE /accounts/{id}
+// removes them too).
 func (s *Server) wrapperLogout(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Username string `json:"username"`
+		Username  string `json:"username"`
+		AccountID string `json:"account_id"`
 	}
 	if !decodeJSONBody(w, r, &req, false) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
-	if req.Username == "" {
-		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "username is required")
+	req.AccountID = strings.TrimSpace(req.AccountID)
+	if (req.Username == "") == (req.AccountID == "") {
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "give username or account_id, not both")
 		return
 	}
-	if err := s.wrapper.Logout(r.Context(), req.Username); err != nil {
+	var err error
+	if req.AccountID != "" {
+		err = s.wrapper.LogoutAccount(r.Context(), req.AccountID)
+	} else {
+		err = s.wrapper.Logout(r.Context(), req.Username)
+	}
+	if err != nil {
 		writeWrapperError(w, err)
 		return
 	}
 	s.tokens.RefreshSoon()
-	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out", "username": req.Username})
+	s.nudgeAccounts()
+	out := map[string]string{"status": "logged_out"}
+	if req.AccountID != "" {
+		out["account_id"] = req.AccountID
+	} else {
+		out["username"] = req.Username
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // writeWrapperError maps a wrapper login, two-step or logout error. Anything
@@ -125,6 +148,8 @@ func writeWrapperError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnauthorized, CodeAuthenticationFailed, err.Error())
 	case errors.Is(err, wrapper.ErrAlreadyLoggedIn):
 		writeError(w, http.StatusConflict, CodeAlreadyLoggedIn, err.Error())
+	case errors.Is(err, wrapper.ErrAccountLimit):
+		writeError(w, http.StatusConflict, CodeAccountLimit, err.Error())
 	case errors.Is(err, wrapper.ErrLoginPending), errors.Is(err, wrapper.ErrLoginSessionBusy):
 		writeError(w, http.StatusConflict, CodeLoginPending, err.Error())
 	case errors.Is(err, wrapper.ErrLoginSessionNotFound):
@@ -139,5 +164,13 @@ func writeWrapperError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusGatewayTimeout, CodeUpstreamTimeout, err.Error())
 	default:
 		writeError(w, http.StatusBadGateway, CodeUpstreamError, err.Error())
+	}
+}
+
+// nudgeAccounts asks for an account discovery soon, when there is an
+// accounts service.
+func (s *Server) nudgeAccounts() {
+	if s.accounts != nil {
+		s.accounts.Nudge()
 	}
 }

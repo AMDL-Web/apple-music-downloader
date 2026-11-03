@@ -338,16 +338,14 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Running{Base: "http://" + ln.Addr().String(), dirs: b.Dirs, lock: l, cancel: cancel, done: make(chan error, 1)}
-	var wrapperToken func() (string, error)
 	if host != nil {
-		wrapperToken = host.MusicToken
 		r.hostDone = make(chan struct{})
 		go func() {
 			defer close(r.hostDone)
 			host.Run(ctx)
 		}()
 	}
-	go func() { r.done <- b.run(ctx, ln, logOut, host, wrapperToken) }()
+	go func() { r.done <- b.run(ctx, ln, logOut, host) }()
 	if err := r.waitHealthy(); err != nil {
 		_ = r.Stop() // the startup error is what matters
 		return nil, err
@@ -365,17 +363,16 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 // /api/v1/system/restart stops it, it listens again on the same address, so
 // Base and the runtime file stay right, and runs it again from config.yaml.
 // The managed wrapper keeps running across the restart.
-func (b Backend) run(ctx context.Context, ln net.Listener, logOut io.Writer, host *wrapperhost.Supervisor, wrapperToken func() (string, error)) error {
+func (b Backend) run(ctx context.Context, ln net.Listener, logOut io.Writer, host *wrapperhost.Supervisor) error {
 	addr := ln.Addr().String()
 	for {
 		err := server.Run(ctx, server.Options{
-			ConfigPath:   b.ConfigPath(),
-			HooksPath:    filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
-			Listener:     ln,
-			LogOutput:    logOut,
-			Console:      b.Console,
-			WrapperHost:  host,
-			WrapperToken: wrapperToken,
+			ConfigPath:  b.ConfigPath(),
+			HooksPath:   filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
+			Listener:    ln,
+			LogOutput:   logOut,
+			Console:     b.Console,
+			WrapperHost: host,
 		})
 		if !errors.Is(err, server.ErrRestart) {
 			return err

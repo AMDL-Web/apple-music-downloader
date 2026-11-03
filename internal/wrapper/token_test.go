@@ -23,7 +23,7 @@ func TestMusicTokenReply(t *testing.T) {
 			"region": "cn", "music_token": musicTok, "refreshed_at": 1793566788, "next_refresh_at": 1793568588,
 		})
 	}))
-	got, err := c.MusicToken(context.Background())
+	got, err := c.MusicToken(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestMusicTokenErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := newTestClient(t, tt.handler)
-			_, err := c.MusicToken(context.Background())
+			_, err := c.MusicToken(context.Background(), "")
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("error %v, want %v", err, tt.want)
 			}
@@ -85,7 +85,7 @@ func TestMusicTokenErrorsNeverQuoteTheBody(t *testing.T) {
 			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, _ = w.Write([]byte(body))
 			}))
-			_, err := c.MusicToken(context.Background())
+			_, err := c.MusicToken(context.Background(), "")
 			if err == nil {
 				t.Fatal("no error")
 			}
@@ -112,7 +112,7 @@ func TestMusicTokenTimesOut(t *testing.T) {
 	}
 	defer c.Close()
 	start := time.Now()
-	_, err = c.MusicToken(context.Background())
+	_, err = c.MusicToken(context.Background(), "")
 	var timeout *timeoutError
 	if !errors.As(err, &timeout) {
 		t.Fatalf("error %v, want a timeout", err)

@@ -14,8 +14,6 @@ import (
 // fixed at startup, its fields and its actions. Its state is its tile on
 // the status board above.
 func (a *App) backendSection(c *ui.Context, k *Tokens, id string) {
-	s := a.Store
-	sv := &s.Server
 	switch id {
 	case "account":
 		a.accountSession(c, k)
@@ -26,15 +24,7 @@ func (a *App) backendSection(c *ui.Context, k *Tokens, id string) {
 	a.sectionFields(c, k, id)
 	switch id {
 	case "library_sync":
-		if l := sv.Sync; l != nil && l.AnchorSize > 0 {
-			actionRow(c, k, "Forget the albums seen so far and watch from now on", "Start over from now…", func() {
-				a.set.edit.confirm = &pendingChange{open: true,
-					title: "Start library sync over from now?", verb: "Start over", danger: true,
-					body:  "Albums you added before now won't be downloaded.",
-					apply: a.Store.ResetLibrarySync,
-				}
-			})
-		}
+		a.syncAccounts(c, k)
 	case "server":
 		a.configFile(c, k)
 	}

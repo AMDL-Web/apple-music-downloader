@@ -10,13 +10,17 @@ import (
 
 var _ jobs.Catalog = (*Downloader)(nil)
 
-// AccountStorefront implements jobs.Catalog: the storefront of the account
-// amdl downloads with (design §3.2). It asks Apple with the media-user-token,
-// then takes the wrapper's single region, then catalog.default_storefront.
-// TODO(P2 media): record runs resolve in this storefront too.
+// AccountStorefront implements jobs.Catalog: the storefront of the default
+// account (design §3.2). It takes the account's region, then asks Apple with
+// its media-user-token, then takes the wrapper's single region, then
+// catalog.default_storefront.
 func (d *Downloader) AccountStorefront(ctx context.Context) (string, error) {
+	if region := d.tokens.DefaultRegion(); region != "" {
+		return region, nil
+	}
 	cfg := d.baseConfig()
 	cd := d.withConfig(cfg)
+	cd.storefront = ""
 	if token := cd.inProcessToken(); token != "" {
 		storefront, err := cd.playback.AccountStorefront(ctx, token)
 		if err == nil && storefront != "" {
@@ -35,6 +39,15 @@ func (d *Downloader) AccountStorefront(ctx context.Context) (string, error) {
 		return "", errors.New("no account storefront: no media-user-token, no single wrapper region and no catalog.default_storefront")
 	}
 	return cfg.Catalog.DefaultStorefront, nil
+}
+
+// RunStorefront is the storefront a record pinned to pin is read in: the pin,
+// else the default account's (AccountStorefront).
+func (d *Downloader) RunStorefront(ctx context.Context, pin string) (string, error) {
+	if pin != "" {
+		return pin, nil
+	}
+	return d.AccountStorefront(ctx)
 }
 
 // SongAlbumID implements jobs.Catalog with the song's required metadata read.

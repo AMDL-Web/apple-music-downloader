@@ -146,13 +146,14 @@ and an attempt still running when the drain ends is cancelled and recorded as
 
 ## Library sync
 
-The watcher polls your signed-in Apple Music library and submits the **album** behind any
+The watcher polls the Apple Music library of each account whose `library_sync` switch is on
+(`PATCH /api/v1/accounts/{id}`; a new account starts off) and submits the **album** behind any
 newly added song as an ordinary download job. Favourite one track on your phone, and the
 album lands on your NAS without a manual submission.
 
 ```yaml
 library_sync:
-  enabled: false          # the only feature that creates jobs on its own
+  enabled: false          # master switch; the only feature that creates jobs on its own
   interval_minutes: 15    # 1..1440
 ```
 
@@ -161,15 +162,16 @@ with `POST /api/v1/config/reload` — the polling loop reads them at the start o
 pass, so turning it off really stops the polling rather than just discarding results, and
 shortening the interval takes effect immediately instead of after the current wait.
 
-It depends on a media-user-token: the wrapper's when the backend can read it
-([configuration.md](configuration.md#the-media-user-token)), else
+It depends on the account's media-user-token: the wrapper's when the backend can read it
+([configuration.md](configuration.md#the-media-user-token)), else, for the default account,
 `catalog.media_user_token`. A personal library is readable only with a subscription token,
 and the web-player token alone will not do. With neither the watcher idles and warns once
 instead of erroring every pass.
 
 New albums are added through `jobs.Manager.AddAlbums` as album records, not through the
 backend's own HTTP API, so their runs are ordinary runs — same picker, same hooks. An album
-you removed from amdl is not added back. Catalog reads use the scraped web-player token, like every other catalog read.
+you removed from amdl is not added back. Each account keeps its own anchor, and an album
+it adds is pinned to that account's storefront. Catalog reads use the scraped web-player token, like every other catalog read.
 
 ### Why the watermark is a position, not a timestamp
 

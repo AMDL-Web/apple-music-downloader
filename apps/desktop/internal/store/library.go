@@ -79,8 +79,12 @@ type Library struct {
 	Apple       client.AppleLibraryPage
 	AppleStatus SearchStatus
 	AppleErr    string
-	// AppleSync is the Apple library's sync status; nil until read.
+	// AppleSync is the Apple library's sync status, one entry per account;
+	// nil until read.
 	AppleSync *client.AppleLibraryStatus
+	// AppleAccount is the account whose copy the Apple tab shows: the
+	// default's until the status names the accounts with their copy on.
+	AppleAccount string
 	// Kept are the catalog ids amdl has a record of, marking Apple's items.
 	Kept map[string]bool
 	// Added are the Apple items added here, by URL.
@@ -107,9 +111,13 @@ func (s *Store) OpenApplePlaylist(id string) {
 		return
 	}
 	l.Tracks[id] = nil
+	account := l.AppleAccount
 	go func() {
-		t, err := c.AppleLibraryPlaylistTracks(ctx, id)
+		t, err := c.AppleLibraryPlaylistTracks(ctx, id, account)
 		s.postIf(ctx, func() {
+			if l.AppleAccount != account {
+				return
+			}
 			if err != nil {
 				delete(l.Tracks, id)
 				s.setNotice(Reason(err), true)
@@ -157,6 +165,73 @@ func (s *Store) SetAppleKind(kind string) {
 		return
 	}
 	l.AppleKind, l.Apple, l.AppleStatus = kind, client.AppleLibraryPage{}, SearchIdle
+	l.refresh(s)
+}
+
+// AppleAccounts are the status entries of the accounts whose Apple library
+// amdl copies, the default first.
+func (l *Library) AppleAccounts() []client.AppleLibraryAccountStatus {
+	if l.AppleSync == nil {
+		return nil
+	}
+	var on []client.AppleLibraryAccountStatus
+	for _, e := range l.AppleSync.Accounts {
+		if e.Enabled {
+			on = append(on, e)
+		}
+	}
+	return on
+}
+
+// AppleEntry is the status entry of the account the Apple tab shows, or
+// nil.
+func (l *Library) AppleEntry() *client.AppleLibraryAccountStatus {
+	if l.AppleSync == nil {
+		return nil
+	}
+	for i, e := range l.AppleSync.Accounts {
+		if e.AccountID == l.AppleAccount || (l.AppleAccount == "" && e.Default) {
+			return &l.AppleSync.Accounts[i]
+		}
+	}
+	return nil
+}
+
+// appleAccountOf is the account the Apple tab shows of st when it showed
+// was: was while its copy is on, else the default's, else the first with
+// its copy on, else was.
+func appleAccountOf(st client.AppleLibraryStatus, was string) string {
+	first := ""
+	for _, e := range st.Accounts {
+		if !e.Enabled {
+			continue
+		}
+		if e.AccountID == was {
+			return was
+		}
+		if first == "" {
+			first = e.AccountID
+		}
+	}
+	for _, e := range st.Accounts {
+		if e.Enabled && e.Default {
+			return e.AccountID
+		}
+	}
+	if first != "" {
+		return first
+	}
+	return was
+}
+
+// SetAppleAccount shows the Apple library of account id.
+func (s *Store) SetAppleAccount(id string) {
+	l := &s.Library
+	if l.AppleAccount == id {
+		return
+	}
+	l.AppleAccount, l.Apple, l.AppleStatus = id, client.AppleLibraryPage{}, SearchIdle
+	l.Tracks = map[string][]domain.AppleLibraryTrack{}
 	l.refresh(s)
 }
 
@@ -258,13 +333,16 @@ func readRecords(ctx context.Context, c *client.Client, tab LibraryTab, q client
 // readApple reads the Apple tab's list, its sync status and the ids of
 // every record, which mark the items amdl keeps.
 func (l *Library) readApple(s *Store, gen int) {
-	c, ctx, kind := s.client, s.ctx, l.AppleKind
+	c, ctx, kind, account := s.client, s.ctx, l.AppleKind, l.AppleAccount
 	if l.Apple.Items == nil {
 		l.AppleStatus, l.AppleErr = SearchLoading, ""
 	}
 	go func() {
 		st, stErr := c.AppleLibraryStatus(ctx)
-		page, err := c.AppleLibrary(ctx, kind, client.AppleLibraryQuery{Limit: recordPage})
+		if stErr == nil {
+			account = appleAccountOf(st, account)
+		}
+		page, err := c.AppleLibrary(ctx, kind, client.AppleLibraryQuery{Limit: recordPage, Account: account})
 		kept := map[string]bool{}
 		for _, tab := range []LibraryTab{LibraryAlbums, LibraryPlaylists} {
 			for p := 0; p < appleMarkPages; p++ {
@@ -284,6 +362,9 @@ func (l *Library) readApple(s *Store, gen int) {
 			if stErr == nil {
 				l.AppleSync = &st
 			}
+			if l.AppleAccount != account {
+				l.AppleAccount, l.Tracks = account, map[string][]domain.AppleLibraryTrack{}
+			}
 			l.Kept = kept
 			if err != nil {
 				l.AppleStatus, l.AppleErr = SearchFailed, Reason(err)
@@ -294,20 +375,28 @@ func (l *Library) readApple(s *Store, gen int) {
 	}()
 }
 
-// SyncApple asks the backend to read the Apple library again.
+// SyncApple asks the backend to read the shown account's Apple library
+// again.
 func (s *Store) SyncApple() {
-	c, ctx := s.client, s.ctx
+	c, ctx, account := s.client, s.ctx, s.Library.AppleAccount
 	if c == nil {
 		return
 	}
 	go func() {
-		st, err := c.SyncAppleLibrary(ctx, "")
+		st, err := c.SyncAppleLibrary(ctx, "", account)
 		s.postIf(ctx, func() {
 			if err != nil {
 				s.setNotice(Reason(err), true)
 				return
 			}
-			s.Library.AppleSync = &st
+			l := &s.Library
+			if l.AppleSync != nil && st.AccountID != "" {
+				for i := range l.AppleSync.Accounts {
+					if l.AppleSync.Accounts[i].AccountID == st.AccountID {
+						l.AppleSync.Accounts[i] = st
+					}
+				}
+			}
 			s.setNotice("Syncing your Apple Music library", false)
 		})
 	}()

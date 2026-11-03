@@ -173,6 +173,9 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 			ui.Text(c, "Applying reconnects; downloads on the server keep going.").FontSize(11.5).TextColor(k.Faint)
 		}
 	})
+	if d.Mode == a.Settings.Mode {
+		a.pairingCard(c, k)
+	}
 	if d.Mode == mode.Standalone {
 		on := a.Settings.KeepAwake
 		if settingRow(c, k, "awake", &on, "Keep the computer awake while downloading",

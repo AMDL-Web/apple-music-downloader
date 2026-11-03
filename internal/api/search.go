@@ -187,7 +187,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 	defer cancel()
-	res, err := s.catalog.Search(ctx, storefront, term, types, limit, offset, s.tokens.Token(s.currentConfig()).Value)
+	res, err := s.catalog.Search(ctx, storefront, term, types, limit, offset, s.tokens.TokenFor(s.currentConfig(), storefront).Value)
 	if err != nil {
 		s.writeCatalogError(ctx, w, r, err, searchTimeout, nil, "search failed", "term", term, "storefront", storefront)
 		return
@@ -217,7 +217,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			}
 			resp.Artists = group
 		}
-		s.markAppleLibrary(r.Context(), t, group.Items, res.InLibrary[t])
+		s.markAppleLibrary(r.Context(), storefront, t, group.Items, res.InLibrary[t])
 		s.markResources(r.Context(), group.Items)
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -263,8 +263,8 @@ func (s *Server) artistAlbums(w http.ResponseWriter, r *http.Request) {
 	for _, album := range page.Albums {
 		resp.Albums.Items = append(resp.Albums.Items, albumHit(storefront, album))
 	}
-	s.markAppleLibrary(r.Context(), applemusic.SearchArtists, []*searchHit{resp.Artist}, nil)
-	s.markAppleLibrary(r.Context(), applemusic.SearchAlbums, resp.Albums.Items, nil)
+	s.markAppleLibrary(r.Context(), storefront, applemusic.SearchArtists, []*searchHit{resp.Artist}, nil)
+	s.markAppleLibrary(r.Context(), storefront, applemusic.SearchAlbums, resp.Albums.Items, nil)
 	s.markResources(r.Context(), resp.Albums.Items)
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -300,6 +300,9 @@ func parseSearchTypes(q url.Values) ([]applemusic.SearchType, error) {
 // catalog.default_storefront.
 func (s *Server) browseStorefront(q url.Values) (string, error) {
 	storefront := strings.ToLower(strings.TrimSpace(q.Get("storefront")))
+	if storefront == "" {
+		storefront = s.tokens.DefaultRegion()
+	}
 	if storefront == "" {
 		storefront = strings.ToLower(strings.TrimSpace(s.currentConfig().Catalog.DefaultStorefront))
 	}

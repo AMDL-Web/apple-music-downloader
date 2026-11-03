@@ -82,19 +82,18 @@ wrapper:
   # Values <= 0 fall back to 120 seconds. Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   login_timeout_seconds: 120
   # string: the wrapper's data directory as this backend sees it, so the backend can read the Apple Music
-  # media-user-token the wrapper keeps in a file named MUSIC_TOKEN and refreshes itself; while it can, that token
-  # is used instead of catalog.media_user_token. A wrapper that serves GET /token at wrapper.address (amdl's
-  # wrapper-lite fork) hands its token over directly and needs no data_dir; while it gives one, this file is not
-  # read (docs/configuration.md, The media-user-token). Two layouts are read: a wrapper-lite base directory, read as
-  # <data_dir>/MUSIC_TOKEN (the ./data/wrapper bind mount of deploy/docker-compose.yml's wrapper-lite option), and
-  # a wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN (<volume>/wrapper/rootfs/data
-  # in the wrapper-manager option). One wrapper account is supported, a wrapper-manager's included; with several,
-  # the newest file is read. The file is read afresh on every use. A container mounts that directory
-  # read-only and sets this key to the mount point. A relative path is resolved from the
+  # media-user-token the wrapper keeps for each account in a file named MUSIC_TOKEN and refreshes itself; while it
+  # can, that token is used instead of catalog.media_user_token. A wrapper that serves GET /token at wrapper.address
+  # (amdl's wrapper-lite fork, and a wrapper-manager for each account by GET /token?instance=) hands its tokens over
+  # directly and needs no data_dir; while it gives one, the file is not read (docs/configuration.md, The
+  # media-user-token). Two layouts are read: a wrapper-lite base directory, read as <data_dir>/MUSIC_TOKEN for its one
+  # account (the ./data/wrapper bind mount of deploy/docker-compose.yml's wrapper-lite option), and a
+  # wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN for the account with that
+  # instance id (<volume>/wrapper/rootfs/data in the wrapper-manager option); a wrapper that does not list its
+  # accounts falls back to the newest instances/*/MUSIC_TOKEN. The file is read afresh on every use. A container
+  # mounts that directory read-only and sets this key to the mount point. A relative path is resolved from the
   # backend working directory. The file must be readable by the user the backend runs as; a missing directory or
-  # file means no wrapper token. Empty (the default) reads
-  # nothing. A backend that runs this machine's wrapper itself (amdl wrapper install) ignores this key and reads
-  # that wrapper's token directly. Runtime: the next token read uses a new value.
+  # file means no wrapper token. Empty (the default) reads nothing. Runtime: the next token read uses a new value.
   data_dir: ""
 
 catalog:
@@ -391,21 +390,24 @@ simulate:
   max_speed_kbps: 4096
 
 library_sync:
-  # Library monitor: polls the signed-in Apple Music library and adds the **album** of each
-  # newly added track to amdl's library as an album record, which downloads like one added by
-  # hand. Add a song to your library on your phone and the whole album downloads here
-  # automatically. An album removed from amdl is not added again by the monitor.
+  # Library monitor: polls the Apple Music library of each account whose library_sync switch is
+  # on (PATCH /api/v1/accounts/{id}, the console's account rows) and adds the **album** of each
+  # newly added track to amdl's library as an album record, pinned to that account's storefront,
+  # which downloads like one added by hand. Add a song to your library on your phone and the
+  # whole album downloads here automatically. An album removed from amdl is not added again by
+  # the monitor. enabled below is the master switch for every account; a new account starts
+  # with its own switch off.
   #
   # Both keys are runtime-mutable through PUT /api/v1/config and config reload; no restart
   # is required. The polling loop re-reads them at the start of every round, so turning the
   # monitor off really stops polling rather than just discarding the results.
   #
-  # Requires a media-user-token — a personal library can be read only with the subscription
-  # token; the web-player token alone is not enough. The wrapper's is used when the backend has
-  # it (a wrapper it runs itself, the wrapper's GET /token, wrapper.data_dir, or its stored copy
-  # of an earlier GET /token answer), else catalog.media_user_token. While
-  # neither has one the monitor idles and warns once, instead of reporting an error every round,
-  # and starts within a tick of one appearing.
+  # Requires the account's media-user-token — a personal library can be read only with the
+  # subscription token; the web-player token alone is not enough. The wrapper's is used when the
+  # backend has it (the wrapper's GET /token, wrapper.data_dir, or its stored copy of an earlier
+  # GET /token answer), else, for the default account, catalog.media_user_token. While an
+  # account has none it idles and warns once, instead of reporting an error every round, and
+  # starts within a tick of one appearing.
   #
   # How it detects "new": Apple does not return when a library track was added (library-songs
   # has no dateAdded attribute, and a library album's dateAdded is when its first track was
@@ -424,10 +426,12 @@ library_sync:
   interval_minutes: 15
 
 apple_library:
-  # Apple library cache: a local copy of the signed-in Apple Music account library (albums,
-  # songs, playlists with their tracks, artists) that GET /api/v1/apple-library/{kind} and the
+  # Apple library cache: a local copy of each account's Apple Music library (albums, songs,
+  # playlists with their tracks, artists) that GET /api/v1/apple-library/{kind} and the
   # in_apple_library mark on search hits and records read, so browsing never waits on Apple. A sync fills it;
-  # it never adds downloads (library_sync above is the monitor that adds new albums).
+  # it never adds downloads (library_sync above is the monitor that adds new albums). An account
+  # syncs while its apple_library switch is on (PATCH /api/v1/accounts/{id}); these two schedules
+  # apply to every account. A new account starts with its switch off.
   #
   # Both keys are runtime-mutable through PUT /api/v1/config and config reload; no restart is
   # required. The sync loop re-reads them every 15 seconds.

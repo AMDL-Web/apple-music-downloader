@@ -25,7 +25,10 @@ const maxClientErrorPasses = 3
 // library album with no catalog counterpart is consumed: it can never be
 // added. So is an album removed from amdl, which the monitor does not add
 // back.
-func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applemusic.LibrarySong) (int, []string) {
+//
+// Each album is pinned to the storefront of the catalog link the account's
+// library gave, else the account's region.
+func (w *Watcher) submitAlbums(ctx context.Context, st *accountState, token, region string, added []applemusic.LibrarySong) (int, []string) {
 	type albumInfo struct {
 		name   string
 		artist string
@@ -35,7 +38,7 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 	albums := make(map[string]*albumInfo, len(added))
 	for _, song := range added {
 		if song.LibraryAlbumID == "" {
-			w.logger.Warn("library song has no album; skipping", "song", song.Name, "song_id", song.ID)
+			st.logger.Warn("library song has no album; skipping", "song", song.Name, "song_id", song.ID)
 			continue
 		}
 		info, seen := albums[song.LibraryAlbumID]
@@ -52,6 +55,7 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 		info := albums[albumID]
 		return fmt.Sprintf("%q by %q (%s): %s", info.name, info.artist, albumID, reason)
 	}
+	storefront := region
 	catalogIDs := make([]string, 0, len(order))
 	libraryIDs := make([]string, 0, len(order))
 	seen := map[string]bool{}
@@ -59,26 +63,26 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 		info := albums[albumID]
 		catalogURL, ok, err := w.library.LibraryAlbumCatalogURL(ctx, token, albumID)
 		if err != nil {
-			if w.giveUpOnAlbum(albumID, err) {
-				w.logger.Warn("library album lookup keeps failing with a client error; skipping it",
+			if st.giveUpOnAlbum(albumID, err) {
+				st.logger.Warn("library album lookup keeps failing with a client error; skipping it",
 					"album", info.name, "artist", info.artist, "library_album_id", albumID, "passes", maxClientErrorPasses, "error", err)
 				continue
 			}
-			w.logger.Warn("resolve library album failed; retrying next pass",
+			st.logger.Warn("resolve library album failed; retrying next pass",
 				"album", info.name, "artist", info.artist, "library_album_id", albumID, "error", err)
 			pending = append(pending, describe(albumID, err.Error()))
 			continue
 		}
-		w.forgetClientErrors(albumID)
+		st.forgetClientErrors(albumID)
 		if !ok {
-			w.logger.Info("library album has no catalog entry; skipping",
+			st.logger.Info("library album has no catalog entry; skipping",
 				"album", info.name, "artist", info.artist, "library_album_id", albumID)
 			continue
 		}
 		// The album record is keyed by its catalog id without the storefront.
 		parsed, err := applemusic.ParseWithAlbumTrackMode(catalogURL, "album")
 		if err != nil || parsed.Type != applemusic.TypeAlbum {
-			w.logger.Warn("library album's catalog link is not an album link; skipping",
+			st.logger.Warn("library album's catalog link is not an album link; skipping",
 				"album", info.name, "artist", info.artist, "library_album_id", albumID, "url", catalogURL, "error", err)
 			continue
 		}
@@ -86,15 +90,18 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 			continue
 		}
 		seen[parsed.ID] = true
+		if parsed.Storefront != "" {
+			storefront = parsed.Storefront
+		}
 		catalogIDs = append(catalogIDs, parsed.ID)
 		libraryIDs = append(libraryIDs, albumID)
-		w.logger.Info("library addition detected",
+		st.logger.Info("library addition detected",
 			"album", info.name, "artist", info.artist, "new_songs", info.songs, "album_id", parsed.ID)
 	}
 	if len(catalogIDs) == 0 {
 		return 0, pending
 	}
-	outcomes, err := w.jobs.AddAlbums(ctx, domain.SourceLibrarySync, catalogIDs)
+	outcomes, err := w.jobs.AddAlbums(ctx, domain.SourceLibrarySync, storefront, catalogIDs)
 	queued := 0
 	for i, id := range catalogIDs {
 		outcome, done := outcomes[id]
@@ -103,7 +110,7 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 			if err != nil {
 				reason = err.Error()
 			}
-			w.logger.Warn("library album not added; retrying next pass", "album_id", id, "error", reason)
+			st.logger.Warn("library album not added; retrying next pass", "album_id", id, "error", reason)
 			pending = append(pending, describe(libraryIDs[i], reason))
 			continue
 		}
@@ -111,10 +118,10 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 		case jobs.AddQueued:
 			queued++
 		case jobs.AddTombstoned:
-			w.logger.Info("library album was removed from amdl; not added again", "album_id", id)
+			st.logger.Info("library album was removed from amdl; not added again", "album_id", id)
 		}
 	}
-	w.logger.Info("library sync added albums", "albums", len(outcomes), "queued", queued)
+	st.logger.Info("library sync added albums", "albums", len(outcomes), "queued", queued)
 	return queued, pending
 }
 
@@ -125,35 +132,35 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 // not mistaken for one: the library listing at the start of the pass uses the
 // same token and fails first, so no lookup runs. A transient error resets the
 // count.
-func (w *Watcher) giveUpOnAlbum(albumID string, err error) bool {
+func (st *accountState) giveUpOnAlbum(albumID string, err error) bool {
 	var marker interface{ NonRetryable() bool }
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	if !errors.As(err, &marker) || !marker.NonRetryable() {
-		delete(w.clientErrorPasses, albumID)
+		delete(st.clientErrorPasses, albumID)
 		return false
 	}
-	if w.clientErrorPasses == nil {
-		w.clientErrorPasses = map[string]int{}
+	if st.clientErrorPasses == nil {
+		st.clientErrorPasses = map[string]int{}
 	}
 	// The count stays at or above the limit, so an album given up on is skipped
 	// again at once while another pending album still holds the anchor; a saved
 	// anchor clears every count (clearClientErrors).
-	w.clientErrorPasses[albumID]++
-	return w.clientErrorPasses[albumID] >= maxClientErrorPasses
+	st.clientErrorPasses[albumID]++
+	return st.clientErrorPasses[albumID] >= maxClientErrorPasses
 }
 
-func (w *Watcher) forgetClientErrors(albumID string) {
-	w.mu.Lock()
-	delete(w.clientErrorPasses, albumID)
-	w.mu.Unlock()
+func (st *accountState) forgetClientErrors(albumID string) {
+	st.mu.Lock()
+	delete(st.clientErrorPasses, albumID)
+	st.mu.Unlock()
 }
 
 // clearClientErrors drops every count once an anchor is saved: the albums
 // counted are then below it, or forgotten by a re-anchor, and never looked up
 // again.
-func (w *Watcher) clearClientErrors() {
-	w.mu.Lock()
-	w.clientErrorPasses = nil
-	w.mu.Unlock()
+func (st *accountState) clearClientErrors() {
+	st.mu.Lock()
+	st.clientErrorPasses = nil
+	st.mu.Unlock()
 }

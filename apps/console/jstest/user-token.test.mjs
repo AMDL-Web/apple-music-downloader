@@ -7,7 +7,7 @@ import { scanLinks } from '../static/js/lib/links.js';
 const ok = (data) => ({ data, error: undefined });
 const down = { data: undefined, error: { status: 503, message: 'wrapper_unavailable' } };
 const pending = undefined;
-const wrapperWith = (token) => ok({ ready: true, logged_in: true, regions: ['us'], accounts: [], media_user_token: token });
+const wrapperWith = (token) => ok({ ready: true, logged_in: true, regions: ['us'], media_user_token: token });
 
 test('the wrapper token wins over the saved one', () => {
   const s = tokenState('...wxyz', wrapperWith('...a1b2'));

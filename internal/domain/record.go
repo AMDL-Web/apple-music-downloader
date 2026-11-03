@@ -142,24 +142,27 @@ type Rollup struct {
 // Album is one catalog album record, keyed by its catalog id without a
 // storefront.
 type Album struct {
-	ID                string       `json:"id"`
-	Name              string       `json:"name"`
-	ArtistName        string       `json:"artist_name"`
-	ArtistID          string       `json:"artist_id,omitempty"`
-	ArtistURL         string       `json:"artist_url,omitempty"`
-	ReleaseDate       string       `json:"release_date,omitempty"`
-	Genre             string       `json:"genre,omitempty"`
-	UPC               string       `json:"upc,omitempty"`
-	ContentRating     string       `json:"content_rating,omitempty"`
-	Artwork           Artwork      `json:"artwork"`
-	ResolvedAt        *time.Time   `json:"resolved_at,omitempty"`
-	ReleaseTrackCount int          `json:"release_track_count"`
-	WithheldCount     int          `json:"withheld_count"`
-	StorefrontRead    string       `json:"storefront_read,omitempty"`
-	CatalogState      CatalogState `json:"catalog_state"`
-	WantedAll         bool         `json:"wanted_all"`
-	Paused            bool         `json:"paused"`
-	Priority          int          `json:"priority"`
+	ID                string     `json:"id"`
+	Name              string     `json:"name"`
+	ArtistName        string     `json:"artist_name"`
+	ArtistID          string     `json:"artist_id,omitempty"`
+	ArtistURL         string     `json:"artist_url,omitempty"`
+	ReleaseDate       string     `json:"release_date,omitempty"`
+	Genre             string     `json:"genre,omitempty"`
+	UPC               string     `json:"upc,omitempty"`
+	ContentRating     string     `json:"content_rating,omitempty"`
+	Artwork           Artwork    `json:"artwork"`
+	ResolvedAt        *time.Time `json:"resolved_at,omitempty"`
+	ReleaseTrackCount int        `json:"release_track_count"`
+	WithheldCount     int        `json:"withheld_count"`
+	StorefrontRead    string     `json:"storefront_read,omitempty"`
+	// PinnedStorefront is the storefront the record's runs read it in, set
+	// when it was added; empty reads it in the default account's.
+	PinnedStorefront string       `json:"pinned_storefront,omitempty"`
+	CatalogState     CatalogState `json:"catalog_state"`
+	WantedAll        bool         `json:"wanted_all"`
+	Paused           bool         `json:"paused"`
+	Priority         int          `json:"priority"`
 	// Overrides is the download overrides of the latest manual add before a
 	// track was done; nil for none. Each run copies it into its plan.
 	Overrides        *config.DownloadOverrides `json:"overrides,omitempty"`
@@ -194,18 +197,20 @@ type Track struct {
 // Playlist is one catalog playlist record (a pl. id). Playlists without a
 // catalog id have no record.
 type Playlist struct {
-	ID             string                    `json:"id"`
-	Name           string                    `json:"name"`
-	CuratorName    string                    `json:"curator_name,omitempty"`
-	Artwork        Artwork                   `json:"artwork"`
-	ResolvedAt     *time.Time                `json:"resolved_at,omitempty"`
-	StorefrontRead string                    `json:"storefront_read,omitempty"`
-	CatalogState   CatalogState              `json:"catalog_state"`
-	LastModified   string                    `json:"last_modified,omitempty"`
-	Paused         bool                      `json:"paused"`
-	Priority       int                       `json:"priority"`
-	Overrides      *config.DownloadOverrides `json:"overrides,omitempty"`
-	CoverState     CoverState                `json:"cover_state"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	CuratorName    string     `json:"curator_name,omitempty"`
+	Artwork        Artwork    `json:"artwork"`
+	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+	StorefrontRead string     `json:"storefront_read,omitempty"`
+	// PinnedStorefront is as Album's.
+	PinnedStorefront string                    `json:"pinned_storefront,omitempty"`
+	CatalogState     CatalogState              `json:"catalog_state"`
+	LastModified     string                    `json:"last_modified,omitempty"`
+	Paused           bool                      `json:"paused"`
+	Priority         int                       `json:"priority"`
+	Overrides        *config.DownloadOverrides `json:"overrides,omitempty"`
+	CoverState       CoverState                `json:"cover_state"`
 	Rollup
 	AddedAt     time.Time  `json:"added_at"`
 	RefreshedAt *time.Time `json:"refreshed_at,omitempty"`
@@ -312,6 +317,9 @@ type PendingAdd struct {
 	Attempts  int                       `json:"attempts"`
 	LastError string                    `json:"last_error,omitempty"`
 	State     PendingAddState           `json:"state"`
+	// Storefront is the storefront the add is read in, and the pin of the
+	// records it becomes; empty reads it in the default account's.
+	Storefront string `json:"storefront"`
 }
 
 // ResourceRef names a record.

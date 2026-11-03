@@ -170,10 +170,11 @@ func TestSetupFollowsTheGuestThenSignsIn(t *testing.T) {
 		t.Errorf("two-step: %q", tt.Texts())
 	}
 	a.Store.Login.LoginID = ""
-	sv.Wrapper = &client.WrapperStatus{Ready: true, LoggedIn: true, Accounts: []string{"someone@icloud.com"}, Regions: []string{"us"},
+	sv.Wrapper = &client.WrapperStatus{Ready: true, LoggedIn: true, Regions: []string{"us"},
 		LoginSupported: true, Managed: &client.ManagedWrapper{Mode: "serving", Accel: "tcg"}}
+	sv.Accounts = []client.Account{{ID: "a1", Name: "someone@icloud.com", Region: "us", Default: true, State: client.AccountActive}}
 	tt.Frame()
-	if !tt.HasText("someone@icloud.com · us") || tt.HasText("Log in") {
+	if !tt.HasText("someone@icloud.com · United States") || tt.HasText("Log in") {
 		t.Errorf("signed in: %q", tt.Texts())
 	}
 }

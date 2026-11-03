@@ -505,7 +505,11 @@ func (m *model) command(line string) tea.Cmd {
 			if what := wrapperProblem(w); what != "" {
 				return what, nil
 			}
-			return "signed in · regions " + strings.Join(w.Regions, ", "), nil
+			out := "signed in · regions " + strings.Join(w.Regions, ", ")
+			if list, err := m.c.ListAccounts(ctx); err == nil {
+				out += accountLines(list.Accounts)
+			}
+			return out, nil
 		})
 	case "/login":
 		m.panel = panelLogin
@@ -658,4 +662,34 @@ func recordLines(l client.AlbumRecords) string {
 		lines = append(lines, fmt.Sprintf("%d more; /library <text> narrows it", l.Total-len(l.Items)))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// accountLines is one line per account for /wrapper: Apple ID and region,
+// whether it is the default or missing, and its two switches.
+func accountLines(list []client.Account) string {
+	var b strings.Builder
+	for _, a := range list {
+		tags := []string{}
+		if a.Default {
+			tags = append(tags, "default")
+		}
+		if a.State != client.AccountActive {
+			tags = append(tags, a.State)
+		}
+		if a.LibrarySync {
+			tags = append(tags, "library sync")
+		}
+		if a.AppleLibrary {
+			tags = append(tags, "apple library")
+		}
+		name := a.Name
+		if name == "" {
+			name = a.ID
+		}
+		fmt.Fprintf(&b, "\n    %s · %s", name, a.Region)
+		if len(tags) > 0 {
+			b.WriteString(" · " + strings.Join(tags, ", "))
+		}
+	}
+	return b.String()
 }

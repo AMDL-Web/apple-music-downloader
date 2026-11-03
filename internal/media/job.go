@@ -52,6 +52,7 @@ func (d *Downloader) ProcessJob(ctx context.Context, job domain.Job, reporter jo
 		}
 		return err
 	}
+	jobDownloader.storefront = job.Storefront
 	err = jobDownloader.processJob(ctx, job, reporter)
 	switch {
 	case ctx.Err() != nil && isShutdown(ctx):

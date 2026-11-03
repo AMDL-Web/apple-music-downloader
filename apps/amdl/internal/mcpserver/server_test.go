@@ -132,8 +132,8 @@ func TestToolsComeFromTheCapabilityTable(t *testing.T) {
 			t.Errorf("%s readOnlyHint = %v", c.Tool, tl.Annotations.ReadOnlyHint)
 		}
 	}
-	if len(got) != 33 {
-		t.Errorf("%d tools, want 33", len(got))
+	if len(got) != 37 {
+		t.Errorf("%d tools, want 37", len(got))
 	}
 	if d := got["delete_job"].Annotations.DestructiveHint; d == nil || !*d {
 		t.Error("delete_job should be destructive")
@@ -516,5 +516,49 @@ func TestStartDownloadHintsDownloadResourceForAnotherQuality(t *testing.T) {
 	acc, _ := out["accepted"].([]any)
 	if isErr || len(acc) != 1 || !strings.Contains(acc[0].(map[string]any)["hint"].(string), "download_resource with kind albums, id 1 and codec aac") {
 		t.Errorf("start_download = %v", out)
+	}
+}
+
+func TestAccountToolsTakeARegionAndReachTheirRoutes(t *testing.T) {
+	var mu sync.Mutex
+	var seen []string
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/accounts" {
+			fmt.Fprint(w, `{"accounts":[{"id":"a1","name":"a","region":"us","state":"active"},{"id":"b2","name":"b","region":"jp","state":"active"}]}`)
+			return
+		}
+		raw := make([]byte, 512)
+		n, _ := r.Body.Read(raw)
+		mu.Lock()
+		seen = append(seen, r.Method+" "+r.URL.RequestURI()+" "+string(raw[:n]))
+		mu.Unlock()
+		fmt.Fprint(w, `{"deleted":"b2","logged_out":true,"kind":"albums","items":[],"total":0}`)
+	}))
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+	}{
+		{"update_account", map[string]any{"account_id": "jp", "library_sync": true, "position": 0}},
+		{"delete_account", map[string]any{"account_id": "b2"}},
+		{"list_apple_library", map[string]any{"kind": "albums", "account": "jp"}},
+		{"sync_apple_library", map[string]any{"account": "us"}},
+	} {
+		if out, isErr := s.call(t, c.tool, c.args); isErr {
+			t.Errorf("%s failed: %v", c.tool, out)
+		}
+	}
+	if out, isErr := s.call(t, "delete_account", map[string]any{"account_id": "fr"}); !isErr || out["error"] == nil {
+		t.Errorf("an unknown account should be a tool error: %v", out)
+	}
+	want := []string{
+		`PATCH /api/v1/accounts/b2 {"library_sync":true,"position":0}`,
+		"DELETE /api/v1/accounts/b2 ",
+		"GET /api/v1/apple-library/albums?account=b2 ",
+		`POST /api/v1/apple-library/sync {"account":"a1"}`,
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(seen, "|") != strings.Join(want, "|") {
+		t.Errorf("requests = %q, want %q", seen, want)
 	}
 }

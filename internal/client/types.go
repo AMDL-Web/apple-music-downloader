@@ -66,7 +66,6 @@ type WrapperStatus struct {
 	Ready          bool     `json:"ready"`
 	LoggedIn       bool     `json:"logged_in"`
 	Regions        []string `json:"regions"`
-	Accounts       []string `json:"accounts"`
 	LoginSupported bool     `json:"login_supported"`
 	// Managed is set when the backend runs the wrapper on its machine.
 	Managed *ManagedWrapper `json:"managed,omitempty"`
@@ -227,15 +226,27 @@ type StatsDay struct {
 	JobsFailed      int    `json:"jobs_failed"`
 }
 
-// LibrarySync is the LibrarySyncStatus schema.
+// LibrarySync is the LibrarySyncStatus schema. Enabled is the master switch
+// (library_sync.enabled); each account polls when both it and its own
+// switch are on.
 type LibrarySync struct {
-	Enabled         bool       `json:"enabled"`
-	IntervalMinutes int        `json:"interval_minutes"`
-	AnchorSize      int        `json:"anchor_size"`
-	LastPollAt      *time.Time `json:"last_poll_at,omitempty"`
-	LastError       string     `json:"last_error,omitempty"`
-	LastSubmitted   int        `json:"last_submitted"`
-	TotalSubmitted  int        `json:"total_submitted"`
+	Enabled         bool                 `json:"enabled"`
+	IntervalMinutes int                  `json:"interval_minutes"`
+	Accounts        []LibrarySyncAccount `json:"accounts"`
+}
+
+// LibrarySyncAccount is the LibrarySyncAccount schema: what the monitor
+// observed for one account. Enabled is the account's own switch.
+type LibrarySyncAccount struct {
+	AccountID      string     `json:"account_id"`
+	Name           string     `json:"name"`
+	Region         string     `json:"region"`
+	Enabled        bool       `json:"enabled"`
+	AnchorSize     int        `json:"anchor_size"`
+	LastPollAt     *time.Time `json:"last_poll_at,omitempty"`
+	LastError      string     `json:"last_error,omitempty"`
+	LastSubmitted  int        `json:"last_submitted"`
+	TotalSubmitted int        `json:"total_submitted"`
 }
 
 // Hooks is the HooksResponse schema.

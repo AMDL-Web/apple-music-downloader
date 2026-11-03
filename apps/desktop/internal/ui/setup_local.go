@@ -258,7 +258,7 @@ func (a *App) accountRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 		return setup.Unchecked
 	}
 	if w.LoggedIn {
-		setupRow(c, k, "account", setup.Ready, title, setup.AccountText(w.Accounts, w.Regions), true, nil, nil)
+		setupRow(c, k, "account", setup.Ready, title, setup.AccountText(a.Store.Server.Accounts, w.Regions), true, nil, nil)
 		return setup.Ready
 	}
 	if !w.LoginSupported {

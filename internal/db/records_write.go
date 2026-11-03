@@ -37,7 +37,10 @@ type AlbumAdd struct {
 	// Paused sets the record's paused flag when non-nil; nil leaves an
 	// existing record's flag alone and makes a new one unpaused.
 	Paused *bool
-	Now    time.Time
+	// Storefront is the pin of a new record (pinned_storefront): the
+	// storefront its runs read it in. An existing record keeps its pin.
+	Storefront string
+	Now        time.Time
 }
 
 // PlaylistAdd is one add of a catalog playlist record.
@@ -47,7 +50,9 @@ type PlaylistAdd struct {
 	Priority  int
 	Overrides *config.DownloadOverrides
 	Paused    *bool
-	Now       time.Time
+	// Storefront is the pin of a new record, as AlbumAdd's.
+	Storefront string
+	Now        time.Time
 }
 
 // AddAlbum creates or extends an album record in one transaction: the record
@@ -57,7 +62,7 @@ type PlaylistAdd struct {
 // unresolved when it is new; ApplyAlbumRead resolves it.
 func (s *Store) AddAlbum(ctx context.Context, add AlbumAdd) (domain.Album, error) {
 	return withTx(ctx, s.db, func(tx *sql.Tx) (domain.Album, error) {
-		if err := upsertRecord(ctx, tx, domain.ResourceAlbum, add.ID, add.Source, add.Priority, add.Overrides, add.Paused, add.Now); err != nil {
+		if err := upsertRecord(ctx, tx, domain.ResourceAlbum, add.ID, add.Source, add.Priority, add.Overrides, add.Paused, add.Storefront, add.Now); err != nil {
 			return domain.Album{}, err
 		}
 		stamp := formatTime(add.Now)
@@ -88,7 +93,7 @@ func (s *Store) AddAlbum(ctx context.Context, add AlbumAdd) (domain.Album, error
 // AddPlaylist creates or updates a playlist record, as AddAlbum does.
 func (s *Store) AddPlaylist(ctx context.Context, add PlaylistAdd) (domain.Playlist, error) {
 	return withTx(ctx, s.db, func(tx *sql.Tx) (domain.Playlist, error) {
-		if err := upsertRecord(ctx, tx, domain.ResourcePlaylist, add.ID, add.Source, add.Priority, add.Overrides, add.Paused, add.Now); err != nil {
+		if err := upsertRecord(ctx, tx, domain.ResourcePlaylist, add.ID, add.Source, add.Priority, add.Overrides, add.Paused, add.Storefront, add.Now); err != nil {
 			return domain.Playlist{}, err
 		}
 		if err := ensureMainSlots(ctx, tx, domain.ResourcePlaylist, add.ID, formatTime(add.Now)); err != nil {
@@ -102,7 +107,7 @@ func (s *Store) AddPlaylist(ctx context.Context, add PlaylistAdd) (domain.Playli
 }
 
 func upsertRecord(ctx context.Context, tx *sql.Tx, kind domain.ResourceKind, id string, source domain.RecordSource,
-	priority int, overrides *config.DownloadOverrides, paused *bool, now time.Time) error {
+	priority int, overrides *config.DownloadOverrides, paused *bool, pin string, now time.Time) error {
 	if id == "" {
 		return fmt.Errorf("add %s: empty id", kind)
 	}
@@ -122,13 +127,13 @@ func upsertRecord(ctx context.Context, tx *sql.Tx, kind domain.ResourceKind, id 
 	}
 	stamp := formatTime(now)
 	newPaused := paused != nil && *paused
-	_, err = tx.ExecContext(ctx, `INSERT INTO `+table+`(id, paused, priority, overrides, added_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)
+	_, err = tx.ExecContext(ctx, `INSERT INTO `+table+`(id, paused, priority, overrides, pinned_storefront, added_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			paused = CASE WHEN ? THEN excluded.paused ELSE paused END,
 			priority = MIN(priority, excluded.priority),
 			overrides = CASE WHEN ? AND tracks_done = 0 THEN excluded.overrides ELSE overrides END,
 			updated_at = excluded.updated_at`,
-		id, newPaused, priority, encoded, stamp, stamp,
+		id, newPaused, priority, encoded, strings.ToLower(pin), stamp, stamp,
 		paused != nil, source == domain.SourceManual)
 	if err != nil {
 		return fmt.Errorf("add %s %s: %w", kind, id, err)

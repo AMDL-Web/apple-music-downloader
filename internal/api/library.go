@@ -249,7 +249,11 @@ func (s *Server) recordBody(r *http.Request, kind domain.ResourceKind, id string
 	if detail.LastCheckedAt, err = s.store.LastCheckedAt(ctx, kind, id); err != nil {
 		return nil, err
 	}
-	if in, ok := s.appleLibrary.Membership(ctx, string(kind)+"s", []string{id})[id]; ok {
+	pin, err := s.manager.RecordPin(ctx, kind, id)
+	if err != nil {
+		return nil, err
+	}
+	if in, ok := s.appleLibrary.Membership(ctx, pin, string(kind)+"s", []string{id})[id]; ok {
 		detail.InAppleLibrary = &in
 	}
 	active, _, err := s.store.ActiveRunID(ctx, kind, id)

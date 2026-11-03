@@ -38,8 +38,8 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	}
 	defer store.Close()
 	ctx := context.Background()
-	if got := userVersion(t, store.db); got != 6 {
-		t.Fatalf("user_version = %d, want 6", got)
+	if got := userVersion(t, store.db); got != 7 {
+		t.Fatalf("user_version = %d, want 7", got)
 	}
 	after := dumpAll(t, store.db)
 
@@ -405,12 +405,12 @@ func TestOpenCreatesLatestSchemaInFreshDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if got := userVersion(t, store.db); got != 6 || got != latestSchemaVersion() {
-		t.Fatalf("fresh user_version = %d, want 6 (latest %d)", got, latestSchemaVersion())
+	if got := userVersion(t, store.db); got != 7 || got != latestSchemaVersion() {
+		t.Fatalf("fresh user_version = %d, want 7 (latest %d)", got, latestSchemaVersion())
 	}
 	for _, table := range []string{"runs", "run_items", "run_events", "albums", "tracks", "playlists", "playlist_tracks", "files",
 		"pending_adds", "resource_sources", "deleted_resources", "check_runs", "library_sync_anchor",
-		"apple_library_items", "apple_library_playlist_tracks", "apple_library_meta"} {
+		"apple_library_items", "apple_library_playlist_tracks", "apple_library_meta", "accounts"} {
 		if len(columnsOf(t, store.db, table)) == 0 {
 			t.Errorf("fresh database lacks table %s", table)
 		}

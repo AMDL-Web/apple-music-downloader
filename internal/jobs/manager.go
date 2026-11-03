@@ -74,6 +74,9 @@ type Manager struct {
 	// catalogMu.
 	catalogMu sync.Mutex
 	catalog   Catalog
+	// storefronts says which storefronts the accounts serve
+	// (SetStorefronts), guarded by catalogMu.
+	storefronts Storefronts
 
 	// lifecycle makes worker shutdown observable. In particular, callers must
 	// not close the store or processor dependencies until Shutdown/Wait says

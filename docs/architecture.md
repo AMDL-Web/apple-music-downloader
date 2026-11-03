@@ -87,8 +87,10 @@ over HTTP (`wrapper.address`) to one of two services, which look the same to
 `internal/wrapper#Client`: [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite) (AMDL-Web's fork, [why](deployment.md#the-wrapper)),
 which holds one logged-in account, or [wrapper-manager
 v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager), which runs one
-wrapper-lite per account behind a single port and forwards each request to an account
-whose storefront can serve it. The managed wrapper (`internal/wrapperhost`) runs wrapper-manager in a QEMU
+wrapper-lite per account behind a single port (at most 10 accounts) and forwards each
+request to an account whose storefront can serve it. `internal/accounts` reads the
+accounts from `/status` into the `accounts` table; `internal/usertoken` picks the
+media-user-token of each. The managed wrapper (`internal/wrapperhost`) runs wrapper-manager in a QEMU
 guest with all accounts and the payload on one persistent disk. What the backend asks for:
 
 - `/key`: for each FairPlay key URI, a white-box template (`ctx` and `state`). The client
@@ -111,7 +113,7 @@ guest with all accounts and the payload on one persistent disk. What the backend
   the web player's `play.music.apple.com` and `play.itunes.apple.com`
   (`internal/media#playbackClient`).
 - `/status`: connectivity, the storefront regions served, and for a wrapper-manager
-  `clientCount` and `ready`, whose presence is how the backend tells the two apart.
+  its accounts as `instances`, `clientCount` and `ready`, whose presence is how the backend tells the two apart.
 
 Logging in is the one thing wrapper-lite cannot do over HTTP: it logs in only from its
 own command line. The login routes of `/api/v1/wrapper` therefore forward to wrapper-manager's
@@ -175,7 +177,7 @@ Per-URL submit results keep the coarse `status` enum (`accepted`, `pending`,
 plus `error` for a server-side failure) and carry the detail in `results[].error`
 (`{code, message, details?}`). The codes are the spec's `SubmitErrorCode` enum: with
 `invalid`, `invalid_url`, `unsupported_input`, `decryptor_unavailable` (for a storefront
-the wrapper's account does not serve, `details` carries the storefront and the supported
+no wrapper account serves, `details` carries the storefront and the supported
 ones) and `invalid_configuration`; with the status of the same name,
 `duplicate_in_request`, `duplicate_active` and `queue_full`; with `error`, `store_error`
 and `internal_error` (the validator failed unexpectedly).
