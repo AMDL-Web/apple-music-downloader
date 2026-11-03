@@ -63,6 +63,30 @@ func TestLibraryRoutesServeRecords(t *testing.T) {
 	rec = requestJSON(t, h, http.MethodPost, "/api/v1/library/albums/2/reset", `{"what":"audio"}`)
 	assertErrorCode(t, rec, http.StatusConflict, CodeRunActive)
 
+	// By activity, the record whose run was just queued comes first, and
+	// every row and the detail carry the time.
+	rec = requestJSON(t, h, http.MethodGet, "/api/v1/library/albums?sort=activity", "")
+	var byActivity struct {
+		Items []struct {
+			ID          string     `json:"id"`
+			ActiveJobID string     `json:"active_job_id"`
+			ActivityAt  *time.Time `json:"activity_at"`
+		} `json:"items"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &byActivity) != nil || len(byActivity.Items) != 2 ||
+		byActivity.Items[0].ID != "2" || byActivity.Items[0].ActiveJobID == "" || byActivity.Items[1].ActivityAt == nil ||
+		!byActivity.Items[0].ActivityAt.After(*byActivity.Items[1].ActivityAt) {
+		t.Fatalf("by activity = %d %s", rec.Code, rec.Body)
+	}
+	rec = requestJSON(t, h, http.MethodGet, "/api/v1/library/albums/2", "")
+	var withActivity struct {
+		ActivityAt *time.Time `json:"activity_at"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &withActivity) != nil || withActivity.ActivityAt == nil ||
+		!withActivity.ActivityAt.Equal(*byActivity.Items[0].ActivityAt) {
+		t.Fatalf("detail activity = %d %s", rec.Code, rec.Body)
+	}
+
 	for _, tc := range []struct {
 		method, path, body string
 		status             int
@@ -76,6 +100,7 @@ func TestLibraryRoutesServeRecords(t *testing.T) {
 		{http.MethodPost, "/api/v1/library/albums/9/reset", `{"what":"audio"}`, http.StatusNotFound, CodeResourceNotFound},
 		{http.MethodPost, "/api/v1/library/check", "", http.StatusServiceUnavailable, CodeDownloadsDirUnavailable},
 		{http.MethodGet, "/api/v1/library/albums?flag=bogus", "", http.StatusBadRequest, CodeInvalidRequest},
+		{http.MethodGet, "/api/v1/library/playlists?sort=recent", "", http.StatusBadRequest, CodeInvalidRequest},
 	} {
 		rec := requestJSON(t, h, tc.method, tc.path, tc.body)
 		assertErrorCode(t, rec, tc.status, tc.code)

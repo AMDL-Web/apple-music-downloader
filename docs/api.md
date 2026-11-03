@@ -336,7 +336,7 @@ marks it missing. Each download of a record is a run, which the API calls a job:
 
 | Route | What it does |
 | --- | --- |
-| `GET /library/albums`, `GET /library/playlists` | List records: `state` (`none`, `partial`, `complete`), `flag` (`failed`, `given_up`, `missing`, `waiting`, `paused`, `unresolved`), `source`, `q`, `sort` (`added`, `name`, `artist`, `release`), `limit` (max 500), `offset` |
+| `GET /library/albums`, `GET /library/playlists` | List records: `state` (`none`, `partial`, `complete`), `flag` (`failed`, `given_up`, `missing`, `waiting`, `paused`, `unresolved`), `source`, `q`, `sort` (`added`, `name`, `artist`, `release`, `activity`), `limit` (max 500), `offset` |
 | `GET /library/albums/{id}`, `GET /library/playlists/{id}` | One record with `sources`, `in_apple_library`, `last_checked_at` and `tracks`, each with its `files` |
 | `GET /library/summary` | Records per state and flag, pending adds, the last check |
 | `POST /library/add` | `POST /downloads` plus `codecs`, `now` and `include` |
@@ -359,7 +359,9 @@ A record's rollup is stored with it: `tracks_wanted` (wanted tracks its storefro
 lists), `tracks_done` (of those, the ones whose main slot is done), `tracks_failed`,
 `tracks_given_up`, `tracks_missing`, and `state`, `complete` when every wanted track is
 done. `withheld_count` counts tracks of the release its storefront does not list;
-they are not counted and not retried. A track's `files` are its slots: `main`, the first
+they are not counted and not retried. `activity_at` is when one of the record's runs
+last changed (its finish, else its last update), or `added_at` while it has none;
+`sort=activity` lists the newest first. A track's `files` are its slots: `main`, the first
 quality, owns the plain file name, and another quality is a codec slot whose file name
 carries a suffix such as ` [EC3 768Kbps]`. Each slot has `audio_state` (`pending`,
 `running`, `done`, `failed`, `given_up`, `unavailable`, `missing`), `lyrics_state`, what

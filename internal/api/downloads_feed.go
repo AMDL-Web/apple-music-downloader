@@ -247,19 +247,23 @@ func (s *Server) resourceMessage(ctx context.Context, job *domain.Job, eventID i
 	if err != nil {
 		return msg, false
 	}
+	activity, err := s.store.RecordActivity(ctx, job.ResourceKind, job.ResourceID)
+	if err != nil {
+		return msg, false
+	}
 	switch job.ResourceKind {
 	case domain.ResourceAlbum:
 		a, err := s.store.GetAlbum(ctx, job.ResourceID)
 		if err != nil {
 			return msg, false
 		}
-		msg.Resource = albumResource{Album: a, ActiveJobID: active}
+		msg.Resource = albumResource{Album: a, ActiveJobID: active, ActivityAt: activity}
 	case domain.ResourcePlaylist:
 		p, err := s.store.GetPlaylist(ctx, job.ResourceID)
 		if err != nil {
 			return msg, false
 		}
-		msg.Resource = playlistResource{Playlist: p, ActiveJobID: active}
+		msg.Resource = playlistResource{Playlist: p, ActiveJobID: active, ActivityAt: activity}
 	default:
 		return msg, false
 	}

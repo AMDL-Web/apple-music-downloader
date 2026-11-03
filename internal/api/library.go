@@ -25,13 +25,15 @@ const (
 // active run.
 type albumResource struct {
 	domain.Album
-	ActiveJobID string `json:"active_job_id,omitempty"`
+	ActiveJobID string    `json:"active_job_id,omitempty"`
+	ActivityAt  time.Time `json:"activity_at"`
 }
 
 // playlistResource is the PlaylistResource schema.
 type playlistResource struct {
 	domain.Playlist
-	ActiveJobID string `json:"active_job_id,omitempty"`
+	ActiveJobID string    `json:"active_job_id,omitempty"`
+	ActivityAt  time.Time `json:"activity_at"`
 }
 
 // fileSlot is the FileSlot schema: one quality of one track copy. Path is
@@ -147,9 +149,9 @@ func parseRecordFilter(q url.Values) (db.RecordFilter, error) {
 		f.Source = src
 	}
 	switch f.Sort {
-	case "", db.SortAdded, db.SortName, db.SortArtist, db.SortRelease:
+	case "", db.SortAdded, db.SortName, db.SortArtist, db.SortRelease, db.SortActivity:
 	default:
-		return f, fmt.Errorf("sort must be added, name, artist or release, not %q", f.Sort)
+		return f, fmt.Errorf("sort must be added, name, artist, release or activity, not %q", f.Sort)
 	}
 	return f, nil
 }
@@ -189,7 +191,7 @@ func (s *Server) listLibrary(kind domain.ResourceKind) http.HandlerFunc {
 			}
 			out := make([]albumResource, 0, len(list))
 			for _, it := range list {
-				out = append(out, albumResource{Album: it.Record, ActiveJobID: it.ActiveJobID})
+				out = append(out, albumResource{Album: it.Record, ActiveJobID: it.ActiveJobID, ActivityAt: it.ActivityAt})
 			}
 			items, total = out, n
 		} else {
@@ -200,7 +202,7 @@ func (s *Server) listLibrary(kind domain.ResourceKind) http.HandlerFunc {
 			}
 			out := make([]playlistResource, 0, len(list))
 			for _, it := range list {
-				out = append(out, playlistResource{Playlist: it.Record, ActiveJobID: it.ActiveJobID})
+				out = append(out, playlistResource{Playlist: it.Record, ActiveJobID: it.ActiveJobID, ActivityAt: it.ActivityAt})
 			}
 			items, total = out, n
 		}
@@ -260,6 +262,10 @@ func (s *Server) recordBody(r *http.Request, kind domain.ResourceKind, id string
 	if err != nil {
 		return nil, err
 	}
+	activity, err := s.store.RecordActivity(ctx, kind, id)
+	if err != nil {
+		return nil, err
+	}
 	detail.Tracks = []recordTrack{}
 	if kind == domain.ResourceAlbum {
 		album, err := s.store.GetAlbum(ctx, id)
@@ -280,7 +286,7 @@ func (s *Server) recordBody(r *http.Request, kind domain.ResourceKind, id string
 		return struct {
 			albumResource
 			recordDetail
-		}{albumResource{Album: album, ActiveJobID: active}, detail}, nil
+		}{albumResource{Album: album, ActiveJobID: active, ActivityAt: activity}, detail}, nil
 	}
 	playlist, err := s.store.GetPlaylist(ctx, id)
 	if err != nil {
@@ -300,7 +306,7 @@ func (s *Server) recordBody(r *http.Request, kind domain.ResourceKind, id string
 	return struct {
 		playlistResource
 		recordDetail
-	}{playlistResource{Playlist: playlist, ActiveJobID: active}, detail}, nil
+	}{playlistResource{Playlist: playlist, ActiveJobID: active, ActivityAt: activity}, detail}, nil
 }
 
 func orEmpty[T any](v []T) []T {

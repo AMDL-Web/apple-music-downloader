@@ -3,6 +3,10 @@ package demo
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"amdl/internal/client"
@@ -44,7 +48,27 @@ func (b *Backend) libraryRoutes(m *http.ServeMux) {
 // albumResource is an album record as GET /library/albums lists it.
 type albumResource struct {
 	domain.Album
-	ActiveJobID string `json:"active_job_id,omitempty"`
+	ActiveJobID string    `json:"active_job_id,omitempty"`
+	ActivityAt  time.Time `json:"activity_at"`
+}
+
+// activity is when a's newest run last changed, or zero without one. The
+// caller holds b.mu.
+func (b *Backend) activity(a *album) time.Time {
+	var at time.Time
+	for _, j := range b.jobs {
+		if j.album != a || j.Type != "album" {
+			continue
+		}
+		t := j.UpdatedAt
+		if j.FinishedAt != nil {
+			t = *j.FinishedAt
+		}
+		if t.After(at) {
+			at = t
+		}
+	}
+	return at
 }
 
 // albumRecord is a's record, false when amdl keeps none. The caller holds
@@ -62,6 +86,10 @@ func (b *Backend) albumRecord(a *album) (albumResource, bool) {
 		Priority: domain.PriorityManual, CoverState: domain.CoverDone, ArtistCoverState: domain.CoverDone, AddedAt: t, UpdatedAt: t,
 		Rollup: domain.Rollup{TracksWanted: m.TracksWanted, TracksDone: m.TracksDone, State: m.State},
 	}}
+	rec.ActivityAt = b.activity(a)
+	if rec.ActivityAt.IsZero() {
+		rec.ActivityAt = t
+	}
 	if j, held := b.priorJob(a.id); held && j.Status == domain.JobFailed {
 		for i, st := range states {
 			if st != domain.AudioDone && i < len(j.items) {
@@ -86,24 +114,42 @@ func (b *Backend) libraryAlbums(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	states, flags := splitList(q["state"]), splitList(q["flag"])
 	items := b.records(func(rec albumResource) bool {
-		if st := q["state"]; len(st) > 0 && string(rec.State) != st[0] {
+		if len(states) > 0 && !slices.Contains(states, string(rec.State)) {
 			return false
 		}
-		switch q.Get("flag") {
-		case "paused":
-			return rec.Paused
-		case "failed":
-			return rec.TracksFailed > 0
-		case "given_up", "missing", "waiting", "unresolved":
-			return false
+		if len(flags) == 0 {
+			return true
 		}
-		return true
+		return (slices.Contains(flags, "paused") && rec.Paused) || (slices.Contains(flags, "failed") && rec.TracksFailed > 0)
 	})
+	if q.Get("sort") == "activity" {
+		sort.SliceStable(items, func(x, y int) bool { return items[x].ActivityAt.After(items[y].ActivityAt) })
+	}
+	total := len(items)
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	items = items[min(max(offset, 0), total):]
+	if limit, _ := strconv.Atoi(q.Get("limit")); limit > 0 && limit < len(items) {
+		items = items[:limit]
+	}
 	if items == nil {
 		items = []albumResource{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+}
+
+// splitList reads a repeated, comma-separated query parameter.
+func splitList(values []string) []string {
+	var out []string
+	for _, v := range values {
+		for _, part := range strings.Split(v, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
 }
 
 func (b *Backend) librarySummary(w http.ResponseWriter, r *http.Request) {

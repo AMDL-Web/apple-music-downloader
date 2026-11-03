@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -39,6 +40,8 @@ const (
 	SortName    RecordSort = "name"
 	SortArtist  RecordSort = "artist"
 	SortRelease RecordSort = "release"
+	// SortActivity is the newest activity first (RecordListItem.ActivityAt).
+	SortActivity RecordSort = "activity"
 )
 
 // RecordFilter selects records of one kind. Empty fields select everything;
@@ -56,10 +59,33 @@ type RecordFilter struct {
 }
 
 // RecordListItem is a listed record with the id of its queued or running
-// run, empty when it has none.
+// run, empty when it has none, and its last activity.
 type RecordListItem[T any] struct {
 	Record      T
 	ActiveJobID string
+	// ActivityAt is when one of the record's runs last changed, or when the
+	// record was added while it has none.
+	ActivityAt time.Time
+}
+
+// activitySQL is a record r's ActivityAt, of kind.
+func activitySQL(kind domain.ResourceKind) string {
+	return `COALESCE((SELECT MAX(COALESCE(a.finished_at, a.updated_at)) FROM runs a WHERE a.resource_kind = '` + string(kind) +
+		`' AND a.resource_id = r.id), r.added_at)`
+}
+
+// RecordActivity is the ActivityAt of record kind id.
+func (s *Store) RecordActivity(ctx context.Context, kind domain.ResourceKind, id string) (time.Time, error) {
+	table, err := recordTable(kind)
+	if err != nil {
+		return time.Time{}, err
+	}
+	var at string
+	err = s.db.QueryRowContext(ctx, `SELECT `+activitySQL(kind)+` FROM `+table+` r WHERE r.id = ?`, id).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, ErrRecordNotFound
+	}
+	return parseTime(at), err
 }
 
 // ListAlbums returns the album records filter selects, with the total that
@@ -92,7 +118,8 @@ func listRecords[T any](ctx context.Context, q *sql.DB, kind domain.ResourceKind
 		return nil, 0, err
 	}
 	query := `SELECT ` + qualifyColumns("r.", columns) + `,
-		COALESCE((SELECT j.id FROM runs j WHERE j.resource_kind = '` + string(kind) + `' AND j.resource_id = r.id AND j.status IN ('queued','running') LIMIT 1), '')
+		COALESCE((SELECT j.id FROM runs j WHERE j.resource_kind = '` + string(kind) + `' AND j.resource_id = r.id AND j.status IN ('queued','running') LIMIT 1), ''),
+		` + activitySQL(kind) + ` AS activity_at
 		FROM ` + table + ` r` + where + ` ORDER BY ` + order
 	if f.Limit > 0 {
 		query += ` LIMIT ? OFFSET ?`
@@ -106,12 +133,14 @@ func listRecords[T any](ctx context.Context, q *sql.DB, kind domain.ResourceKind
 	out := []RecordListItem[T]{}
 	for rows.Next() {
 		var item RecordListItem[T]
+		var activity string
 		item.Record, err = scan(scannerFunc(func(dest ...any) error {
-			return rows.Scan(append(dest, &item.ActiveJobID)...)
+			return rows.Scan(append(dest, &item.ActiveJobID, &activity)...)
 		}))
 		if err != nil {
 			return nil, 0, err
 		}
+		item.ActivityAt = parseTime(activity)
 		out = append(out, item)
 	}
 	return out, total, rows.Err()
@@ -194,6 +223,8 @@ func recordOrder(kind domain.ResourceKind, sort RecordSort) (string, error) {
 			return `r.last_modified DESC, r.id`, nil
 		}
 		return `r.release_date DESC, r.id`, nil
+	case SortActivity:
+		return `activity_at DESC, r.id`, nil
 	}
 	return "", fmt.Errorf("unknown record sort %q", sort)
 }

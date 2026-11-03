@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -108,5 +109,55 @@ func TestCheckRunsRecordTheLastCheck(t *testing.T) {
 	must(t, store.DeleteRecord(ctx, domain.ResourceAlbum, "1", t1.Add(time.Minute)))
 	if last, found, err := store.LastCheckRun(ctx); err != nil || !found || last.ID != left.ID {
 		t.Errorf("last check after removing album 1 = %+v (%v, %v), want the library check", last, found, err)
+	}
+}
+
+// sort=activity puts the record whose run changed last first, a run that
+// ended without writing a file included, and a record without runs at its
+// add time.
+func TestRecordListByActivity(t *testing.T) {
+	store := openRecordStore(t)
+	ctx := context.Background()
+	t0 := mustTime(t, "2026-11-01T10:00:00Z")
+	for i, id := range []string{"1", "2", "3"} {
+		_, err := store.AddAlbum(ctx, AlbumAdd{ID: id, WantedAll: true, Source: domain.SourceManual, Now: t0.Add(time.Duration(i) * time.Minute)})
+		must(t, err)
+	}
+	// Album 1, added first, has a run that failed after the others were
+	// added; it wrote no file.
+	ended := t0.Add(time.Hour)
+	must(t, store.CreateJob(ctx, domain.Job{ID: "run-1", Input: "x", Type: "album", Status: domain.JobFailed, ResourceKind: domain.ResourceAlbum,
+		ResourceID: "1", CreatedAt: t0, UpdatedAt: ended.Add(time.Second), FinishedAt: &ended}))
+	list := func() []RecordListItem[domain.Album] {
+		l, _, err := store.ListAlbums(ctx, RecordFilter{Sort: SortActivity, Now: t0})
+		must(t, err)
+		return l
+	}
+	ids := func(l []RecordListItem[domain.Album]) []string {
+		var out []string
+		for _, it := range l {
+			out = append(out, it.Record.ID)
+		}
+		return out
+	}
+	l := list()
+	if got := ids(l); !slices.Equal(got, []string{"1", "3", "2"}) {
+		t.Fatalf("by activity = %v, want 1 3 2", got)
+	}
+	if !l[0].ActivityAt.Equal(ended) || !l[1].ActivityAt.Equal(t0.Add(2*time.Minute)) {
+		t.Errorf("activity = %v, %v", l[0].ActivityAt, l[1].ActivityAt)
+	}
+	// A run queued for album 2 moves it first.
+	queued := ended.Add(time.Minute)
+	must(t, store.CreateJob(ctx, domain.Job{ID: "run-2", Input: "x", Type: "album", Status: domain.JobQueued, ResourceKind: domain.ResourceAlbum,
+		ResourceID: "2", CreatedAt: queued, UpdatedAt: queued}))
+	if got := ids(list()); !slices.Equal(got, []string{"2", "1", "3"}) {
+		t.Errorf("after a run of 2 = %v, want 2 1 3", got)
+	}
+	if at, err := store.RecordActivity(ctx, domain.ResourceAlbum, "2"); err != nil || !at.Equal(queued) {
+		t.Errorf("activity of 2 = %v %v", at, err)
+	}
+	if _, err := store.RecordActivity(ctx, domain.ResourceAlbum, "9"); err != ErrRecordNotFound {
+		t.Errorf("activity of no record: %v", err)
 	}
 }

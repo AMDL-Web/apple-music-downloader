@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"amdl/internal/domain"
 )
@@ -14,6 +15,8 @@ import (
 type AlbumRecord struct {
 	domain.Album
 	ActiveJobID string `json:"active_job_id,omitempty"`
+	// ActivityAt is when one of its runs last changed, or when it was added.
+	ActivityAt time.Time `json:"activity_at"`
 }
 
 // AlbumRecords is a page of album records.
@@ -85,7 +88,8 @@ func (c *Client) ResetRecord(ctx context.Context, kind domain.ResourceKind, id s
 // PlaylistRecord is one row of GET /api/v1/library/playlists.
 type PlaylistRecord struct {
 	domain.Playlist
-	ActiveJobID string `json:"active_job_id,omitempty"`
+	ActiveJobID string    `json:"active_job_id,omitempty"`
+	ActivityAt  time.Time `json:"activity_at"`
 }
 
 // PlaylistRecords is a page of playlist records.

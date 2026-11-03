@@ -2643,11 +2643,12 @@ components:
       name: sort
       in: query
       description: >-
-        added (newest first, the default), name, artist, or release (newest
-        first; a playlist's last modification).
+        added (newest first, the default), name, artist, release (newest
+        first; a playlist's last modification), or activity (activity_at,
+        newest first).
       schema:
         type: string
-        enum: [added, name, artist, release]
+        enum: [added, name, artist, release, activity]
         default: added
     RecordLimit:
       name: limit
@@ -5032,7 +5033,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/RecordRollup'
         - type: object
-          required: [id, name, artist_name, artwork, release_track_count, withheld_count, catalog_state, wanted_all, paused, priority, cover_state, artist_cover_state, added_at, updated_at]
+          required: [id, name, artist_name, artwork, release_track_count, withheld_count, catalog_state, wanted_all, paused, priority, cover_state, artist_cover_state, added_at, updated_at, activity_at]
           properties:
             id: {type: string}
             name: {type: string, description: Empty until the first read.}
@@ -5088,12 +5089,19 @@ components:
             active_job_id:
               type: string
               description: The record's queued or running run; absent without one.
+            activity_at:
+              type: string
+              format: date-time
+              description: >-
+                When one of the record's runs last changed (its finish, else
+                its last update), or added_at while it has none; sort=activity
+                orders by it.
     PlaylistResource:
       description: A catalog playlist record (pl. id).
       allOf:
         - $ref: '#/components/schemas/RecordRollup'
         - type: object
-          required: [id, name, artwork, catalog_state, paused, priority, cover_state, added_at, updated_at]
+          required: [id, name, artwork, catalog_state, paused, priority, cover_state, added_at, updated_at, activity_at]
           properties:
             id: {type: string}
             name: {type: string}
@@ -5121,6 +5129,10 @@ components:
             completed_at: {type: string, format: date-time}
             updated_at: {type: string, format: date-time}
             active_job_id: {type: string}
+            activity_at:
+              type: string
+              format: date-time
+              description: As the album record's.
     FileSlot:
       type: object
       required: [slot, audio_state, failures]
