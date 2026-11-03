@@ -271,6 +271,11 @@ func (b *Backend) removeRecord(w http.ResponseWriter, r *http.Request, a *album,
 	}
 	b.removed[a.id] = true
 	delete(b.paused, a.id)
+	for _, j := range slices.Clone(b.jobs) {
+		if j.album.id == a.id {
+			b.drop(j)
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -344,7 +344,7 @@ marks it missing. Each download of a record is a run, which the API calls a job:
 | `POST /library/{kind}/{id}/reset` | Download files, lyrics or covers again |
 | `POST /library/reset` | Reset every record a filter selects |
 | `POST /library/{kind}/{id}/pause`, `/resume` | Stop and continue a record |
-| `DELETE /library/{kind}/{id}` | Remove a record; its files and runs stay |
+| `DELETE /library/{kind}/{id}` | Remove a record and its runs; its files stay |
 | `GET /library/pending`, `DELETE /library/pending/{id}`, `POST /library/pending/{id}/retry` | Adds waiting for a catalog read |
 | `POST /library/check`, `GET /library/check` | Check the stored files on disk |
 

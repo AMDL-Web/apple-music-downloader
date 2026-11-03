@@ -178,7 +178,7 @@ func (c *Client) recordMark(ctx context.Context, kind domain.ResourceKind, id, a
 	return m, err
 }
 
-// DeleteRecord removes a record; its files and runs stay. A record with a
+// DeleteRecord removes a record and its runs; its files stay. A record with a
 // queued or running run answers run_active.
 func (c *Client) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id string) error {
 	return c.do(ctx, http.MethodDelete, recordPath(kind, id), nil, nil, nil, http.StatusNoContent)

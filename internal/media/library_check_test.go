@@ -87,9 +87,9 @@ func TestDiskCheckMarksMissingAndResetDownloadsThem(t *testing.T) {
 	}
 }
 
-// Removing a record from amdl keeps its runs, leaves a tombstone, and drops
+// Removing a record from amdl drops its runs, leaves a tombstone, and drops
 // its resume checkpoints; one with an active run is refused.
-func TestDeleteRecordKeepsRunsAndDropsCheckpoints(t *testing.T) {
+func TestDeleteRecordDropsRunsAndCheckpoints(t *testing.T) {
 	cfg := recordTestConfig(t)
 	catalog := newRecordCatalog()
 	catalog.addAlbum("100", "Back in Black", "AC/DC", 1, 1, 1000, "")
@@ -114,8 +114,8 @@ func TestDeleteRecordKeepsRunsAndDropsCheckpoints(t *testing.T) {
 	if _, err := h.store.GetAlbum(ctx, "100"); err != db.ErrRecordNotFound {
 		t.Errorf("the record stays: %v", err)
 	}
-	if runs := h.runsOf(domain.ResourceAlbum, "100"); len(runs) != 1 {
-		t.Errorf("runs after the delete = %d, want the one kept", len(runs))
+	if runs := h.runsOf(domain.ResourceAlbum, "100"); len(runs) != 0 {
+		t.Errorf("runs after the delete = %d, want none", len(runs))
 	}
 	if gone, err := h.store.Tombstoned(ctx, domain.ResourceAlbum, []string{"100"}); err != nil || !gone["100"] {
 		t.Errorf("tombstone = %v, %v", gone, err)

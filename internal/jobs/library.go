@@ -18,19 +18,41 @@ type RecordCleaner interface {
 	CleanupRecordArtifacts(kind domain.ResourceKind, id string)
 }
 
-// DeleteRecord removes a record from amdl (design §3.10): its tracks, slots
-// and resume checkpoints go, a tombstone stays, and its files and runs are
-// kept. A record with a queued or running run is refused with
-// db.ErrRunActive.
+// DeleteRecord removes a record from amdl: its tracks, slots, runs and
+// resume checkpoints go, a tombstone stays, and its files are kept. Each
+// deleted run is published as job_deleted, as Delete does. A record with a
+// queued, running or finalizing run, or one whose hooks still run, is
+// refused with db.ErrRunActive.
 func (m *Manager) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := m.store.DeleteRecord(ctx, kind, id, time.Now().UTC()); err != nil {
+	runs, err := m.store.RecordRuns(ctx, kind, id)
+	if err != nil {
+		m.mu.Unlock()
+		return err
+	}
+	for _, run := range runs {
+		if m.cancels[run.ID] != nil || m.finalizing[run.ID] || m.hooks.Pending(run.ID) {
+			m.mu.Unlock()
+			return db.ErrRunActive
+		}
+	}
+	tombstones, err := m.store.DeleteRecord(ctx, kind, id, time.Now().UTC())
+	if err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	delete(m.backoff, recordKey{kind, id})
 	if cleaner, ok := m.processor.(RecordCleaner); ok {
 		cleaner.CleanupRecordArtifacts(kind, id)
+	}
+	m.mu.Unlock()
+	if cleaner, ok := m.processor.(ArtifactCleaner); ok {
+		for _, run := range runs {
+			cleaner.CleanupJobArtifacts(run)
+		}
+	}
+	for _, ev := range tombstones {
+		m.hub.Publish(ev)
 	}
 	return nil
 }

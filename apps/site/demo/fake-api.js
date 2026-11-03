@@ -702,6 +702,12 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     if (!action && method === 'DELETE') {
       if (run) return apiError(409, 'run_active', 'the record has a queued or running run; pause it first');
       records.drop(rec);
+      for (const [jid, job] of [...jobs]) {
+        if (!job.resource || job.resource.kind !== rec.kind || job.resource.id !== rec.id) continue;
+        jobs.delete(jid);
+        items.delete(jid);
+        addEvent({ job_id: jid, type: 'job_deleted', message: 'job deleted' });
+      }
       return new Response(null, { status: 204 });
     }
     if (action === 'pause' && method === 'POST') {

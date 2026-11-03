@@ -657,8 +657,8 @@ func (s *Server) setPaused(w http.ResponseWriter, r *http.Request, paused bool) 
 	writeJSON(w, http.StatusOK, body)
 }
 
-// deleteRecord answers DELETE /library/{kind}/{id}: the record goes, its
-// files and runs stay.
+// deleteRecord answers DELETE /library/{kind}/{id}: the record and its runs
+// go, its files stay.
 func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 	kind, id, ok := recordRef(w, r)
 	if !ok {

@@ -122,3 +122,43 @@ func TestLibraryRoutesServeRecords(t *testing.T) {
 		t.Fatalf("check before any = %d %q", rec.Code, rec.Body)
 	}
 }
+
+// Removing a record removes its runs, each with a job_deleted tombstone the
+// feeds pass on, and leaves other records' runs alone.
+func TestDeletingARecordDeletesItsRuns(t *testing.T) {
+	server := newTestServerWithManager(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, id := range []string{"7", "8"} {
+		if _, err := server.store.AddAlbum(ctx, db.AlbumAdd{ID: id, WantedAll: true, Source: domain.SourceManual, Now: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runs := []domain.Job{
+		{ID: "run_done", Input: "album|jp|7", Type: "album", CanonicalKey: "album:7:a", Status: domain.JobCompleted, ResourceKind: domain.ResourceAlbum, ResourceID: "7"},
+		{ID: "run_failed", Input: "album|jp|7", Type: "album", CanonicalKey: "album:7:b", Status: domain.JobFailed, ResourceKind: domain.ResourceAlbum, ResourceID: "7"},
+		{ID: "run_other", Input: "album|jp|8", Type: "album", CanonicalKey: "album:8", Status: domain.JobCompleted, ResourceKind: domain.ResourceAlbum, ResourceID: "8"},
+	}
+	for _, run := range runs {
+		if err := server.store.CreateJob(ctx, run); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rec := requestJSON(t, server.Routes(), http.MethodDelete, "/api/v1/library/albums/7", "")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d %s", rec.Code, rec.Body)
+	}
+	for _, id := range []string{"run_done", "run_failed"} {
+		if _, err := server.store.GetJob(ctx, id); err == nil {
+			t.Errorf("%s outlived its record", id)
+		}
+		events, err := server.store.ListEventsAfterLimit(ctx, id, 0, 0)
+		if err != nil || len(events) != 1 || events[0].Type != domain.EventJobDeleted {
+			t.Errorf("events of %s = %v (%v), want one delete tombstone", id, events, err)
+		}
+	}
+	if _, err := server.store.GetJob(ctx, "run_other"); err != nil {
+		t.Errorf("another record's run went too: %v", err)
+	}
+}

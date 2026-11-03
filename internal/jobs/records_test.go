@@ -683,7 +683,7 @@ func TestAddAlbumsSkipsRemovedRecords(t *testing.T) {
 	if _, err := store.AddAlbum(ctx, db.AlbumAdd{ID: "100", WantedAll: true, Source: domain.SourceManual, Now: now}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DeleteRecord(ctx, domain.ResourceAlbum, "100", now); err != nil {
+	if _, err := store.DeleteRecord(ctx, domain.ResourceAlbum, "100", now); err != nil {
 		t.Fatal(err)
 	}
 

@@ -350,6 +350,13 @@ func (b *Backend) remove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "job_active", "the job is still queued or running; cancel it first")
 		return
 	}
+	b.drop(j)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// drop deletes a terminal job and tells the overview feeds. The caller
+// holds b.mu.
+func (b *Backend) drop(j *job) {
 	b.jobs = slices.DeleteFunc(b.jobs, func(x *job) bool { return x == j })
 	b.seq++
 	msg := domain.DownloadFeedMessage{Type: "download_deleted", JobID: j.ID, EventID: b.seq, StatusCounts: b.counts()}
@@ -359,7 +366,6 @@ func (b *Backend) remove(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // resolve finds what a link names in the catalog: an album, or a song of

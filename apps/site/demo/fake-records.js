@@ -224,7 +224,7 @@ export function createRecordStore({ jobs, items, now }) {
     return { playlist_id: id, items: tracks.map((s, i) => ({ position: i, song_id: `i.${s.id}`, catalog_id: s.id, url: s.url, name: s.name, artist_name: s.artist_name, album_name: s.album_name, duration_ms: s.duration_ms })), total: tracks.length, read_at: iso(now - 39 * 60000) };
   }
 
-  /** Removes a record; its runs stay. */
+  /** Removes a record; fake-api.js drops its runs. */
   // A removed record takes its check along: the demo keeps no earlier one.
   const drop = (r) => {
     if (check && check.scope === keyOf(r)) check = null;

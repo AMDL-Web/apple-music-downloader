@@ -203,21 +203,33 @@ func TestAlbumRecordLifecycleKeepsRollupInStep(t *testing.T) {
 	if _, err := store.ResetFiles(ctx, FileReset{Kind: domain.ResourceAlbum, ID: "1", Now: now}); !errors.Is(err, ErrRunActive) {
 		t.Fatalf("reset with an active run: err = %v", err)
 	}
-	if err := store.DeleteRecord(ctx, domain.ResourceAlbum, "1", now); !errors.Is(err, ErrRunActive) {
+	if _, err := store.DeleteRecord(ctx, domain.ResourceAlbum, "1", now); !errors.Is(err, ErrRunActive) {
 		t.Fatalf("delete with an active run: err = %v", err)
 	}
 	must(t, store.UpdateJobStatus(ctx, "run-5", domain.JobCompleted, now))
 
-	// Delete leaves a tombstone that only a manual add clears; the runs stay.
-	step("delete", store.DeleteRecord(ctx, domain.ResourceAlbum, "1", now))
+	// Delete takes the record's runs with it and leaves a tombstone that
+	// only a manual add clears.
+	runs, err := store.RecordRuns(ctx, domain.ResourceAlbum, "1")
+	step("runs", err)
+	gone, err := store.DeleteRecord(ctx, domain.ResourceAlbum, "1", now)
+	step("delete", err)
+	if len(gone) != len(runs) || len(runs) == 0 {
+		t.Fatalf("delete published %d tombstones for %d runs", len(gone), len(runs))
+	}
+	for i, ev := range gone {
+		if ev.Type != domain.EventJobDeleted || ev.JobID != runs[i].ID {
+			t.Fatalf("tombstone %d = %+v, want job_deleted of %s", i, ev, runs[i].ID)
+		}
+	}
 	if _, err := store.GetAlbum(ctx, "1"); !errors.Is(err, ErrRecordNotFound) {
 		t.Fatalf("deleted album: err = %v", err)
 	}
 	if files, _ := store.ListFiles(ctx, domain.ResourceAlbum, "1"); len(files) != 0 {
 		t.Fatalf("files of a deleted album = %v", files)
 	}
-	if _, err := store.GetJob(ctx, "run-5"); err != nil {
-		t.Fatalf("run of a deleted album: %v", err)
+	if _, err := store.GetJob(ctx, "run-5"); err == nil {
+		t.Fatal("a run of the deleted album is still there")
 	}
 	if dead, _ := store.Tombstoned(ctx, domain.ResourceAlbum, []string{"1", "2"}); !dead["1"] || dead["2"] {
 		t.Fatalf("tombstones = %v", dead)

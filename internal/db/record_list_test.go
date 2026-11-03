@@ -106,7 +106,8 @@ func TestCheckRunsRecordTheLastCheck(t *testing.T) {
 	if reason != domain.CheckAbortedInterrupted {
 		t.Errorf("the check left open ended %q", reason)
 	}
-	must(t, store.DeleteRecord(ctx, domain.ResourceAlbum, "1", t1.Add(time.Minute)))
+	_, err = store.DeleteRecord(ctx, domain.ResourceAlbum, "1", t1.Add(time.Minute))
+	must(t, err)
 	if last, found, err := store.LastCheckRun(ctx); err != nil || !found || last.ID != left.ID {
 		t.Errorf("last check after removing album 1 = %+v (%v, %v), want the library check", last, found, err)
 	}

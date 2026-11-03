@@ -1946,8 +1946,9 @@ paths:
       tags: [Library]
       summary: Remove a record from amdl
       description: |
-        Deletes the record with its tracks, slots and resume checkpoints. The
-        files on disk and the record's runs stay. The library monitor does not
+        Deletes the record with its tracks, slots, resume checkpoints and runs;
+        each run's deletion reaches the feeds as job_deleted. The files on disk
+        stay. The library monitor does not
         add it back; adding it by hand does, and its first run takes a file
         still at a track's path as that track's download instead of
         downloading it again.

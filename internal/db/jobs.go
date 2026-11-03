@@ -385,16 +385,7 @@ func (s *Store) DeleteJob(ctx context.Context, id string) (domain.Event, error) 
 	if !domain.JobStatus(status).IsTerminal() {
 		return domain.Event{}, ErrJobNotTerminal
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM run_events WHERE job_id=?`, id); err != nil {
-		return domain.Event{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM run_items WHERE job_id=?`, id); err != nil {
-		return domain.Event{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM runs WHERE id=?`, id); err != nil {
-		return domain.Event{}, err
-	}
-	tombstone, err := addEvent(ctx, tx, domain.Event{JobID: id, Type: domain.EventJobDeleted})
+	tombstone, err := deleteRun(ctx, tx, id)
 	if err != nil {
 		return domain.Event{}, err
 	}
@@ -402,6 +393,17 @@ func (s *Store) DeleteJob(ctx context.Context, id string) (domain.Event, error) 
 		return domain.Event{}, err
 	}
 	return tombstone, nil
+}
+
+// deleteRun removes a run with its items and events and records its
+// job_deleted tombstone.
+func deleteRun(ctx context.Context, tx *sql.Tx, id string) (domain.Event, error) {
+	for _, stmt := range []string{`DELETE FROM run_events WHERE job_id=?`, `DELETE FROM run_items WHERE job_id=?`, `DELETE FROM runs WHERE id=?`} {
+		if _, err := tx.ExecContext(ctx, stmt, id); err != nil {
+			return domain.Event{}, err
+		}
+	}
+	return addEvent(ctx, tx, domain.Event{JobID: id, Type: domain.EventJobDeleted})
 }
 
 // ListRecoverableJobs returns the work a previous process left unfinished:

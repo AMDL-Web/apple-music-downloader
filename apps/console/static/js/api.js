@@ -198,7 +198,7 @@ export const downloadRecord = (kind, id, body = {}) => request('POST', `/api/v1/
 export const resetRecord = (kind, id, body) => request('POST', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}/reset`, undefined, { body });
 export const pauseRecord = (kind, id) => request('POST', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}/pause`);
 export const resumeRecord = (kind, id) => request('POST', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}/resume`);
-/** Removes a record; its files and runs stay. 409 run_active. */
+/** Removes a record and its runs; its files stay. 409 run_active. */
 export const deleteRecord = (kind, id) => request('DELETE', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}`);
 /** Resets every record a filter selects: body {what, filter, kind?, states?}; {reset, skipped_active}. */
 export const resetRecords = (body) => request('POST', '/api/v1/library/reset', undefined, { body });

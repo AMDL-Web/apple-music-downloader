@@ -371,24 +371,37 @@ func (s *Store) SetPaused(ctx context.Context, kind domain.ResourceKind, id stri
 	return requireRow(res, err)
 }
 
-// DeleteRecord removes a record with its tracks, files rows and sources and
-// leaves a tombstone, in one transaction. Runs and files on disk stay. A
-// record with a queued or running run is refused with ErrRunActive.
-func (s *Store) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id string, now time.Time) error {
-	_, err := withTx(ctx, s.db, func(tx *sql.Tx) (struct{}, error) {
+// DeleteRecord removes a record with its tracks, files rows, sources and
+// runs and leaves a tombstone, in one transaction; files on disk stay. It
+// returns a job_deleted tombstone event per run. A record with a queued or
+// running run is refused with ErrRunActive.
+func (s *Store) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id string, now time.Time) ([]domain.Event, error) {
+	return withTx(ctx, s.db, func(tx *sql.Tx) ([]domain.Event, error) {
 		table, err := recordTable(kind)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 		var name string
 		if err := tx.QueryRowContext(ctx, `SELECT name FROM `+table+` WHERE id = ?`, id).Scan(&name); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return struct{}{}, ErrRecordNotFound
+				return nil, ErrRecordNotFound
 			}
-			return struct{}{}, err
+			return nil, err
 		}
 		if err := refuseActiveRun(ctx, tx, kind, id); err != nil {
-			return struct{}{}, err
+			return nil, err
+		}
+		runIDs, err := recordRunIDs(ctx, tx, kind, id)
+		if err != nil {
+			return nil, err
+		}
+		tombstones := make([]domain.Event, 0, len(runIDs))
+		for _, runID := range runIDs {
+			ev, err := deleteRun(ctx, tx, runID)
+			if err != nil {
+				return nil, err
+			}
+			tombstones = append(tombstones, ev)
 		}
 		trackTable, ownerColumn := "tracks", "album_id"
 		if kind == domain.ResourcePlaylist {
@@ -401,15 +414,49 @@ func (s *Store) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id s
 			`DELETE FROM ` + table + ` WHERE id = ?`,
 		} {
 			if _, err := tx.ExecContext(ctx, stmt, id); err != nil {
-				return struct{}{}, fmt.Errorf("delete %s %s: %w", kind, id, err)
+				return nil, fmt.Errorf("delete %s %s: %w", kind, id, err)
 			}
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO deleted_resources(resource_kind, resource_id, name, deleted_at) VALUES(?, ?, ?, ?)
 			ON CONFLICT(resource_kind, resource_id) DO UPDATE SET name = excluded.name, deleted_at = excluded.deleted_at`,
 			string(kind), id, name, formatTime(now))
-		return struct{}{}, err
+		return tombstones, err
 	})
-	return err
+}
+
+func recordRunIDs(ctx context.Context, tx *sql.Tx, kind domain.ResourceKind, id string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM runs WHERE resource_kind = ? AND resource_id = ?`, string(kind), id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var runID string
+		if err := rows.Scan(&runID); err != nil {
+			return nil, err
+		}
+		ids = append(ids, runID)
+	}
+	return ids, rows.Err()
+}
+
+// RecordRuns returns every run of a record.
+func (s *Store) RecordRuns(ctx context.Context, kind domain.ResourceKind, id string) ([]domain.Job, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM runs j WHERE j.resource_kind = ? AND j.resource_id = ?`, string(kind), id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Job
+	for rows.Next() {
+		job, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, job)
+	}
+	return out, rows.Err()
 }
 
 func refuseActiveRun(ctx context.Context, q rowQueryer, kind domain.ResourceKind, id string) error {

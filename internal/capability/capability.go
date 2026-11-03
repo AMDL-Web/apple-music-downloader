@@ -138,7 +138,7 @@ var All = []Capability{
 		Summary:     "Resume a paused record",
 		ToolSummary: "Resume a paused record (kind albums or playlists, id): the scheduler then queues a new run when it needs one, so find its job_id in the answer's active_job_id or with list_jobs (q = the id); answers the record"},
 	{Command: "library delete", Tool: "delete_resource", Ops: []string{"deleteLibraryRecord"}, Safety: Destructive, Args: []string{"kind", "id"},
-		Summary: "Remove a record from amdl; its files and runs stay, and the library monitor does not add it back"},
+		Summary: "Remove a record and its runs from amdl; its files stay, and the library monitor does not add it back"},
 	{Command: "library check", Tool: "check_library", Ops: []string{"startLibraryCheck"}, Safety: Write,
 		Summary:     "Check that the stored files of the library, or of one record, are still on disk and mark the missing ones; it runs in the background, and --wait follows it to the end",
 		ToolSummary: "Start a disk check of the library, or of one record (kind albums or playlists, id): it marks the done files it does not find missing and marks nothing when more than half are gone unless force; answers {check}; read the result with get_library_check, then reset_resource with states [missing] to download them again",
