@@ -1,0 +1,84 @@
+name: Boot the wrapper guest
+description: >-
+  Boots a wrapper-manager guest in QEMU the way amdl does (TestGuestBoot in
+  internal/wrapperhost) and fails unless the manager answers /status with its
+  pinned payload downloaded. Used by ci.yml, guestboot.yml, wrapper-pin.yml and
+  the wrapper repository's manager.yml, which checks amdl out with `checkout`.
+
+inputs:
+  pin-file:
+    description: A pin as JSON (the wrapper-pins file) to boot; empty boots the pin built into the source.
+    default: ''
+  guest-dir:
+    description: A directory with the guest's kernel, initramfs and data.img to boot instead of the pin's guest; its payload is still the pin's.
+    default: ''
+  checkout:
+    description: A ref of amdl to check out into amdl-src, for callers outside amdl; empty uses the workspace. Paths in the other inputs must then be absolute.
+    default: ''
+  fresh:
+    description: >-
+      'true' downloads the guest again instead of using the cached one, so a
+      pinned artifact that has vanished from nightly.link or GitHub fails the run.
+      Scheduled and pin-refresh runs set it; runs on a change reuse the cache.
+    default: 'false'
+  timeout:
+    description: How long the guest may take to answer, as Go writes durations; empty is 4m with KVM and 15m without.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Check out amdl
+      if: inputs.checkout != ''
+      uses: actions/checkout@v7
+      with:
+        repository: AMDL-Web/apple-music-downloader
+        ref: ${{ inputs.checkout }}
+        path: amdl-src
+        fetch-depth: 1
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: ${{ inputs.checkout != '' && 'amdl-src/go.mod' || 'go.mod' }}
+        cache: false
+
+    - name: Install QEMU
+      shell: bash
+      run: |
+        set -eu
+        sudo apt-get -o Acquire::Retries=3 update -qq
+        sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends qemu-system-x86
+
+    # GitHub's Linux runners expose /dev/kvm to root only until a udev rule
+    # opens it; without it the guest runs on TCG, which takes minutes longer.
+    - name: Allow KVM
+      shell: bash
+      run: |
+        set -u
+        if [ -e /dev/kvm ]; then
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo chmod 666 /dev/kvm || true
+          echo "KVM is available: $(ls -l /dev/kvm)"
+        else
+          echo "::warning::/dev/kvm is missing on this runner; the guest boots on TCG, with a longer timeout"
+        fi
+
+    - name: Restore the downloaded guest
+      if: inputs.fresh != 'true'
+      uses: actions/cache@v5
+      with:
+        path: ${{ runner.temp }}/guestboot-cache
+        key: guestboot-guest-${{ hashFiles('**/internal/wrapperhost/pin.go') }}
+        restore-keys: guestboot-guest-
+
+    - name: Boot the guest
+      shell: bash
+      working-directory: ${{ inputs.checkout != '' && 'amdl-src' || '.' }}
+      env:
+        GUESTBOOT_PIN_FILE: ${{ inputs.pin-file }}
+        GUESTBOOT_GUEST_DIR: ${{ inputs.guest-dir }}
+        GUESTBOOT_CACHE_DIR: ${{ runner.temp }}/guestboot-cache
+        GUESTBOOT_TIMEOUT: ${{ inputs.timeout }}
+      run: go test -tags guestboot -run '^TestGuestBoot$' -count=1 -timeout 30m -v ./internal/wrapperhost/

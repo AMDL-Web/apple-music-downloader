@@ -22,6 +22,44 @@ permissions:
   contents: read
 
 jobs:
+  # Names the jobs a change needs, from the paths it touched
+  # (.github/scripts/changed-paths.mjs). The comparison covers the whole push
+  # or pull request; when GitHub cannot make it, every optional job runs.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      guestboot: ${{ steps.paths.outputs.guestboot }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Classify the changed paths
+        id: paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          set -u
+          # Both listings page through every file but stop at 3000; a list that
+          # long may be cut short, so it counts as unknown like a failed read.
+          limit=3000
+          files=
+          if [ -n "$PR" ]; then
+            files=$(timeout 120 gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" --jq '.[] | .filename, (.previous_filename // empty)' 2>/dev/null) || files=
+          elif [ -n "$BASE" ] && [ "${BASE#0000000}" = "$BASE" ]; then
+            files=$(timeout 120 gh api --paginate "repos/$REPO/compare/$BASE...$HEAD?per_page=100" --jq '.files[] | .filename, (.previous_filename // empty)' 2>/dev/null) || files=
+          fi
+          if [ -n "$files" ] && [ "$(printf '%s\n' "$files" | wc -l)" -ge "$limit" ]; then files=; fi
+          [ -n "$files" ] || echo "the changed paths are unknown; every optional job runs"
+          printf '%s\n' "$files" | node .github/scripts/changed-paths.mjs
+
   unit:
     name: Unit tests and checks
     runs-on: ubuntu-latest
@@ -112,15 +150,40 @@ jobs:
       - name: Race detector
         run: make ${{ matrix.target }}
 
+  # Boots the pinned manager guest in QEMU the way the desktop app does and
+  # waits for its manager (internal/wrapperhost, TestGuestBoot). It runs when a
+  # change touches the code behind it (changes job); guestboot.yml runs it
+  # weekly for the days nothing changes but the artifacts expire or upstream
+  # moves.
+  guestboot:
+    name: Guest boot
+    needs: changes
+    if: needs.changes.outputs.guestboot == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Boot the guest
+        uses: ./.github/actions/guestboot
+
   # Branch protection on main requires a check named "Build and test". This job
-  # carries that name and fails unless the unit job and every race shard
-  # succeeded, so the required check covers every `make check` step, the race
-  # detector included, without a settings change. `if: always()` makes it run
-  # when a needed job failed or was cancelled: a job skipped because a
-  # dependency failed reports as passing to branch protection.
+  # carries that name and fails unless every needed job succeeded, so the
+  # required check covers every `make check` step, the race detector included,
+  # without a settings change. `if: always()` makes it run when a needed job
+  # failed or was cancelled: a job skipped because a dependency failed reports
+  # as passing to branch protection.
+  #
+  # Two lists soften that. OPTIONAL jobs may be skipped, because their paths
+  # did not change. ADVISORY jobs may also fail: a gate that is new, and red on
+  # a defect the code under test still has, stays visible without blocking
+  # merges until the defect is fixed. Empty ADVISORY once guestboot is green.
   build-and-test:
     name: Build and test
-    needs: [unit, race, upgrade]
+    needs: [changes, unit, race, upgrade, guestboot]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -128,9 +191,15 @@ jobs:
       - name: Require every needed job to succeed
         env:
           NEEDS: ${{ toJSON(needs) }}
+          OPTIONAL: guestboot
+          ADVISORY: guestboot
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null
+          echo "$NEEDS" | jq -e --arg optional "$OPTIONAL" --arg advisory "$ADVISORY" '
+            ($optional | split(" ")) as $o | ($advisory | split(" ")) as $a
+            | to_entries | all(.[]; .value.result == "success"
+                or (.key as $k | $o | index($k)) != null and .value.result == "skipped"
+                or (.key as $k | $a | index($k)) != null)' > /dev/null
 
   # make temaridiff checks internal/fairplay byte for byte against the upstream
   # Temari library it was translated from, and checks that rounds_gen.go is the
