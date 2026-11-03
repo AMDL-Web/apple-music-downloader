@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Starts a release candidate on the files the previous release wrote, as an
-# upgrade does: a server install (serve, simulate mode) and the embedded
-# backend the desktop app and --server embedded run. The amdl-release skill
-# runs it before the release PR.
+# upgrade does: a server install (serve, simulate mode), the embedded backend
+# the desktop app and --server embedded run, and a desktop install whose local
+# wrapper is still the retired bare-lite guest (installed.json without a kind,
+# plus an account disk; legacy-guest.sh). The amdl-release skill runs it before
+# the release PR; ci.yml runs it on every push and pull request.
 #
 # Usage: tools/upgradecheck/run.sh <previous-version> <candidate-amdl>
 # Needs gh, curl and a Linux or macOS host; downloads the previous release.
@@ -14,7 +16,9 @@ os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m); case $arch in x86_64) arch=amd64;; aarch64) arch=arm64;; esac
 d=$(mktemp -d)
 echo "work dir $d"
-gh release download "$prev" -R AMDL-Web/apple-music-downloader -p "amdl_${prev}_${os}_${arch}.tar.gz" -D "$d"
+# bounded <seconds> <command...>: perl's alarm works the same on Linux and macOS.
+bounded() { local s=$1; shift; perl -e 'alarm shift; exec @ARGV' "$s" "$@"; }
+bounded 180 gh release download "$prev" -R AMDL-Web/apple-music-downloader -p "amdl_${prev}_${os}_${arch}.tar.gz" -D "$d"
 mkdir -p "$d/old" && tar -xzf "$d"/amdl_*.tar.gz -C "$d/old"
 old=$(find "$d/old" -type f -name amdl | head -1)
 
@@ -59,4 +63,7 @@ if out=$("$new" --server embedded system get 2>&1); then
 else
 	echo "FAIL: embedded backend:"; echo "$out" | tail -5; fail=1
 fi
+
+# A desktop install with the retired bare-lite wrapper guest (legacy-guest.sh).
+bash "$(dirname "$0")/legacy-guest.sh" "$new" "$d" || fail=1
 exit $fail
