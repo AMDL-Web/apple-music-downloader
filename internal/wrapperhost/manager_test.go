@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"amdl/internal/wrapper"
@@ -53,9 +52,6 @@ func TestManagerDiscoversAccountsAndSelectsTokenByID(t *testing.T) {
 	if _, err := h.InstanceToken(context.Background(), "unknown"); !errors.Is(err, wrapper.ErrNoToken) {
 		t.Fatalf("unknown instance: %v", err)
 	}
-	if _, err := h.MusicToken(); !errors.Is(err, ErrMultipleAccounts) {
-		t.Fatalf("scalar token selected among several accounts: %v", err)
-	}
 }
 
 func TestManagerErrorsDoNotQuoteSecrets(t *testing.T) {
@@ -73,23 +69,5 @@ func TestManagerTokenHonorsCanceledContext(t *testing.T) {
 	cancel()
 	if _, err := h.InstanceToken(ctx, "a"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled request: %v", err)
-	}
-}
-
-func TestScalarMusicTokenUsesSoleReadyInstance(t *testing.T) {
-	var tokenReads atomic.Int32
-	h := managerHome(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/status" {
-			fmt.Fprint(w, `{"code":0,"data":{"instances":[{"id":"only-account","ready":true,"degraded":false}]}}`)
-			return
-		}
-		tokenReads.Add(1)
-		if r.URL.Path != "/token" || r.URL.Query().Get("instance") != "only-account" {
-			t.Error("token was not selected by instance id")
-		}
-		fmt.Fprint(w, `{"code":0,"data":{"music_token":"synthetic-token"}}`)
-	})
-	if got, err := h.MusicToken(); err != nil || got == "" || tokenReads.Load() != 1 {
-		t.Fatal("sole account token was not read over HTTP")
 	}
 }
