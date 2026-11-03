@@ -138,6 +138,10 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				}
 			})
 			if !elsewhere {
+				// Stop, Start, an update's reboot and an uninstall move the
+				// guest within seconds, as the setup screen follows it.
+				a.Store.WatchServerWithin(serverEvery)
+				c.After(serverEvery)
 				a.wrapperRow(c, k, here)
 				a.guestManageRow(c, k)
 				return
@@ -331,7 +335,12 @@ func (a *App) uninstallDialog(c *ui.Context, k *Tokens) {
 		ui.Text(c, "Downloads stop until a wrapper is installed again.").FontSize(12.5).TextColor(k.Muted)
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			toggle(c, k, "purge", &f.purge, "Also log out the account")
-			ui.Text(c, "Also log out the account").FontSize(12.5)
+			// The label flips the switch too, as a checkbox's does.
+			label := ui.Box(c.Key("purge-label")).Cursor(ui.CursorPointer)
+			label.Children(func() { ui.Text(c, "Also log out the account").FontSize(12.5) })
+			if label.Clicked() {
+				f.purge = !f.purge
+			}
 		})
 		ui.Row(c).Gap(8).Justify(ui.End).Padding(6, 0, 0, 0).Children(func() {
 			if button(c, k, buttonPlain, "Cancel", nil).Clicked() {

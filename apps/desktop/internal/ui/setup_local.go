@@ -122,6 +122,15 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 		// wrapper's (its database, its config), so the row names AMDL.
 		setupRow(c, k, "wrapper", setup.Failed, "AMDL", a.Act.StartErr(), false, restart, nil)
 		return setup.Failed
+	case w == nil && a.Store.Server.WrapperErr != "":
+		// No wrapper answers: a backend started before its guest was
+		// installed runs none until it starts again.
+		var act func()
+		if a.Setup.Guest.State == setup.Ready {
+			act = restart
+		}
+		setupRow(c, k, "wrapper", setup.Missing, title, "Not running", false, act, nil)
+		return setup.Missing
 	case w == nil:
 		setupRow(c, k, "wrapper", setup.Checking, title, "", false, nil, nil)
 		return setup.Checking
@@ -146,7 +155,9 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 		return setup.Ready
 	case m.Mode == "stopped":
 		setupRow(c, k, "wrapper", setup.Missing, title, "Stopped", false, func() {
-			if button(c, k, buttonPlain, "Start", nil).Clicked() {
+			// With no guest installed the wrapper stays stopped until the
+			// guest row's download installs one.
+			if a.Setup.Guest.State == setup.Ready && button(c, k, buttonPlain, "Start", nil).Clicked() {
 				_ = a.Setup.StartGuest() // a failure shows as the row staying stopped
 				a.Store.WatchServerWithin(0)
 			}

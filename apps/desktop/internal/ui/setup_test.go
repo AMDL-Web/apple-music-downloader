@@ -363,3 +363,72 @@ func TestConnectionSettingsShowWhereTheWrapperRuns(t *testing.T) {
 		t.Fatalf("screen %v, mode %q, elsewhere %v, applied %+v", a.Screen, a.su.mode, a.su.elsewhere, act.applied)
 	}
 }
+
+// connectionWithGuest is the connection page for this computer's wrapper in
+// mode, or answering none when mode is empty, with a guest in state g.
+func connectionWithGuest(t *testing.T, wrapperMode string, g setup.Guest) (*App, *ui.Tester) {
+	t.Helper()
+	s := mode.DefaultSettings()
+	s.Mode = mode.Standalone
+	a, _ := newTestApp(s)
+	a.Setup, _ = fakeSetup(func(func()) {})
+	a.Setup.Guest = g
+	if wrapperMode == "" {
+		a.Store.Server.WrapperErr = "wrapper /status: connection refused"
+	} else {
+		a.Store.Server.Wrapper = &client.WrapperStatus{Ready: wrapperMode == "serving", Managed: &client.ManagedWrapper{Mode: wrapperMode, Accel: "whpx"}}
+	}
+	a.GoSettings("connection")
+	return a, ui.NewTester(a.View, 1280, 800)
+}
+
+// The uninstall dialog's label flips its switch, as a checkbox's label does,
+// and a click on the switch itself flips it once.
+func TestUninstallLabelFlipsTheSwitch(t *testing.T) {
+	a, tt := connectionWithGuest(t, "serving", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "34e9b5796c0d"}})
+	if err := tt.Click("Uninstall…"); err != nil {
+		t.Fatal(err)
+	}
+	// Find gives the switch, labeled as its text; the text is 10 to its right.
+	sw, ok := tt.Find("Also log out the account")
+	if !ok {
+		t.Fatalf("no switch: %q", tt.Texts())
+	}
+	tt.ClickAt(sw.X+sw.W+10+20, sw.Y+sw.H/2)
+	tt.Frame()
+	if !a.set.purge {
+		t.Fatal("a click on the label left the switch off")
+	}
+	tt.ClickAt(sw.X+sw.W/2, sw.Y+sw.H/2)
+	tt.Frame()
+	if a.set.purge {
+		t.Fatal("a click on the switch did not turn it off, or turned it twice")
+	}
+}
+
+// A wrapper stopped because its guest is gone offers no Start: the guest
+// row's Download is the way back.
+func TestStoppedWrapperStartsOnlyWithAGuest(t *testing.T) {
+	_, tt := connectionWithGuest(t, "stopped", setup.Guest{State: setup.Missing, Size: 64 << 20})
+	if !tt.HasText("Stopped") || tt.HasText("Start") || !tt.HasText("Download") {
+		t.Fatalf("no guest: %q", tt.Texts())
+	}
+	_, tt = connectionWithGuest(t, "stopped", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "34e9b5796c0d"}})
+	if !tt.HasText("Stopped") || !tt.HasText("Start") {
+		t.Fatalf("a guest: %q", tt.Texts())
+	}
+}
+
+// A backend that started before its guest was installed answers no wrapper
+// status: the row says the wrapper is not running, not that it is still
+// being read, and offers Restart once a guest is installed.
+func TestNoWrapperAnswerIsNotRunning(t *testing.T) {
+	_, tt := connectionWithGuest(t, "", setup.Guest{State: setup.Missing, Size: 64 << 20})
+	if !tt.HasText("Not running") || tt.HasText("Restart") {
+		t.Fatalf("no guest: %q", tt.Texts())
+	}
+	_, tt = connectionWithGuest(t, "", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "34e9b5796c0d"}})
+	if !tt.HasText("Not running") || !tt.HasText("Restart") {
+		t.Fatalf("a guest: %q", tt.Texts())
+	}
+}
