@@ -257,10 +257,10 @@ func isClosed(ch <-chan struct{}) bool {
 }
 
 // retryable reports whether a failed /key may succeed when asked again: any
-// failure except a 4xx answer, a wait for a permit that ran out and the
-// caller's own cancellation.
+// failure except a 4xx answer (a refused key included), a wait for a permit
+// that ran out and the caller's own cancellation.
 func retryable(err error) bool {
-	if errors.Is(err, context.Canceled) || errors.Is(err, errPlaybackWait) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, errPlaybackWait) || errors.Is(err, ErrUnauthorized) {
 		return false
 	}
 	var reply *ReplyError

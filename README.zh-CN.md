@@ -209,7 +209,7 @@ CORS 头。
 | **搜索** | `GET /search`：在曲库里搜歌曲、专辑、歌单和艺人 · `GET /artists/{id}/albums`：分页列出艺人的专辑 · `GET /albums/{id}`：专辑的歌曲列表，逐首标出在专辑记录里的状态 |
 | **音质探测** | `POST /quality`：不建作业，探测链接的编码和音质 |
 | **账户** | `GET /accounts` · `PATCH /accounts/{account_id}`：资料库开关与顺序 · `DELETE /accounts/{account_id}`：登出该账户并删除它的记录 |
-| **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` · `GET /wrapper/pairing` · `POST /wrapper/pairing` · `DELETE /wrapper/pairing` |
+| **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
 | **资料库同步** | `GET /library-sync`：总开关与每个账户一项 · `POST /library-sync/reset`：重置某个账户的锚点 |
 | **Apple 资料库** | `GET /apple-library/{kind}`：从本地副本读某个账户的 Apple Music 资料库（`?account=`）· `GET /apple-library/playlists/{id}/tracks` · `POST /apple-library/sync` · `GET /apple-library/status`：每个账户一项 |

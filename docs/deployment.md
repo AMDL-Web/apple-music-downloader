@@ -238,11 +238,10 @@ connection with `GET /api/v1/wrapper/status`.
 The local managed guest runs wrapper-manager too. Wrapper-manager holds up to 10 accounts, and amdl serves them all: each account's
 storefront is served by its own account, and the console's Settings page switches library
 sync and the Apple library per account. A bare wrapper-lite holds one. A wrapper-manager
-behind a gateway that asks for a token (the Cloudflare deploy) is paired once: run `amdl wrapper pair`,
-or press Connect in the desktop app, open the page it prints, and approve the code with your passkey
-([Pairing](api.md#pairing)). The credential stays in the backend's data directory
-([configuration.md](configuration.md#wrapper)); `amdl wrapper pair --status` shows whether it is still
-accepted.
+behind a gateway that checks a key (a Cloudflare Worker, or a reverse proxy) takes the same key on both
+sides: make one with `amdl wrapper keygen` (or Generate in the desktop app), set it on the gateway, and
+run `amdl config set wrapper.token=<key>` ([configuration.md](configuration.md#wrapper)). Bind a custom
+domain to a Worker: mainland China blocks `workers.dev`.
 
 The wrapper-lite that amdl points to is AMDL-Web's fork of
 [upstream's `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite)

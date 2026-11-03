@@ -41,6 +41,14 @@ export const FIELDS = [
     restart: true,
   },
   {
+    key: 'wrapper.token',
+    section: 'account',
+    type: 'token',
+    label: 'Session service key',
+    help: 'Only for a session service behind a gateway, such as a Cloudflare Worker.',
+    defaultValue: '',
+  },
+  {
     key: 'wrapper.data_dir',
     section: 'account',
     type: 'path',

@@ -5,6 +5,8 @@
 // three steps under the field. While the backend reads the wrapper's own
 // token (`wrapperToken`, GET /wrapper/status, masked the same way), the field
 // names that one instead, and a saved token gets a second line with Remove.
+// Another token field (wrapper.token) is write-only: the API answers a set one
+// as "..." alone, so its row says "Token set", with no help.
 
 import { html, useState, useRef } from '../ui/preact.js';
 import { Button } from '../ui/components.js';
@@ -57,12 +59,13 @@ function WrapperToken({ id, wrapperToken, value, onChange }) {
   </div>`;
 }
 
-export function TokenControl({ id, value, invalid, described, onChange, wrapperToken = '' }) {
-  if (wrapperToken) return html`<${WrapperToken} id=${id} wrapperToken=${wrapperToken} value=${value} onChange=${onChange} />`;
-  return html`<${TypedToken} id=${id} value=${value} invalid=${invalid} described=${described} onChange=${onChange} />`;
+export function TokenControl({ field, id, value, invalid, described, onChange, wrapperToken = '' }) {
+  const userToken = !field || field.key === 'catalog.media_user_token';
+  if (wrapperToken && userToken) return html`<${WrapperToken} id=${id} wrapperToken=${wrapperToken} value=${value} onChange=${onChange} />`;
+  return html`<${TypedToken} id=${id} value=${value} invalid=${invalid} described=${described} onChange=${onChange} userToken=${userToken} />`;
 }
 
-function TypedToken({ id, value, invalid, described, onChange }) {
+function TypedToken({ id, value, invalid, described, onChange, userToken = true }) {
   const set = typeof value === 'string' && value !== '';
   const [replacing, setReplacing] = useState(false);
   const [typed, setTyped] = useState('');
@@ -82,7 +85,7 @@ function TypedToken({ id, value, invalid, described, onChange }) {
             id=${id}
             ref=${input}
             value=${replacing ? typed : ''}
-            placeholder="Paste your media-user-token"
+            placeholder=${userToken ? 'Paste your media-user-token' : 'Paste the token'}
             autocomplete="off"
             autocapitalize="off"
             spellcheck="false"
@@ -103,12 +106,14 @@ function TypedToken({ id, value, invalid, described, onChange }) {
           ${replacing && set ? html`<${Button} variant="ghost" size="sm" className="token-cancel" onClick=${() => setReplacing(false)}>Done</${Button}>` : null}
         </div>`
       : html`<div class="token-row token-set">
-          <span class="token-state" id=${id} tabindex="-1">Token set · ends <span class="mono">…${tokenTail(value)}</span></span>
+          <span class="token-state" id=${id} tabindex="-1"
+            >${userToken ? html`Token set · ends <span class="mono">…${tokenTail(value)}</span>` : 'Token set'}</span
+          >
           <span class="token-actions">
             <${Button} variant="ghost" size="sm" className="token-replace" onClick=${startReplace}>Replace</${Button}>
             <${Button} variant="danger" size="sm" className="token-remove" onClick=${() => onChange('')}>Remove</${Button}>
           </span>
         </div>`}
-    <${WhereToFind} id=${id} />
+    ${userToken ? html`<${WhereToFind} id=${id} />` : null}
   </div>`;
 }

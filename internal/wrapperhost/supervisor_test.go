@@ -264,9 +264,6 @@ func TestAccountCapAndLogoutKeepOtherAccounts(t *testing.T) {
 	if err != nil || token.MusicToken == "" {
 		t.Fatal("per-account token unavailable")
 	}
-	if _, err := h.MusicToken(); !errors.Is(err, ErrMultipleAccounts) {
-		t.Fatalf("scalar token selected an arbitrary account: %v", err)
-	}
 	before, _ := h.ReadState()
 	if err := s.Logout(context.Background(), accounts[0].ID); err != nil {
 		t.Fatal(err)

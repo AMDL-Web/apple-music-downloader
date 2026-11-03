@@ -160,6 +160,9 @@ func (c Config) Validate() error {
 	if err := validateWrapperAddress(c.Wrapper.Address); err != nil {
 		return err
 	}
+	if strings.ContainsFunc(strings.TrimSpace(c.Wrapper.Token), func(r rune) bool { return r <= ' ' || r == 0x7f }) {
+		return fmt.Errorf("wrapper.token must be one word, without spaces or control characters")
+	}
 	if c.Catalog.AlbumTrackURLMode != "song" && c.Catalog.AlbumTrackURLMode != "album" {
 		return fmt.Errorf("catalog.album_track_url_mode must be song or album")
 	}

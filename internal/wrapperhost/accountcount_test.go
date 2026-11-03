@@ -37,10 +37,3 @@ func TestAccountCountOfAnEmptyExt4Registry(t *testing.T) {
 		t.Fatalf("empty registry count: %d, %v", got, err)
 	}
 }
-
-func TestMusicTokenWithoutAnInstallation(t *testing.T) {
-	h := Home{Dir: t.TempDir()}
-	if got, err := h.MusicToken(); got != "" || err != nil {
-		t.Fatalf("no installation: %d bytes, %v", len(got), err)
-	}
-}

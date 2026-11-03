@@ -60,6 +60,9 @@ var configFields = []configField{
 	{key: "wrapper.address", section: "account", kind: fieldText, label: "Wrapper address",
 		help: restartHelp},
 	{key: "wrapper.data_dir", section: "account", kind: fieldPath, label: "Wrapper data folder"},
+	// Shown in Connection (wrapperKeyCard).
+	{key: "wrapper.token", section: "connection", kind: fieldToken, label: "Key",
+		help: "Only for a wrapper behind a gateway, such as a Cloudflare Worker."},
 	{key: "catalog.default_storefront", section: "account", kind: fieldSelect, label: "Default storefront",
 		options: []option{{"cn", "China (CN)"}, {"us", "United States (US)"}, {"jp", "Japan (JP)"}, {"gb", "United Kingdom (GB)"}, {"hk", "Hong Kong (HK)"}, {"tw", "Taiwan (TW)"}},
 		custom:  true, pattern: regexp.MustCompile(`^[a-z]{2}$`), hint: "Two lowercase letters, as de"},

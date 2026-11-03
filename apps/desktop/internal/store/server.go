@@ -33,12 +33,9 @@ type Server struct {
 	// Accounts are the wrapper's accounts with amdl's switches for them,
 	// the default first; nil when the backend did not answer.
 	Accounts []client.Account
-	// Pairing is amdl's pairing with a wrapper behind a gateway; nil when
-	// the backend has none.
-	Pairing *client.WrapperPairing
-	Stats   *client.Stats
-	Sync    *client.LibrarySync
-	Hooks   *client.Hooks
+	Stats    *client.Stats
+	Sync     *client.LibrarySync
+	Hooks    *client.Hooks
 	// HookPresets are the services a webhook can be built for, read once
 	// per connection: they change only with the backend's version.
 	HookPresets []client.HookPreset
@@ -112,11 +109,6 @@ func (s *Store) WatchServerWithin(every time.Duration) {
 			}
 		})
 		read(func(ctx context.Context) {
-			if v, err := c.WrapperPairing(ctx); err == nil {
-				next.Pairing = &v
-			}
-		})
-		read(func(ctx context.Context) {
 			if v, err := c.ListAccounts(ctx); err == nil {
 				next.Accounts = v.Accounts
 				if next.Accounts == nil {
@@ -157,10 +149,6 @@ func (s *Store) WatchServerWithin(every time.Duration) {
 			if s.accountOps > 0 {
 				next.Accounts = sv.Accounts
 			}
-			// The poll of a pairing under way is newer than this read.
-			if s.Pair.polling > 0 {
-				next.Pairing = sv.Pairing
-			}
 			if next.System != nil {
 				next.Active = append(next.Active, next.System.Jobs.Active)
 				if len(next.Active) > activeSamples {
@@ -168,11 +156,6 @@ func (s *Store) WatchServerWithin(every time.Duration) {
 				}
 			}
 			*sv = next
-			// A pairing started elsewhere, as in the web console, is
-			// followed here too.
-			if next.Pairing != nil {
-				s.followPairing(*next.Pairing)
-			}
 		})
 	}()
 }

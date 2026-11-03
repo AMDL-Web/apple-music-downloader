@@ -26,6 +26,10 @@ type Guest struct {
 	Latest wrapperhost.Pin
 	// Removing is an uninstall under way, as opposed to a download.
 	Removing bool
+	// Replaced is an install over a guest this build cannot run (NeedsUpdate):
+	// the backend that is running started without a wrapper, and starts
+	// again to run the new one.
+	Replaced bool
 
 	cancel  context.CancelFunc
 	sampled time.Time
@@ -65,6 +69,7 @@ func (s *Setup) installGuest() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	g := &s.Guest
+	replaces := g.NeedsUpdate()
 	*g = Guest{State: Working, Size: g.Size, Progress: wrapperhost.Progress{Phase: wrapperhost.Downloading}, cancel: cancel}
 	var last time.Time
 	report := func(p wrapperhost.Progress) {
@@ -103,7 +108,7 @@ func (s *Setup) installGuest() {
 			size := g.Size
 			switch {
 			case err == nil:
-				*g = Guest{State: Ready, Installed: in, Size: size, Latest: pin}
+				*g = Guest{State: Ready, Installed: in, Size: size, Latest: pin, Replaced: replaces}
 				s.Recheck()
 			case canceled:
 				*g = Guest{State: Missing, Size: size}
@@ -175,12 +180,21 @@ func (s *Setup) StartGuest() error { return s.deps.Home.SetEnabled(true) }
 // GuestLog is the guest's console log.
 func (s *Setup) GuestLog() string { return s.deps.Home.LogPath() }
 
-// UpdateAvailable reports whether CheckGuestUpdate found a guest newer than
-// the one installed, or pins another wrapper-lite payload. A bare-lite guest always needs a manager update, even
-// when imported; a manager import with no commit is not compared.
+// UpdateAvailable reports whether the installed guest can update: always for
+// one this build cannot run (NeedsUpdate), whose update reads the pin itself,
+// and else when CheckGuestUpdate found a guest newer than the one installed,
+// or one that pins another wrapper-lite payload. A manager import with no
+// commit is not compared.
 func (g Guest) UpdateAvailable() bool {
-	return g.State == Ready && g.Latest.Commit != "" && (g.Installed.Kind != wrapperhost.ManagerGuest ||
-		g.Installed.Commit != "" && (g.Latest.Commit != g.Installed.Commit || g.Latest.Lite.RunID != g.Installed.Lite.RunID))
+	return g.NeedsUpdate() || g.State == Ready && g.Latest.Commit != "" &&
+		g.Installed.Commit != "" && (g.Latest.Commit != g.Installed.Commit || g.Latest.Lite.RunID != g.Installed.Lite.RunID)
+}
+
+// NeedsUpdate reports an installed guest this build cannot run, such as a
+// bare-lite guest from before the manager: the backend runs no wrapper
+// until it updates.
+func (g Guest) NeedsUpdate() bool {
+	return g.State == Ready && g.Installed.Kind != wrapperhost.ManagerGuest
 }
 
 // CheckGuestUpdate reads the current pin, at most once every updateEvery.

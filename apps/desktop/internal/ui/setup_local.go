@@ -100,6 +100,10 @@ func (a *App) localApplied() bool {
 	return a.Settings.WrapperAddress != "" && a.Settings.WrapperAddress == f.wrapperAddr
 }
 
+// guestUpdateReason is why the wrapper does not run while its guest needs
+// an update.
+const guestUpdateReason = "the guest needs an update; its account disk is kept, sign in again after"
+
 // wrapperRow is the guest running under this computer's backend.
 func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 	f := &a.su
@@ -110,10 +114,25 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 		}
 	}
 	w := a.Store.Server.Wrapper
+	g := a.Setup.Guest
+	// A guest that replaced one this backend could not run needs the
+	// backend to start again, once; the page keeps its place meanwhile.
+	if g.Replaced && applied && !a.Act.Starting() && (w == nil && a.Store.Server.WrapperErr != "" || w != nil && w.Managed == nil) {
+		a.Setup.Guest.Replaced = false
+		a.Act.Reconnect()
+	}
 	switch {
 	case !applied:
 		setupRow(c, k, "wrapper", setup.Unchecked, title, "Not running", false, nil, nil)
 		return setup.Unchecked
+	case g.NeedsUpdate():
+		// Restarting runs nothing: the backend cannot run this guest.
+		setupRow(c, k, "wrapper", setup.Missing, title, "Not running · "+guestUpdateReason, false, func() {
+			if button(c, k, buttonPlain, "Update", nil).Clicked() {
+				a.Setup.UpdateGuest()
+			}
+		}, nil)
+		return setup.Missing
 	case a.Act.Starting():
 		setupRow(c, k, "wrapper", setup.Working, title, "Starting AMDL", false, nil, nil)
 		return setup.Working
@@ -126,7 +145,7 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 		// No wrapper answers: a backend started before its guest was
 		// installed runs none until it starts again.
 		var act func()
-		if a.Setup.Guest.State == setup.Ready {
+		if g.State == setup.Ready && a.Setup.QEMU.State != setup.Missing {
 			act = restart
 		}
 		setupRow(c, k, "wrapper", setup.Missing, title, "Not running", false, act, nil)

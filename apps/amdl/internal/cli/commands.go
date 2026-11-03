@@ -26,9 +26,8 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 		"accounts set":      accountsSetCmd,
 		"wrapper logout":    wrapperLogoutCmd,
 		"wrapper login":     wrapperLoginCmd,
-		"wrapper pair":      wrapperPairCmd,
-		"wrapper unpair":    wrapperUnpairCmd,
 		"wrapper 2fa":       wrapperTwoStepCmd,
+		"wrapper keygen":    wrapperKeygenCmd,
 		"cli search":        cliSearchCmd,
 		"cli commands":      cliCommandsCmd,
 		"cli setup":         cliSetupCmd,
@@ -62,7 +61,7 @@ var offline = map[string]bool{
 	"cli search": true, "cli commands": true, "cli setup": true, "schema": true, "context list": true,
 	"context add": true, "context use": true, "context remove": true, "serve": true, "version": true,
 	"doctor": true, "wrapper install": true, "wrapper update": true, "wrapper import": true, "wrapper uninstall": true,
-	"wrapper start": true, "wrapper stop": true, "wrapper logs": true, "service install": true, "service uninstall": true, "service start": true, "service stop": true, "service status": true,
+	"wrapper start": true, "wrapper stop": true, "wrapper logs": true, "wrapper keygen": true, "service install": true, "service uninstall": true, "service start": true, "service stop": true, "service status": true,
 }
 
 // planned are the offline commands that still take --dry-run: they print what

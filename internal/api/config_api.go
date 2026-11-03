@@ -57,7 +57,7 @@ func (s *Server) pendingRestart(saved config.Config) []string {
 
 // writeConfigResponse answers GET, PUT and POST /config/reload alike: the
 // ConfigResponse schema for cfg, the configuration as saved, with
-// catalog.media_user_token redacted.
+// catalog.media_user_token redacted and wrapper.token hidden.
 func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, reloadErr error) {
 	view, err := config.MutableView(cfg)
 	if err != nil {
@@ -67,6 +67,11 @@ func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, r
 	if catalog, ok := view["catalog"].(map[string]any); ok {
 		if _, ok := catalog["media_user_token"]; ok {
 			catalog["media_user_token"] = redactToken(cfg.Catalog.MediaUserToken)
+		}
+	}
+	if wrapperView, ok := view["wrapper"].(map[string]any); ok {
+		if _, ok := wrapperView["token"]; ok {
+			wrapperView["token"] = hideSecret(cfg.Wrapper.Token)
 		}
 	}
 	resp := map[string]any{
@@ -117,6 +122,9 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 		// token; that leaves the saved one as it is.
 		if strings.HasPrefix(merged.Catalog.MediaUserToken, redactedTokenPrefix) {
 			merged.Catalog.MediaUserToken = current.Catalog.MediaUserToken
+		}
+		if strings.HasPrefix(merged.Wrapper.Token, redactedTokenPrefix) {
+			merged.Wrapper.Token = current.Wrapper.Token
 		}
 		if locked := config.RuntimeLockedChanges(current, merged); len(locked) > 0 {
 			err := errors.New("fields can only be changed in the config file and require a restart: " + strings.Join(locked, ", "))
@@ -173,6 +181,15 @@ func redactToken(token string) string {
 		return redactedTokenPrefix
 	}
 	return redactedTokenPrefix + token[len(token)-4:]
+}
+
+// hideSecret is how a config response shows a write-only secret: "..." when
+// set, with none of its characters.
+func hideSecret(secret string) string {
+	if secret == "" {
+		return ""
+	}
+	return redactedTokenPrefix
 }
 
 // isFileAccessError reports an error reading or writing the config file

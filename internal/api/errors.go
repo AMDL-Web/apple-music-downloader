@@ -71,15 +71,15 @@ const (
 	CodeStoreError    ErrorCode = "store_error"
 	// 501
 	CodeLoginUnsupported ErrorCode = "login_unsupported"
-	// CodePairingUnsupported: the wrapper has no pairing (it takes requests
-	// without a token).
-	CodePairingUnsupported ErrorCode = "pairing_unsupported"
 	// 502
 	CodeUpstreamError ErrorCode = "upstream_error"
 	// 503
 	CodeQueueFull          ErrorCode = "queue_full"
 	CodeWrapperUnavailable ErrorCode = "wrapper_unavailable"
-	CodeFeatureUnavailable ErrorCode = "feature_unavailable"
+	// CodeWrapperUnauthorized: the wrapper's gateway or proxy answered 401
+	// to wrapper.token, or wants one that is not set.
+	CodeWrapperUnauthorized ErrorCode = "wrapper_unauthorized"
+	CodeFeatureUnavailable  ErrorCode = "feature_unavailable"
 	// CodeAppleLibraryUnavailable: the Apple library cannot be read (no
 	// usable media-user-token) and nothing is cached.
 	CodeAppleLibraryUnavailable ErrorCode = "apple_library_unavailable"

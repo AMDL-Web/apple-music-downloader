@@ -129,13 +129,18 @@ account sessions. `wrapper.data_dir` is a runtime key; the other four apply afte
 - `wrapper.data_dir` (default empty) is the wrapper's data directory as the backend sees
   it, so the backend can read the wrapper's media-user-tokens
   ([The media-user-token](#the-media-user-token)).
-- A wrapper behind a gateway that asks for a bearer token (the Cloudflare deploy of
-  wrapper-manager) has no config key: the backend pairs with it
-  ([Pairing](api.md#pairing); `amdl wrapper pair`, or the desktop app's Connect button).
-  The credential is stored in `pairing/wrapper.json` next to the database file, readable
-  by the backend's user only, tied to the `wrapper.address` it was paired with, and never
-  written to `config.yaml`, shown by `GET /config` or logged. A wrapper without a gateway
-  needs none.
+- `wrapper.token` (default empty) is an optional key for a wrapper behind a gateway that
+  checks one, such as a Cloudflare Worker in front of a wrapper-manager, or a reverse
+  proxy. The backend sends it as `Authorization: Bearer <key>` on every wrapper request;
+  set the same key on the gateway (several backends may share one). `amdl wrapper keygen`,
+  or Generate in the desktop app's Connection settings, makes a strong one (32 random
+  bytes, base64url). It is a runtime key and write-only: `GET /config` shows a set key as
+  `...`, and `GET /wrapper/status` says `token_set`. A gateway that answers `401` fails
+  the wrapper requests with `wrapper_unauthorized` (not retried). Empty sends no header, as
+  a wrapper on the LAN expects.
+- A wrapper at `*.workers.dev` that times out or loses its connection gets a hint in the
+  error: mainland China blocks `workers.dev`, so bind a custom domain to the Worker and
+  set `wrapper.address` to it.
 - The wrapper may hold several accounts: a wrapper-manager holds at most 10. The backend
   learns them from the wrapper's `/status` (a wrapper-manager lists them as instances) and
   keeps one row per account, with its switches, in the database

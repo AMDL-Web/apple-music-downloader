@@ -62,7 +62,7 @@ by meaning.
 | `system restart` | `POST /system/restart` | write |
 | `hooks presets`, `hooks switch --enabled`, `hooks set <name> [--preset <id> --values <json>] [--url] [--events] [--headers <json>] [--body] ...`, `hooks test <name>`, `hooks delete <name>` | `GET /hooks/presets`, `PUT /hooks`, `PUT`/`DELETE /hooks/{name}`, `POST …/test` | read, write, write, write, destructive |
 | `config get [key...]`, `config set <key=value>...`, `config reload` | `GET`/`PUT /config`, `…/reload` | read, write, write |
-| `wrapper status`, `wrapper login [--username <id>] [--password-stdin]`, `wrapper 2fa <login_id>`, `wrapper logout --username <id>\|--account-id <id>`, `wrapper pair [--status]`, `wrapper unpair` | `/wrapper/*` | read, write, write, destructive, write, destructive |
+| `wrapper status`, `wrapper login [--username <id>] [--password-stdin]`, `wrapper 2fa <login_id>`, `wrapper logout --username <id>\|--account-id <id>`, `wrapper keygen` | `/wrapper/*`, local | read, write, write, destructive, read |
 | `context list\|add <name> <url>\|use <name>\|remove <name>`, `version` | local, `/system` | |
 | `serve [--config] [--hooks] [--init key=value]... [--no-console]` | runs the backend in this process | |
 
@@ -97,18 +97,9 @@ and reads the password from the first line of stdin; a `needs_2fa` answer then c
 the `login_id` for `wrapper 2fa <login_id>`, which reads the code the same way (a
 prompt in a terminal, else stdin's first line) and has to follow within 60 seconds.
 
-`wrapper pair` connects the backend to a wrapper behind a gateway that asks for a bearer
-token (the Cloudflare deploy of wrapper-manager; [Pairing](api.md#pairing)). It starts a
-pairing, prints the code and the page the wrapper's owner approves it on with a passkey,
-then asks the backend every 2 seconds until the pairing is `paired`. In a terminal the code
-and page go to stderr and stdout gets the final pairing; elsewhere stdout gets two JSON
-lines, the `pending` pairing with `user_code` and `verification_url` first, then the final
-one, so an agent can pass the code on while the command waits. It stops waiting when the
-code expires (exit 8, `wait_timeout`) or on Ctrl-C (130; the pairing goes on in the
-backend), and exits 6 with `pairing_failed` when the owner refused. A wrapper that takes
-requests without a token answers `pairing_unsupported` (exit 6). `wrapper pair --status`
-only reads the state (`unpaired`, `pending`, `paired`, `needs_pairing`), and `wrapper
-unpair` forgets the stored credential.
+`wrapper keygen` prints `{"key": …}`, a strong random key for `wrapper.token` (32 random
+bytes, base64url), and contacts no server: set it on the wrapper's gateway and with
+`amdl config set wrapper.token=<key>` ([configuration.md](configuration.md#wrapper)).
 
 What is downloaded is what amdl's records say, never the disk: `library list` and
 `library get` show them, and `search`, `lookup` and `albums get` mark what they find with
@@ -188,7 +179,7 @@ to run next.
 | 3 | Not found | the 404 codes, `context_not_found`, `config_key_not_found` |
 | 4 | State conflict | the 409 codes |
 | 5 | Unavailable; retry later | 502, 503 and 504 codes, `server_unreachable`, `server_not_configured` |
-| 6 | Wrapper sign-in or pairing failed | `authentication_failed`, `login_unsupported`, `pairing_failed`, `pairing_unsupported` |
+| 6 | Wrapper sign-in failed, or its gateway refused the key | `authentication_failed`, `login_unsupported`, `wrapper_unauthorized` |
 | 7 | A waited-for job failed or was cancelled | `job_failed` |
 | 8 | The wait ended before the job did | `wait_timeout` |
 | 10 | Confirmation needed; nothing was changed | `confirmation_required` |
@@ -201,7 +192,7 @@ and prints the batch, whose results carry `existing_job_id`.
 
 - **Destructive commands** (`jobs delete`, `library reset`, `library reset-all`,
   `library delete`, `library pending delete`, `library sync reset`, `accounts delete`, `wrapper logout`,
-  `wrapper unpair`, `wrapper uninstall --purge`, and `wrapper install` when it
+  `wrapper uninstall --purge`, and `wrapper install` when it
   would install QEMU) ask `[y/N]` when stdin and stderr are a terminal and otherwise
   need `--yes`; without it they exit 10 before changing anything.
 - **`--dry-run`** on every command that changes something, except `mcp`, prints
@@ -309,8 +300,6 @@ which are all queued or running already are not an error. `set_config`, like
   Apple library tools use the default account without one.
 - **No tool signs the wrapper in**: a password never passes through a model. When
   `get_status` shows no account, a person runs `amdl wrapper login` or uses the console.
-  `get_wrapper_pairing` only reads the pairing state; when it is `needs_pairing`, a person
-  runs `amdl wrapper pair`.
 
 ## Terminal interface
 

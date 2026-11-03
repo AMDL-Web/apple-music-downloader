@@ -136,7 +136,7 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
       // While amdl runs the wrapper itself, its fact row (factRows) stands in
       // for the wrapper.address field, which the API refuses to change.
       const managed = !sysPending && Boolean(wrapper && wrapper.managed);
-      const shown = fields.filter((f) => f.key !== 'catalog.media_user_token' && !(managed && f.key === 'wrapper.address'));
+      const shown = fields.filter((f) => f.key !== 'catalog.media_user_token' && !(managed && (f.key === 'wrapper.address' || f.key === 'wrapper.token')));
       return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${wrapper} />
         ${fieldRows(shown)}
         <${AccountPanel}>

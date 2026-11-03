@@ -83,8 +83,8 @@ type AccountDiscovery struct {
 	// (account_id '', the anchor and Apple library cache of a database from
 	// before accounts) when the table has no account yet. It becomes the
 	// default, with its library-sync switch set to AdoptLibrarySync and its
-	// Apple library switch on, as the single account had them. Empty adopts
-	// the first of Seen.
+	// Apple library switch on, as the single account had them. Empty, or an
+	// id not in Seen, adopts the first of Seen with an id.
 	Adopt            string
 	AdoptLibrarySync bool
 	Now              time.Time
@@ -103,7 +103,9 @@ type AccountsSync struct {
 // the name and region the wrapper reports (an empty one keeps the stored
 // value) and becomes active; a new one is appended after the others with both
 // switches off, except the first account of an empty table, which adopts the
-// rows without an account (AccountDiscovery.Adopt). With Complete, an account
+// rows without an account (AccountDiscovery.Adopt). Rows without an account
+// found later, when the table has accounts, go to the default account with
+// its switches unchanged. With Complete, an account
 // the discovery did not report is marked missing; it keeps its row, position
 // and switches.
 func (s *Store) SyncAccounts(ctx context.Context, d AccountDiscovery) (AccountsSync, error) {
@@ -124,11 +126,10 @@ func (s *Store) SyncAccounts(ctx context.Context, d AccountDiscovery) (AccountsS
 			next = max(next, a.Position+1)
 		}
 		adopt := ""
-		if len(existing) == 0 && len(d.Seen) > 0 {
-			adopt = d.Seen[0].ID
+		if len(existing) == 0 {
 			for _, seen := range d.Seen {
-				if seen.ID == d.Adopt {
-					adopt = d.Adopt
+				if seen.ID != "" && (adopt == "" || seen.ID == d.Adopt) {
+					adopt = seen.ID
 				}
 			}
 		}
@@ -164,6 +165,17 @@ func (s *Store) SyncAccounts(ctx context.Context, d AccountDiscovery) (AccountsS
 			}
 			out.Added = append(out.Added, seen.ID)
 		}
+		if adopt == "" && len(existing) > 0 {
+			// Rows without an account left behind by an earlier discovery
+			// go to the default account.
+			unowned, err := hasUnowned(ctx, tx)
+			if err != nil {
+				return out, err
+			}
+			if unowned {
+				adopt = existing[0].ID
+			}
+		}
 		if adopt != "" {
 			if err := adoptUnowned(ctx, tx, adopt); err != nil {
 				return out, err
@@ -185,6 +197,21 @@ func (s *Store) SyncAccounts(ctx context.Context, d AccountDiscovery) (AccountsS
 
 // accountTables are the tables whose rows belong to one account.
 var accountTables = []string{"library_sync_anchor", "apple_library_items", "apple_library_playlist_tracks", "apple_library_meta"}
+
+// hasUnowned reports whether any table holds rows without an account.
+func hasUnowned(ctx context.Context, tx *sql.Tx) (bool, error) {
+	for _, table := range accountTables {
+		var found int
+		err := tx.QueryRowContext(ctx, `SELECT 1 FROM `+table+` WHERE account_id = '' LIMIT 1`).Scan(&found)
+		if err == nil {
+			return true, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return false, fmt.Errorf("look for %s rows without an account: %w", table, err)
+		}
+	}
+	return false, nil
+}
 
 // adoptUnowned hands the rows without an account to id.
 func adoptUnowned(ctx context.Context, tx *sql.Tx, id string) error {

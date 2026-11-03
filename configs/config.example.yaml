@@ -68,6 +68,17 @@ wrapper:
   # address always loads. While this machine runs its own wrapper, PUT refuses to change it
   # (config_key_not_mutable, reason managed_wrapper). Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   address: "http://127.0.0.1:12340"
+  # string: an optional key sent as "Authorization: Bearer <key>" on every request to the wrapper, for a
+  # wrapper behind a gateway that checks one, such as a Cloudflare Worker in front of a wrapper-manager, or a
+  # reverse proxy. Set the same key on both sides; several backends may share one. amdl wrapper keygen, or
+  # Generate in the desktop app's connection settings, makes a strong one (32 random bytes, base64url). One
+  # word: spaces and control characters are rejected. A wrapper that answers 401 fails its requests with
+  # wrapper_unauthorized, and they are not retried. Empty (the default) sends no header, as a wrapper on the
+  # LAN expects. Write-only: GET /api/v1/config shows a set key as "...", GET /api/v1/wrapper/status says
+  # token_set, and a PUT that sends "..." back keeps the saved one. Saved through PUT /api/v1/config (the
+  # console's Settings, the desktop app's connection settings, or amdl config set wrapper.token=<key>).
+  # Runtime: the next wrapper request uses a new value.
+  token: ""
   # integer seconds: timeout for one wrapper HTTP request. A failed key-template request (/key) is
   # retried up to 3 more times, 1, 2 and 4 seconds apart, each with this timeout. A /key or /m3u8 also
   # waits at most 10 times this for a free playback slot, not taken from its timeout; a /key that runs

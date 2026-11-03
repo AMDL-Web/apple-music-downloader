@@ -186,15 +186,9 @@ func Run(ctx context.Context, opts Options) (err error) {
 	} else {
 		media.CleanupStaleResume(cfg.Download.TempDir, owners, logSystem.Logger.With("component", "media"))
 	}
-	// A wrapper behind a gateway takes requests with the bearer token amdl
-	// got by pairing (POST /api/v1/wrapper/pairing); without one it sends none.
-	pairing, err := wrapper.NewPairing(cfg.Wrapper.Address, cfg.Wrapper.Timeout(), wrapper.PairingDir(cfg.Database.Path),
-		logSystem.Logger.With("component", "wrapper"))
-	if err != nil {
-		return fmt.Errorf("set up wrapper pairing: %w", err)
-	}
-	defer pairing.Close()
-	wrapperClient, err := wrapper.NewClient(cfg.Wrapper, wrapper.WithPairing(pairing))
+	// A wrapper behind a gateway or reverse proxy takes requests with the
+	// key in wrapper.token, read per request; empty sends none.
+	wrapperClient, err := wrapper.NewClient(cfg.Wrapper, wrapper.WithToken(func() string { return cfgStore.Get().Wrapper.Token }))
 	if err != nil {
 		return fmt.Errorf("set up wrapper client: %w", err)
 	}
@@ -266,7 +260,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 	apiServer, err := api.New(api.Deps{
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
-		Wrapper: wrapperSvc, Quality: qualityService, LibrarySync: libraryWatcher, Accounts: accountService, Pairing: pairing,
+		Wrapper: wrapperSvc, Quality: qualityService, LibrarySync: libraryWatcher, Accounts: accountService,
 		AppleLibrary: appleLibrary, Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
 		WrapperManaged: opts.WrapperHost != nil, AccountStorefront: downloader.AccountStorefront,
 		Restart: func() {
@@ -315,7 +309,6 @@ func Run(ctx context.Context, opts Options) (err error) {
 	background.Go(func() { appleLibrary.Run(backgroundCtx) })
 	background.Go(func() { tokens.RunEndpoint(backgroundCtx) })
 	background.Go(func() { accountService.Run(backgroundCtx) })
-	background.Go(func() { pairing.Run(backgroundCtx) })
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.Serve(listener) }()
 	if opts.Console != nil {

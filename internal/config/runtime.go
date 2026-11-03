@@ -43,7 +43,9 @@ func classOf(key string) keyClass {
 		"catalog.default_storefront",
 		// The token provider reads the directory on every use, from the
 		// snapshot its caller passes.
-		"wrapper.data_dir":
+		"wrapper.data_dir",
+		// Read from the live snapshot by every wrapper request.
+		"wrapper.token":
 		return classRuntime
 	case "logging.console", "logging.buffer_size",
 		"wrapper.address", "wrapper.timeout_seconds", "wrapper.login_timeout_seconds",
