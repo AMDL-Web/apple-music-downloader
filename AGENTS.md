@@ -44,8 +44,8 @@ link, then download, decrypt, remux and tag each track. Code map: the
   and the code disagree, fix the doc.
 - Reports keep changed, tested, pushed and released apart, and label behavior
   inferred from reading code as inference.
-- Rules for some paths live in `.claude/rules/` and in `AGENTS.md` files under
-  `apps/` and `internal/`; open the matching one before editing there.
+- Path rules live in `.claude/rules/` and the `AGENTS.md` files under `apps/` and
+  `internal/`; open the matching one before editing.
 
 ## This service has no auth, on purpose
 
@@ -137,8 +137,8 @@ and console checks and the report format.
 | --- | --- |
 | Docs, AGENTS.md, rules, skills | `go test -count=1 ./tools/repocheck/` |
 | Go logic | the package's tests, then `make test` |
-| Bug fix with a regression test | `go run ./tools/revertproof -test <file> -run <new tests>` after committing ([amdl-verify](.claude/skills/amdl-verify/SKILL.md#revert-proof)) |
-| Decryption (`internal/fairplay`, `tools/temaridiff`) | `go test ./internal/fairplay/` and `make temaridiff`, which `make check` does not run |
+| Bug fix with a test | `go run ./tools/revertproof -test <file> -run <new tests>` after committing ([amdl-verify](.claude/skills/amdl-verify/SKILL.md#revert-proof)) |
+| Decryption (`internal/fairplay`, `tools/temaridiff`) | `go test ./internal/fairplay/`, `make temaridiff` (not in `make check`) |
 | Concurrency (jobs, media pools, events, SSE) | `make race` |
 | API routes, schemas, SSE | `go test ./internal/api/` and a live check with `make dev` |
 | Config keys | `go test ./internal/config/ ./internal/api/`, then reread the key's example comment |
@@ -148,6 +148,7 @@ and console checks and the report format.
 | Dependencies | `make vuln` |
 | Scripts, release tooling | `make node-test` |
 | Dockerfile, entrypoint | `make docker` |
+| Upgrade path | `make upgradecheck` (own CI job; needs `gh`) |
 | Before pushing to dev | `make check` |
 
 Add a behavior test where a regression is likely, not one that restates the
@@ -195,6 +196,7 @@ sit in front of it and adds the login API the console uses; a bare wrapper-lite 
 | `main` only through a PR | branch protection; guard hook on `git push` |
 | No `--admin` merge without approval | guard hook on `gh pr merge` (Claude Code only) |
 | Never commit config, keys or data | `.gitignore`; guard hook on `git add -f` |
+| A build starts on the last release's files | CI Upgrade check job |
 | No auth, breaking-change marking, clients updated with the API, full config comments, row-preserving migrations, optional amp-api reads degrade | text and `REVIEW.md` |
 
 The guard hook runs where Claude Code loads `.claude/settings.json`; other agents

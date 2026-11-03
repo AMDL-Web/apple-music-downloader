@@ -122,10 +122,11 @@ temaridiff: ## Compare internal/fairplay with upstream Temari (own CI job; downl
 # tools/upgradecheck/run.sh. Downloads that release with gh. CI runs it as its
 # own job and the release process before every release candidate, so
 # `make check` leaves it out.
-PREV ?= $(shell gh release list -L 1 --exclude-drafts --json tagName -q '.[0].tagName' 2>/dev/null)
+# perl's alarm bounds the query the same on Linux and macOS, which has no timeout.
+PREV ?= $(shell perl -e 'alarm shift; exec @ARGV' 60 gh release list -L 1 --exclude-drafts --json tagName -q '.[0].tagName' 2>/dev/null)
 
 upgradecheck: build ## Start this build on the files the newest release wrote (needs gh; its own CI job)
-	@test -n "$(PREV)" || { echo "upgradecheck: no release found; set PREV=<tag>" >&2; exit 1; }
+	@test -n "$(PREV)" || { echo "upgradecheck: no release found (gh release list failed or took over 60 s); set PREV=<tag>" >&2; exit 1; }
 	tools/upgradecheck/run.sh "$(PREV)" bin/amdl
 
 docker: ## Build the server image locally (single arch, not pushed)
