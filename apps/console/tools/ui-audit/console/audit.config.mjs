@@ -6,7 +6,8 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMockServer } from './mock-server.mjs';
-import { jobId, JOB_KEYS, CATALOG, LOSSY_ALBUM } from './fixtures.mjs';
+import { CATALOG, LOSSY_ALBUM } from './fixtures.mjs';
+import { jobId, JOB_KEYS } from './fixtures-worlds.mjs';
 import { SETTINGS_SCENARIOS, managed } from './scenarios-settings.mjs';
 import { QUEUE_SCENARIOS } from './scenarios-queue.mjs';
 

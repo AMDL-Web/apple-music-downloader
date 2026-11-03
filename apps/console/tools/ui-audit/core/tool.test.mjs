@@ -9,7 +9,7 @@ import { declarations, readScale, scanCss } from './css-scan.mjs';
 import { aggregate, compare, normalize } from './report.mjs';
 import { probeSource } from './probe.mjs';
 import { readCsp, startMockServer } from '../console/mock-server.mjs';
-import { jobId, JOB_KEYS } from '../console/fixtures.mjs';
+import { jobId, JOB_KEYS } from '../console/fixtures-worlds.mjs';
 
 const cli = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 

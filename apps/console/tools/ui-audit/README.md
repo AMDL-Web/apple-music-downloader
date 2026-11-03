@@ -44,7 +44,7 @@ before → after and which findings went away or appeared.
 The console needs no Go to audit: `console/mock-server.mjs` serves
 `apps/console/static` under `/console/` with the Go server's CSP (read from
 `apps/console/console.go`) and answers `/api/v1` from deterministic worlds
-(`console/fixtures.mjs`): `empty`, `idle`, `active` and `many`, with fixed job
+(`console/fixtures-worlds.mjs`): `empty`, `idle`, `active` and `many`, with fixed job
 ids for each drawer state. Covers come from Apple's CDN once and then from
 `~/.cache/amdl-ui-audit`; motion covers are blocked. Run the mock alone to
 look by hand:
