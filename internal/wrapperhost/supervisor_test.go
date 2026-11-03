@@ -277,6 +277,33 @@ func TestStopAndStart(t *testing.T) {
 	}
 }
 
+// TestUninstallStopsUntilTheNextInstall covers an uninstall that keeps the
+// account's disk and the wrapper turned on: the supervisor stops rather than
+// boot assets that are gone, and serves the next install on its disk.
+func TestUninstallStopsUntilTheNextInstall(t *testing.T) {
+	s, h, _ := runFake(t)
+	if err := h.Uninstall(false); err != nil {
+		t.Fatal(err)
+	}
+	s.poke()
+	waitMode(t, s, "stopped")
+	if m := s.Managed(); m.LastError != "" {
+		t.Errorf("stopped with error %q", m.LastError)
+	}
+	if !h.Enabled() {
+		t.Fatal("uninstall turned the wrapper off")
+	}
+	art := fakeArtifact(t, "", "a newer empty image")
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "c0ffee5f47a30518"), time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	s.poke()
+	waitMode(t, s, "serving")
+	if got := s.Managed().Guest; got != "c0ffee5f47a3" {
+		t.Errorf("serving guest %s, want the new install's", got)
+	}
+}
+
 // TestBannerOfAGuestThatAlreadyExited covers a login guest that printed its
 // banner and exited before StartLogin waited for it, as a refused login can
 // on a busy host: both are ready, and the banner has to win.

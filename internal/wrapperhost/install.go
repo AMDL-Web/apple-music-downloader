@@ -167,9 +167,24 @@ func (h Home) Uninstall(purge bool) error {
 			return err
 		}
 	}
-	if purge {
-		return os.RemoveAll(h.Dir)
+	if !purge {
+		return nil
 	}
+	entries, err := os.ReadDir(h.Dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Name() == "logs" {
+			continue
+		}
+		if err := os.RemoveAll(h.path(e.Name())); err != nil {
+			return err
+		}
+	}
+	// A running backend keeps the guest's log open, and Windows deletes no
+	// open file; the log holds no secrets and goes with the next purge.
+	_ = os.RemoveAll(h.Dir)
 	return nil
 }
 

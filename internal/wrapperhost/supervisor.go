@@ -187,7 +187,7 @@ func (s *Supervisor) Run(ctx context.Context) {
 			s.mu.Unlock()
 			return
 		case s.sess != nil:
-		case !s.home.Enabled():
+		case !s.home.Enabled() || s.uninstalled():
 			if s.g != nil {
 				s.g.stop()
 				s.g = nil
@@ -203,6 +203,14 @@ func (s *Supervisor) Run(ctx context.Context) {
 		case <-time.After(pollEvery):
 		}
 	}
+}
+
+// uninstalled reports whether amdl wrapper uninstall, or the app's, removed
+// the guest while this supervisor ran. It stays stopped rather than boot
+// assets that are gone, and boots the next install's when one appears.
+func (s *Supervisor) uninstalled() bool {
+	_, err := s.home.Current()
+	return errors.Is(err, ErrNotInstalled)
 }
 
 // refreshLocked picks up a guest that amdl wrapper update or import

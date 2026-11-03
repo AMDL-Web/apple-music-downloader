@@ -212,6 +212,12 @@ func TestInstallKeepsTheAccount(t *testing.T) {
 	if _, err := os.Stat(h.ImagePath()); err != nil {
 		t.Error("uninstall keeps the account unless purged")
 	}
+	if err := h.Uninstall(true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(h.Dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a purge leaves %s: %v", h.Dir, err)
+	}
 }
 
 func TestImportRejectsAnUnrelatedZip(t *testing.T) {

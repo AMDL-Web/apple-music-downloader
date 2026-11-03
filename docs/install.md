@@ -352,7 +352,9 @@ amdl wrapper uninstall --purge
 The first stops the backend, and with it the wrapper amdl runs, and removes the
 registration. The second, needed only with [A wrapper amdl runs](#a-wrapper-amdl-runs),
 deletes its directory, the account's disk included, which logs the account out for
-good; without `--purge` it keeps `data.img` for a later `amdl wrapper install`.
+good; without `--purge` it keeps `data.img` for a later `amdl wrapper install`. A
+backend still running keeps the guest stopped until that install, which it boots, and
+keeps its console log open, so on Windows the logs folder stays until the next purge.
 
 Then delete the binary: `~/.local/bin/amdl` (or `/usr/local/bin/amdl`), or
 `%LOCALAPPDATA%\Programs\amdl` on Windows, where you also remove that directory from the
