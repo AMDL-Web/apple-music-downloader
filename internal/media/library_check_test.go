@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,7 +106,14 @@ func TestDeleteRecordDropsRunsAndCheckpoints(t *testing.T) {
 	if err := os.MkdirAll(owner, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.m.DeleteRecord(ctx, domain.ResourceAlbum, "100"); err != nil {
+	// The run's teardown and hooks outlast its terminal status, and the
+	// delete waits for them as Delete does.
+	var err error
+	h.waitFor("the record deleted", func() bool {
+		err = h.m.DeleteRecord(ctx, domain.ResourceAlbum, "100")
+		return !errors.Is(err, db.ErrRunActive)
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(owner); !os.IsNotExist(err) {
