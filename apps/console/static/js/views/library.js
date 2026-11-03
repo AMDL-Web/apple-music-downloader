@@ -8,7 +8,7 @@
 // views/library-apple.js. A record opens its drawer (views/record-drawer.js).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { listAlbumRecords, listPlaylistRecords, getLibrarySummary, startCheck, resetRecords, resetRecord, pauseRecord, deleteRecord } from '../api.js';
+import { listAlbumRecords, listPlaylistRecords, listDownloads, getLibrarySummary, startCheck, resetRecords, resetRecord, pauseRecord, deleteRecord } from '../api.js';
 import { libraryFilters, libraryHash, recordHash, LIBRARY_TABS } from '../lib/route.js';
 import { recordQuery, recordTitle, kindWord, checkText, checkRunning, applyCheckFeed, checkBody, bulkResetText } from '../lib/records.js';
 import { runLimited } from '../lib/bulk.js';
@@ -103,6 +103,34 @@ function useRecords(app, f, enabled) {
   return [state, load, () => setStamp((n) => n + 1)];
 }
 
+/**
+ * The status of the jobs the page has heard of, by id, so a record whose run
+ * is running reads Running as Activity does, not In the queue: the running
+ * ones read once, then each download_upserted of the feed.
+ */
+function useRunStatus(app) {
+  const [status, setStatus] = useState(() => new Map());
+  useEffect(() => {
+    let live = true;
+    listDownloads({ status: 'running', limit: 100 }).then(
+      (r) => live && setStatus((m) => new Map([...m, ...(r && Array.isArray(r.downloads) ? r.downloads : []).map((j) => [j.id, j.status])])),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [app.epoch]);
+  useEffect(
+    () =>
+      app.subscribeFeed((batch) => {
+        const jobs = batch.filter((m) => m.type === 'download_upserted' && m.job && m.job.id).map((m) => m.job);
+        if (jobs.length) setStatus((m) => (jobs.every((j) => m.get(j.id) === j.status) ? m : new Map([...m, ...jobs.map((j) => [j.id, j.status])])));
+      }),
+    [],
+  );
+  return status;
+}
+
 export function LibraryPage({ route }) {
   const app = useApp();
   const f = libraryFilters(route.params);
@@ -116,6 +144,7 @@ export function LibraryPage({ route }) {
   const records = f.tab !== 'apple';
   const [summary, reloadSummary] = useSummary(app);
   const [state, load, reload] = useRecords(app, f, records);
+  const runs = useRunStatus(app);
   const kind = f.tab === 'playlists' ? 'playlists' : 'albums';
 
   const tabs = LIBRARY_TABS.map((t) => {
@@ -286,6 +315,7 @@ export function LibraryPage({ route }) {
                           : null}
                         <${RecordRow}
                           record=${r}
+                          runStatus=${(r.active_job_id && runs.get(r.active_job_id)) || ''}
                           href=${recordHash(kind, r.id, route.params)}
                           selected=${selected.has(r.id)}
                           onSelect=${selecting ? () => setSelected((s) => toggleId(s, r.id, !s.has(r.id))) : undefined}

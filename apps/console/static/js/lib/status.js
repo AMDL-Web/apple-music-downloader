@@ -4,6 +4,8 @@
 
 import { errorSummary } from './format.js';
 
+const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
+
 /** @typedef {{icon: string, role: 'info'|'success'|'danger'|'warning'|'neutral'|'skipped', label: string, detail?: string, pulse?: boolean}} StatusView */
 
 /** Counters of a job, with the 2.0 disjoint fields defaulted to 0. */
@@ -17,14 +19,31 @@ export function jobCounts(job) {
   return { total, completed, skipped, failed, cancelled, done: completed + skipped };
 }
 
-/** Whether a completed job wrote nothing because every track was already on disk. */
-export function isAlreadyInLibrary(job) {
+/** Whether a completed job wrote nothing: each track was on disk already or does not offer the quality. */
+export function wroteNothing(job) {
   const c = jobCounts(job);
   return Boolean(job && job.status === 'completed' && c.total > 0 && c.completed === 0 && c.skipped === c.total);
 }
 
-/** @returns {StatusView} */
-export function jobStatusView(job) {
+/**
+ * Whether a completed job wrote nothing because every track was already on
+ * disk. The job's counters put a track that does not offer the quality with
+ * those on disk, so only its tracks (`items`) can tell.
+ */
+export function isAlreadyInLibrary(job, items) {
+  return wroteNothing(job) && Array.isArray(items) && items.length > 0 && items.every((it) => it.status === 'skipped_existing');
+}
+
+/** Whether a run ended because its record was paused (cancelled, error "paused"). */
+export const isPausedRun = (job) => Boolean(job && job.status === 'cancelled' && job.error === 'paused');
+
+/**
+ * A job's status as one view. `items`, where the caller has them (the job
+ * drawer), tell a run that found every track on disk from one whose tracks
+ * do not offer its quality; a list row without them says what both share.
+ * @returns {StatusView}
+ */
+export function jobStatusView(job, items) {
   const status = job && job.status;
   const c = jobCounts(job);
   switch (status) {
@@ -33,8 +52,12 @@ export function jobStatusView(job) {
     case 'running':
       return { icon: 'dot', role: 'info', label: 'Running', pulse: true, detail: c.total === 0 ? 'Resolving' : undefined };
     case 'completed':
-      if (isAlreadyInLibrary(job)) {
+      if (isAlreadyInLibrary(job, items)) {
         return { icon: 'archive', role: 'skipped', label: 'Already in library', detail: 'Every track was already on disk' };
+      }
+      if (wroteNothing(job)) {
+        const offered = Array.isArray(items) && items.length > 0 && items.every((it) => it.status === 'unavailable');
+        return offered ? { icon: 'circle-minus', role: 'warning', label: 'Not offered' } : { icon: 'circle-minus', role: 'skipped', label: 'Nothing downloaded' };
       }
       return {
         icon: 'circle-check',
@@ -45,7 +68,7 @@ export function jobStatusView(job) {
     case 'failed':
       return { icon: 'circle-x', role: 'danger', label: 'Failed', detail: (job && job.error) || undefined };
     case 'cancelled':
-      return { icon: 'circle-slash', role: 'neutral', label: 'Cancelled' };
+      return isPausedRun(job) ? { icon: 'pause', role: 'neutral', label: 'Paused' } : { icon: 'circle-slash', role: 'neutral', label: 'Cancelled' };
     default:
       return { icon: 'circle-help', role: 'neutral', label: status ? String(status) : 'Unknown' };
   }
@@ -155,19 +178,22 @@ export function connectionView(state) {
 
 /**
  * Segmented progress of a job: done (completed + skipped), failed, of total.
- * The text is a count, except while a running job has nothing finished yet:
- * the count would stand still for the whole first track, so the job's overall
- * progress (Job.progress, from each track's stages) fills the track and the
- * text is its percentage. A running job that has not read its tracks yet is
- * Resolving; a queued one that has not either waits, with an empty bar and
- * no text, as it is not resolving anything yet.
+ * While a job runs, one measure fills it from start to end: the job's overall
+ * progress (Job.progress, the mean of its tracks' stage-weighted progress,
+ * which counts a finished track whole), and the text is its percentage; a
+ * count would stand still for a whole track and, once the first track
+ * finished, read less than the percentage before it. A finished job counts
+ * its tracks. A running job that has not read its tracks yet is Resolving; a
+ * queued one that has not either waits, with an empty bar and no text, as it
+ * is not resolving anything yet.
  */
 export function jobProgress(job) {
   const c = jobCounts(job);
   const indeterminate = c.total === 0 && Boolean(job) && job.status === 'running';
   const waiting = c.total === 0 && Boolean(job) && job.status === 'queued';
-  const working = Boolean(job) && job.status === 'running' && c.total > 0 && c.done === 0 && c.failed === 0 && c.cancelled === 0;
-  const fraction = working ? clamp01(job.progress) : 0;
+  const working = Boolean(job) && job.status === 'running' && c.total > 0;
+  // Never below the tracks already finished, should a snapshot lack progress.
+  const fraction = working ? Math.max(clamp01(job.progress), c.total ? (c.done + c.failed + c.cancelled) / c.total : 0) : 0;
   const percent = Math.floor(fraction * 100);
   let aria = `${c.done} of ${c.total} tracks`;
   if (c.skipped) aria += `, ${c.skipped} already on disk`;
@@ -233,8 +259,6 @@ export function progressLegend(job) {
   counts.remaining = left;
   return Object.keys(LEGEND_LABELS).map((state) => ({ state, role: CELL_ROLES[state], n: counts[state], label: LEGEND_LABELS[state] }));
 }
-
-const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 
 const STAGE_LABELS = { resolve: 'Resolve', download: 'Download', decrypt: 'Decrypt', remux: 'Remux', verify: 'Verify', tag: 'Tag', save: 'Save' };
 

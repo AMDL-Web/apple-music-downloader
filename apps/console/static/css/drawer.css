@@ -63,6 +63,20 @@
   overscroll-behavior: contain;
 }
 
+/* The end of the list clears a toast (bottom right, over the drawer), so
+   its last rows can always be scrolled out from under one. */
+.drawer-scroll::after {
+  content: "";
+  display: block;
+  height: calc(var(--s-6) + var(--toast-row) + 2 * var(--s-2));
+}
+
+@media (max-width: 639px) {
+  .drawer-scroll::after {
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2) + var(--touch) + 2 * var(--s-2));
+  }
+}
+
 .drawer-scroll > .empty,
 .drawer-scroll > .error-note,
 .drawer-scroll > .skel-list {

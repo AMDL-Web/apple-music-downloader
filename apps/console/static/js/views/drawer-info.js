@@ -4,7 +4,7 @@
 import { html, useState, useEffect } from '../ui/preact.js';
 import { getConfig } from '../api.js';
 import { absTime, dateTime, elapsed, count, errorSummary, clockTime } from '../lib/format.js';
-import { hookStatusView } from '../lib/status.js';
+import { hookStatusView, isPausedRun } from '../lib/status.js';
 import { activityRows } from '../lib/jobview.js';
 import { outputFolders } from '../lib/files.js';
 import { settingsHash } from '../lib/route.js';
@@ -78,8 +78,8 @@ const when = (value) =>
  * replays it when the drawer opens) plus live events. The list scrolls
  * instead of growing.
  */
-function Activity({ activity }) {
-  const rows = activityRows(activity);
+function Activity({ activity, paused }) {
+  const rows = activityRows(activity, paused);
   if (rows.length === 0) return null;
   return html`<section class="activity" aria-labelledby="activity-title">
     <h4 id="activity-title" class="subsection-title">Activity <span class="muted">(${count(rows.length)} ${rows.length === 1 ? 'event' : 'events'})</span></h4>
@@ -118,7 +118,7 @@ export function DetailsSection({ job, activity, hooks }) {
         <code class="mono" title=${job.id}>${job.id}</code>
         <${CopyButton} text=${job.id} label="Copy job ID" />
       </div>
-      <${Activity} activity=${activity} />
+      <${Activity} activity=${activity} paused=${isPausedRun(job)} />
       <section aria-labelledby="hooks-title">
         <h4 id="hooks-title" class="subsection-title">Hooks</h4>
         ${hooks.length === 0

@@ -25,14 +25,19 @@ export function recordPalette(r) {
 /**
  * How a record reads in a list: {icon, role, label} for its badge, and the
  * flags it shows (failed, given up, missing), each {key, label}. A run in
- * the queue wins, then paused, then the rollup state.
+ * the queue wins, then paused, then the rollup state. `runStatus` is the
+ * status of its active run where the caller knows it: a running one reads
+ * Running, as its row in Activity does, and one that ended no longer
+ * counts while the record is read again.
  */
-export function recordView(r) {
+export function recordView(r, runStatus = '') {
   if (!r) return { view: { icon: 'circle-help', role: 'neutral', label: 'Unknown' }, flags: [] };
   const done = r.tracks_done || 0;
   const wanted = r.tracks_wanted || 0;
   let view;
-  if (r.active_job_id) view = { icon: 'clock', role: 'info', label: 'In the queue' };
+  const active = r.active_job_id && !['completed', 'failed', 'cancelled'].includes(runStatus);
+  if (active && runStatus === 'running') view = { icon: 'dot', role: 'info', label: 'Running', pulse: true };
+  else if (active) view = { icon: 'clock', role: 'info', label: 'In the queue' };
   else if (r.paused && r.state !== 'complete') view = { icon: 'pause', role: 'neutral', label: 'Paused' };
   else if (r.catalog_state && r.catalog_state !== 'ok') view = { icon: 'circle-slash', role: 'warning', label: r.catalog_state === 'gone' ? 'Gone from Apple Music' : 'Not in your storefront' };
   else if (r.state === 'complete') view = { icon: 'circle-check', role: 'success', label: 'Downloaded' };
@@ -68,12 +73,73 @@ const AUDIO = {
 /** One slot's audio state as {icon, role, label}. */
 export const audioView = (state) => AUDIO[state] || { icon: 'circle-help', role: 'neutral', label: state || 'Unknown' };
 
-/** A slot's quality words: "ALAC 24-bit / 96 kHz", the codec it landed or, before that, its slot. */
+/** A slot's codec: the one it landed or, before that, its slot's ('' for a main slot not downloaded yet). */
+const slotCodec = (slot) => (slot ? slot.codec || (slot.slot !== 'main' ? slot.slot : '') : '');
+
+/** A slot's quality words: "ALAC 24-bit / 96 kHz", "AAC 262 kbps", the codec it landed or, before that, its slot. */
 export function slotQuality(slot) {
   if (!slot) return '';
-  const codec = slot.codec || (slot.slot !== 'main' ? slot.slot : '');
+  const codec = slotCodec(slot);
   const name = codec ? codecName(codec) : '';
-  return [name, slot.quality_label].filter(Boolean).join(' ');
+  const label = String(slot.quality_label || '').replace(/(\d)\s*kbps$/i, '$1 kbps');
+  return [name, label].filter(Boolean).join(' ');
+}
+
+/** Whether any track of a record has a slot besides its main one. */
+export const hasExtraSlots = (record) => (record && Array.isArray(record.tracks) ? record.tracks : []).some((t) => (t.files || []).some((f) => f.slot !== 'main'));
+
+/**
+ * A track's slots as {key, codec, view, label}, main first, for a record
+ * with more than one quality: each says its codec ("ALAC", "AAC") with its
+ * own state, so a quality still waiting never reads as downloaded. `label`
+ * spells both out for a title and screen readers ("AAC 262 kbps: Waiting").
+ */
+export function slotStates(t) {
+  const files = t && Array.isArray(t.files) ? t.files : [];
+  const main = files.filter((f) => f.slot === 'main');
+  return [...main, ...files.filter((f) => f.slot !== 'main')].map((f) => {
+    const view = audioView(f.audio_state);
+    const codec = slotCodec(f);
+    return { key: f.slot, codec: codec ? codecName(codec) : 'Main', view, label: `${slotQuality(f) || 'Main'}: ${view.label}` };
+  });
+}
+
+/** The codec names of a record's other qualities, in first-seen order ("AAC"). */
+export function extraCodecs(record) {
+  const out = [];
+  for (const t of record && Array.isArray(record.tracks) ? record.tracks : []) {
+    for (const f of t.files || []) {
+      const c = f.slot !== 'main' ? codecName(slotCodec(f)) : '';
+      if (c && !out.includes(c)) out.push(c);
+    }
+  }
+  return out;
+}
+
+/**
+ * The codec name of the other quality a run of this record fetched, from
+ * the slots that run wrote last ("AAC"), or '' for a run of the main slots.
+ */
+export function runSlot(record, jobId) {
+  if (!jobId) return '';
+  for (const t of record && Array.isArray(record.tracks) ? record.tracks : []) {
+    const f = (t.files || []).find((x) => x.last_job_id === jobId);
+    if (f) return f.slot !== 'main' ? codecName(slotCodec(f)) : '';
+  }
+  return '';
+}
+
+/**
+ * Whether a record has anything a run could still do, so Pause means
+ * something: a run is active, it was never read, or a wanted track's slot
+ * waits, runs or failed (a failed slot is retried by itself).
+ */
+export function recordHasWork(r) {
+  if (!r) return false;
+  if (r.active_job_id || !r.resolved_at) return true;
+  return (Array.isArray(r.tracks) ? r.tracks : []).some(
+    (t) => t.wanted && t.availability !== 'unavailable' && ((t.files || []).length === 0 || (t.files || []).some((f) => ['pending', 'running', 'failed'].includes(f.audio_state))),
+  );
 }
 
 /**

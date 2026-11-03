@@ -3,7 +3,7 @@
 // a burst of endings becomes. The shell owns the timers and the toast list.
 
 import { buildHash } from './route.js';
-import { isTerminal } from './status.js';
+import { isTerminal, isPausedRun } from './status.js';
 import { jobTitle, typeLabel } from './format.js';
 
 /** Endings within this window after the first one share one toast. */
@@ -39,7 +39,7 @@ export function finishedToast(jobs, route = { page: 'overview', params: {} }) {
     const job = jobs[0];
     const onPage = DRAWER_PAGES.has(route.page);
     return {
-      message: `${[typeLabel(job.type), jobTitle(job)].filter(Boolean).join(' ')} ${ENDED[job.status] || job.status}`,
+      message: `${[typeLabel(job.type), jobTitle(job)].filter(Boolean).join(' ')} ${isPausedRun(job) ? 'was paused' : ENDED[job.status] || job.status}`,
       role: job.status === 'completed' ? 'success' : job.status === 'failed' ? 'danger' : 'neutral',
       action: { label: 'Open', hash: buildHash(onPage ? route.page : 'queue', onPage ? route.params : {}, job.id) },
     };

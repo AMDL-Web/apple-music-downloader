@@ -115,7 +115,7 @@ page in `apps/console/skins/`.
 | shadcn dashboard order (KPI cards, chart, table) and a sidebar that collapses to icons | `apps/console/static/js/app.js` | adapted | 232 px sidebar, 56 px rail at 640-1023 px, bottom tab bar below. |
 | Grafana stat panel: one metric per tile, color only where it means something | `apps/console/static/js/views/overview.js` | adopted | |
 | Sonarr `getQueueStatus`: one pure function from state to icon, kind and title | `apps/console/static/js/lib/status.js` | adopted | Unit-tested in `apps/console/jstest/status.test.mjs`. |
-| Primer segmented ProgressBar with a visible value and `aria-valuetext` | `apps/console/static/js/ui/components.js` | adopted | Counts, never an aggregate percentage (`ItemProgress` has none). |
+| Primer segmented ProgressBar with a visible value and `aria-valuetext` | `apps/console/static/js/ui/components.js` | adopted | `Job.progress` as a percentage while a job runs, counts once it ended. |
 | Tremor Tracker: one block per period | job drawer track strip | adapted | One block per track, colored by item status. |
 | VueTorrent: mobile card per item, keyboard-first queue | `apps/console/static/js/app.js` | adapted | Two-line queue cards under 640 px; `j`/`k` and `/` shortcuts. |
 | Grafana logs panel and Supabase Logs Explorer: level colors, expandable JSON details, live toggle, filters in the URL | `apps/console/static/js/views/logs.js` | adopted | |

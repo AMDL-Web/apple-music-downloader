@@ -7,11 +7,13 @@
 // fetches what the record does not have. Pure: no DOM, so node --test
 // covers it.
 
+import { codecName } from './overrides.js';
+
 const LOSSLESS = ['lossless', 'hi-res-lossless'];
 const DOLBY = ['ec3', 'ac3'];
 
-/** The question's name for a codec. */
-export const CHOICE_LABEL = { alac: 'Lossless', ec3: 'Dolby Atmos', ac3: 'Dolby Digital', aac: 'AAC', 'aac-binaural': 'AAC Binaural', 'aac-downmix': 'AAC Downmix' };
+/** The question's name for a codec: its name everywhere in the console (lib/overrides.js codecName). */
+export const CHOICE_LABEL = Object.fromEntries(['alac', 'ec3', 'ac3', 'aac', 'aac-binaural', 'aac-downmix'].map((c) => [c, codecName(c)]));
 
 // The codecs another slot may be, in the order the menu lists them.
 const SLOT_CODECS = ['alac', 'ec3', 'ac3', 'aac', 'aac-binaural', 'aac-downmix'];

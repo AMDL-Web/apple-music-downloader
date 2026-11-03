@@ -12,11 +12,12 @@ const ROW_ART = artWidths(40, 48);
 
 /**
  * Props: record, href, selected, onSelect(e) (selection mode: a plain click
- * selects), bare (no state badge, where the list already says it).
+ * selects), bare (no state badge, where the list already says it),
+ * runStatus (its active run's status, where the list knows it).
  */
-export function RecordRow({ record, href, selected, onSelect, bare = false }) {
+export function RecordRow({ record, href, selected, onSelect, bare = false, runStatus = '' }) {
   const palette = artPalette(recordPalette(record));
-  const { view, flags } = recordView(record);
+  const { view, flags } = recordView(record, runStatus);
   const sub = recordSub(record);
   const onClick = onSelect
     ? (e) => {

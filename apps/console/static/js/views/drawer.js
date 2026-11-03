@@ -21,7 +21,7 @@ import {
   inputLabel,
 } from '../lib/format.js';
 import { drawerSummary, codecNote, isNotFound, rowView } from '../lib/jobview.js';
-import { jobStatusView, isTerminal } from '../lib/status.js';
+import { jobStatusView, isTerminal, isPausedRun } from '../lib/status.js';
 import { jobAllows, actionDone, actionError, retryToast } from '../lib/jobactions.js';
 import { buildHash, parseHash, recordHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
@@ -209,7 +209,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
         ${meta ? html`<p class="drawer-meta">${meta}</p>` : null}
         ${summary ? html`<p class="drawer-meta drawer-summary" title=${summaryTitle}>${summary}</p>` : null}
         <div class="drawer-badges">
-          <${Badge} view=${jobStatusView(job)} />
+          <${Badge} view=${jobStatusView(job, items)} />
           ${live ? html`<span class="live-tag"><span class="pulse-static" aria-hidden="true"></span>Live</span>` : null}
         </div>
       </div>
@@ -227,7 +227,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
           <${AlbumProgress} job=${job} items=${items} />
           ${items.length === 0
             ? html`<${Empty} icon="list" title="No tracks resolved yet" />`
-            : html`<${TrackList} items=${items} albumArtist=${job.artist_name || ''} keepStatus=${seenLive.current.on} />`}
+            : html`<${TrackList} items=${items} albumArtist=${job.artist_name || ''} keepStatus=${seenLive.current.on} paused=${isPausedRun(job)} />`}
         </section>`
       : null}
 

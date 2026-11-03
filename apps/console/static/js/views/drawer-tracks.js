@@ -5,7 +5,7 @@
 import { html } from '../ui/preact.js';
 import { trackLength, bytes, codecMeaning } from '../lib/format.js';
 import { albumCodec, trackView, trackNote, stagePercent } from '../lib/jobview.js';
-import { itemStatusView, isTerminal } from '../lib/status.js';
+import { itemStatusView, isTerminal, isPausedRun } from '../lib/status.js';
 import { albumProgress } from '../lib/album-progress.js';
 import { useJobRate } from '../ui/job-rate.js';
 import { StatusText, StageTrack, Icon, Chip } from '../ui/components.js';
@@ -17,8 +17,8 @@ const OUTCOME_WORDS = { completed: 'saved', skipped_existing: 'already on disk',
  * of the finished tracks in the order they finished, a translucent fill to the
  * overall stage-weighted progress, and under it the finished count, the
  * tracks saved or on disk with the failed ones counted apart, and the
- * percent. A job that failed or was cancelled drops the percent, which no
- * longer measures anything; so does a single track, whose row has its own
+ * percent. A job that failed, was cancelled or put no track on disk drops
+ * the percent, which no longer measures anything; so does a single track, whose row has its own
  * stage percent beside it. Drawn
  * from the first render, resolving included, so nothing below it moves when
  * tracks arrive or the job ends.
@@ -28,12 +28,13 @@ export function AlbumProgress({ job, items }) {
   const rate = useJobRate(job, items, p.fraction);
   const speed = [rate.avg, rate.left].filter(Boolean).join(' · ');
   const resolving = p.total === 0;
-  const short = isTerminal(job.status) && job.status !== 'completed';
+  // A run that failed, was cancelled or put nothing on disk drops its percent: 100% would read as done.
+  const short = isTerminal(job.status) && (job.status !== 'completed' || (p.total > 0 && p.onDisk === 0));
   const counts = {};
   for (const it of items) if (OUTCOME_WORDS[it.status]) counts[it.status] = (counts[it.status] || 0) + 1;
   const extra = Object.keys(OUTCOME_WORDS)
     .filter((k) => k !== 'completed' && counts[k])
-    .map((k) => `${counts[k]} ${OUTCOME_WORDS[k]}`);
+    .map((k) => `${counts[k]} ${k === 'cancelled' && isPausedRun(job) ? 'paused' : OUTCOME_WORDS[k]}`);
   const text = resolving
     ? 'Resolving tracks'
     : short
@@ -64,13 +65,14 @@ export function AlbumProgress({ job, items }) {
   </div>`;
 }
 
-export function TrackList({ items, albumArtist, keepStatus }) {
+/** `paused`: the run ended because its record was paused, so its stopped tracks read Paused. */
+export function TrackList({ items, albumArtist, keepStatus, paused = false }) {
   const mode = albumCodec(items);
   return html`<ol class="tracks">
     ${items.map((it) => {
-      const v = itemStatusView(it);
+      const v = paused && it.status === 'cancelled' ? { icon: 'pause', role: 'neutral', label: 'Paused' } : itemStatusView(it);
       const t = trackView(it, albumArtist, mode, keepStatus);
-      const note = it.status === 'failed' && it.error ? '' : trackNote(it, v.label);
+      const note = (it.status === 'failed' && it.error) || (paused && it.status === 'cancelled') ? '' : trackNote(it, v.label);
       const pct = it.file_size > 0 ? '' : stagePercent(it);
       return html`<li key=${it.id} class="track" data-row tabindex="-1" data-status=${it.status} data-detail=${t.status ? '' : undefined}>
         <span class="track-index num">${it.index}</span>

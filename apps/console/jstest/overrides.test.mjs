@@ -134,8 +134,8 @@ test('the custom preset sends its edited quality keys, never other keys', () => 
 
 test('qualityText, customLabel and probeWarning say what a download gets', () => {
   const d = optionDefaults(SERVER);
-  assert.equal(qualityText(d), 'Lossless (ALAC) up to 24-bit / 192 kHz');
-  assert.equal(qualityText(presetValues(d, 'atmos')), 'Dolby Atmos, then Lossless (ALAC) up to 24-bit / 192 kHz');
+  assert.equal(qualityText(d), 'ALAC (lossless) up to 24-bit / 192 kHz');
+  assert.equal(qualityText(presetValues(d, 'atmos')), 'Dolby Atmos, then ALAC (lossless) up to 24-bit / 192 kHz');
   assert.equal(qualityText({ ...d, quality_priority: ['aac', 'alac'], codec_alternative: false }), 'AAC only');
   assert.equal(customLabel({ quality_priority: ['ec3', 'alac'] }), 'Custom: Dolby Atmos, ALAC');
   const slots = [
@@ -151,20 +151,20 @@ test('qualityText, customLabel and probeWarning say what a download gets', () =>
     { id: 'alac', tracks: 12, total: 12, best: '24-bit / 44.1\u00a0kHz · 1,580\u00a0kbps · 2\u00a0ch' },
     { id: 'ec3', tracks: 0, total: 12, best: '' },
   ];
-  assert.deepEqual(probedQuality(presetValues(d, 'atmos'), probed), { text: 'Lossless (ALAC), 24-bit / 44.1\u00a0kHz', warning: 'Dolby Atmos not offered' });
+  assert.deepEqual(probedQuality(presetValues(d, 'atmos'), probed), { text: 'ALAC (lossless), 24-bit / 44.1\u00a0kHz', warning: 'Dolby Atmos not offered' });
   assert.equal(probedQuality({ ...presetValues(d, 'atmos'), codec_alternative: false }, probed).text, 'nothing', 'no fallback to AAC-LC');
   assert.equal(probedQuality({ ...presetValues(d, 'atmos'), quality_priority: ['ec3'] }, probed).text, 'AAC-LC, 256 kbps');
 });
 
 test('the dock says what the links will download once read, else what the choice asks for', () => {
   const d = optionDefaults(SERVER);
-  const cd = { text: 'Lossless (ALAC), 16-bit / 44.1\u00a0kHz', warning: '' };
-  const hires = { text: 'Lossless (ALAC), 24-bit / 96\u00a0kHz', warning: '' };
-  assert.equal(dockQuality(d, [cd]), 'Will download: Lossless (ALAC), 16-bit / 44.1\u00a0kHz', 'as the row says it');
-  assert.equal(dockQuality(d, [cd, cd]), 'Will download: Lossless (ALAC), 16-bit / 44.1\u00a0kHz');
-  assert.equal(dockQuality(d, [cd, null]), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz', 'a link not read yet: the ceiling, said as one');
-  assert.equal(dockQuality(d, [cd, hires]), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz', 'links that differ');
-  assert.equal(dockQuality(d, []), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz');
+  const cd = { text: 'ALAC (lossless), 16-bit / 44.1\u00a0kHz', warning: '' };
+  const hires = { text: 'ALAC (lossless), 24-bit / 96\u00a0kHz', warning: '' };
+  assert.equal(dockQuality(d, [cd]), 'Will download: ALAC (lossless), 16-bit / 44.1\u00a0kHz', 'as the row says it');
+  assert.equal(dockQuality(d, [cd, cd]), 'Will download: ALAC (lossless), 16-bit / 44.1\u00a0kHz');
+  assert.equal(dockQuality(d, [cd, null]), 'Asks for ALAC (lossless) up to 24-bit / 192 kHz', 'a link not read yet: the ceiling, said as one');
+  assert.equal(dockQuality(d, [cd, hires]), 'Asks for ALAC (lossless) up to 24-bit / 192 kHz', 'links that differ');
+  assert.equal(dockQuality(d, []), 'Asks for ALAC (lossless) up to 24-bit / 192 kHz');
   assert.equal(dockQuality(null, [cd]), '');
 });
 

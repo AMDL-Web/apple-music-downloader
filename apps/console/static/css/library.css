@@ -95,6 +95,19 @@
   gap: var(--s-1);
 }
 
+/* A record with another quality: each quality and its own state. */
+.rtrack-each {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-1) var(--s-3);
+}
+
+/* A quality chip keeps the label's case ("262 kbps", "44.1 kHz"). */
+.rtrack-slot .chip {
+  text-transform: none;
+}
+
 /* A slot that is not downloaded draws its chip quietly. */
 .rtrack-slot:not([data-state="done"]) {
   opacity: 0.6;
@@ -304,7 +317,8 @@
     padding: var(--s-2) 0;
   }
 
-  .rtrack-state {
+  .rtrack-state,
+  .rtrack-each {
     justify-content: flex-start;
   }
 

@@ -184,10 +184,11 @@ export function trackNote(item, statusLabel) {
 /**
  * The drawer's Activity as {entry, view} rows, oldest first: "Gave up" right
  * before the "Failed" that carries the same text is one failure, so it is
- * dropped and only "Failed" stays.
+ * dropped and only "Failed" stays. In a run its record's pause ended
+ * (`paused`), the cancel reads Paused.
  */
-export function activityRows(activity) {
-  const rows = (activity || []).map((entry) => ({ entry, view: activityView(entry) }));
+export function activityRows(activity, paused = false) {
+  const rows = (activity || []).map((entry) => ({ entry, view: paused && entry.type === 'job_cancelled' ? { label: 'Paused', role: 'neutral', text: '' } : activityView(entry) }));
   return rows.filter((r, i) => {
     const next = rows[i + 1];
     return !(r.entry.type === 'operation_exhausted' && next && next.entry.type === 'job_failed' && r.view.text === next.view.text);

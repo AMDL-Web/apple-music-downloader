@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   jobCounts,
   isAlreadyInLibrary,
+  isPausedRun,
+  wroteNothing,
   jobStatusView,
   itemStatusView,
   hookStatusView,
@@ -46,8 +48,9 @@ test('job status views', () => {
 
 test('a completed job whose tracks were all on disk is "Already in library"', () => {
   const job = { status: 'completed', total_items: 12, completed_items: 0, skipped_items: 12, failed_items: 0 };
-  assert.equal(isAlreadyInLibrary(job), true);
-  const v = jobStatusView(job);
+  const onDisk = Array.from({ length: 12 }, () => ({ status: 'skipped_existing' }));
+  assert.equal(isAlreadyInLibrary(job, onDisk), true);
+  const v = jobStatusView(job, onDisk);
   assert.equal(v.label, 'Already in library');
   assert.equal(v.role, 'skipped');
 
@@ -56,6 +59,25 @@ test('a completed job whose tracks were all on disk is "Already in library"', ()
   assert.equal(jobStatusView(partial).label, 'Completed');
   assert.equal(jobStatusView(partial).detail, '2 already on disk');
   assert.equal(isAlreadyInLibrary({ status: 'completed', total_items: 0, skipped_items: 0 }), false);
+});
+
+test('a run that wrote nothing is not "Already in library" unless its tracks say so', () => {
+  // skipped_items counts tracks on disk and tracks that do not offer the quality alike.
+  const job = { status: 'completed', total_items: 9, completed_items: 0, skipped_items: 9 };
+  assert.equal(wroteNothing(job), true);
+  assert.equal(isAlreadyInLibrary(job), false, 'a list row has no tracks to tell');
+  assert.equal(jobStatusView(job).label, 'Nothing downloaded');
+  const notOffered = Array.from({ length: 9 }, () => ({ status: 'unavailable' }));
+  assert.deepEqual(jobStatusView(job, notOffered), { icon: 'circle-minus', role: 'warning', label: 'Not offered' });
+  assert.equal(jobStatusView(job, [...notOffered.slice(1), { status: 'skipped_existing' }]).label, 'Nothing downloaded');
+});
+
+test('a run its record\'s pause ended reads Paused, not Cancelled', () => {
+  const paused = { status: 'cancelled', error: 'paused', total_items: 16, completed_items: 7, cancelled_items: 9 };
+  assert.equal(isPausedRun(paused), true);
+  assert.deepEqual(jobStatusView(paused), { icon: 'pause', role: 'neutral', label: 'Paused' });
+  assert.equal(jobStatusView({ status: 'cancelled', error: 'cancelled' }).label, 'Cancelled');
+  assert.equal(isPausedRun({ status: 'failed', error: 'paused' }), false);
 });
 
 test('jobCounts defaults missing counters to zero', () => {
@@ -93,8 +115,8 @@ test('log levels and connection states', () => {
   assert.equal(connectionView('offline').label, 'Offline');
 });
 
-test('jobProgress counts tracks once one has finished', () => {
-  const p = jobProgress({ status: 'running', total_items: 14, completed_items: 11, skipped_items: 1, failed_items: 1 });
+test('jobProgress counts the tracks of a finished job', () => {
+  const p = jobProgress({ status: 'failed', total_items: 14, completed_items: 11, skipped_items: 1, failed_items: 1 });
   assert.equal(p.text, '12 / 14');
   assert.equal(p.aria, '12 of 14 tracks, 1 already on disk, 1 failed');
   assert.equal(p.indeterminate, false);
@@ -108,6 +130,20 @@ test('jobProgress counts tracks once one has finished', () => {
   assert.equal(waiting.aria, 'Not started');
 });
 
+test('a running job fills its bar by one measure from start to end', () => {
+  // 40% overall while several tracks download, then the first one finishes:
+  // a count (1 / 11, 9%) would move the bar back.
+  const before = jobProgress({ status: 'running', total_items: 11, progress: 0.4 });
+  const after = jobProgress({ status: 'running', total_items: 11, completed_items: 1, progress: 0.43 });
+  assert.equal(before.text, '40%');
+  assert.equal(after.text, '43%');
+  assert.ok(after.fraction >= before.fraction);
+  assert.equal(after.working, true);
+  assert.equal(after.aria, '1 of 11 tracks, 43% done');
+  // A snapshot without progress never reads below the tracks already finished.
+  assert.equal(jobProgress({ status: 'running', total_items: 4, completed_items: 2 }).text, '50%');
+});
+
 test('a running job with nothing finished shows its overall progress', () => {
   const song = jobProgress({ status: 'running', total_items: 1, progress: 0.426 });
   assert.equal(song.working, true);
@@ -116,10 +152,10 @@ test('a running job with nothing finished shows its overall progress', () => {
   assert.equal(song.text, '42%', 'a lone track would read 0 / 1 for the whole run');
   assert.equal(jobProgress({ status: 'running', total_items: 12, progress: 0.05 }).text, '5%');
   assert.equal(jobProgress({ status: 'running', total_items: 12 }).text, '0%', 'a snapshot without progress has not moved');
-  assert.equal(jobProgress({ status: 'running', total_items: 12, completed_items: 1, progress: 0.2 }).text, '1 / 12');
+  assert.equal(jobProgress({ status: 'running', total_items: 12, completed_items: 1, progress: 0.2 }).text, '20%');
   assert.equal(jobProgress({ status: 'completed', total_items: 1, completed_items: 1 }).text, '1 / 1');
   assert.equal(jobProgress({ status: 'failed', total_items: 1 }).text, '0 / 1');
-  assert.equal(jobProgress({ status: 'running', total_items: 5, completed_items: 1 }).working, false);
+  assert.equal(jobProgress({ status: 'running', total_items: 5, completed_items: 1 }).working, true);
   assert.equal(jobProgress({ status: 'running', total_items: 0 }).working, false);
   assert.equal(jobProgress({ status: 'queued', total_items: 3 }).working, false);
   assert.equal(jobProgress({ status: 'failed', total_items: 3 }).working, false);

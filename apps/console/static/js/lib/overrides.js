@@ -1,6 +1,6 @@
 // Pure download overrides for the New download page: the server's download
 // defaults (GET config `download`), the quality presets of the submit row
-// (Quality: Settings, Lossless, Dolby Atmos then lossless, AAC, Custom), and
+// (Quality: Settings, ALAC, Dolby Atmos then ALAC, AAC, Custom), and
 // the DownloadOverrides a submission sends, which holds
 // only what differs from the defaults. Everything else is a Settings value
 // for every download. Field names, enums and value lists follow
@@ -137,8 +137,8 @@ export const QUALITY_KEYS = ['quality_priority', 'codec_alternative', 'alac_max_
  */
 export const PRESETS = [
   { id: 'follow', label: 'Quality: Settings', values: {} },
-  { id: 'lossless', label: 'Lossless (ALAC)', values: { quality_priority: ['alac'], codec_alternative: true } },
-  { id: 'atmos', label: 'Dolby Atmos, then lossless', values: { quality_priority: ['ec3', 'alac'], codec_alternative: true } },
+  { id: 'lossless', label: 'ALAC (lossless)', values: { quality_priority: ['alac'], codec_alternative: true } },
+  { id: 'atmos', label: 'Dolby Atmos, then ALAC', values: { quality_priority: ['ec3', 'alac'], codec_alternative: true } },
   { id: 'aac', label: 'AAC', values: { quality_priority: ['aac'], codec_alternative: true } },
 ];
 
@@ -165,16 +165,16 @@ export function presetOverrides(defaults, preset, custom = null) {
 }
 
 const SHORT = { alac: 'ALAC', ec3: 'Dolby Atmos', ac3: 'Dolby Digital', aac: 'AAC', 'aac-binaural': 'AAC binaural', 'aac-downmix': 'AAC downmix' };
-const LONG = { ...SHORT, alac: 'Lossless (ALAC)' };
+const LONG = { ...SHORT, alac: 'ALAC (lossless)' };
 
-/** A codec's short name ("Dolby Atmos"); `long` spells ALAC as "Lossless (ALAC)". */
+/** A codec's short name ("Dolby Atmos"), as Settings and the record drawer say it; `long` spells ALAC as "ALAC (lossless)". */
 export const codecName = (value, long = false) => (long ? LONG : SHORT)[value] || value;
 
 const limits = (v) => `up to ${v.alac_max_bit_depth}-bit / ${rateLabel(v.alac_max_sample_rate)}`;
 
 /**
  * What a set of option values asks for, in words: the codecs in order, ALAC
- * with its limits ("Dolby Atmos, then Lossless (ALAC) up to 24-bit / 192
+ * with its limits ("Dolby Atmos, then ALAC (lossless) up to 24-bit / 192
  * kHz"), the card's Quality line. Without the fallback only the first codec
  * counts.
  */
@@ -230,8 +230,8 @@ export function probedQuality(values, slots) {
 /**
  * The dock's quality line. When the qualities of every link to be sent were
  * read and agree, what each row's Will download line says ("Will download:
- * Lossless (ALAC), 16-bit / 44.1 kHz"); else what the choice asks for, said
- * as an ask ("Asks for Lossless (ALAC) up to 24-bit / 192 kHz"): a ceiling,
+ * ALAC (lossless), 16-bit / 44.1 kHz"); else what the choice asks for, said
+ * as an ask ("Asks for ALAC (lossless) up to 24-bit / 192 kHz"): a ceiling,
  * not what a link has. `probed` holds each link's probedQuality, null while
  * unread.
  */

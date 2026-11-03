@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { recordView, trackState, trackCountText, checkText, checkRunning, applyCheckFeed, songsIn, recordQuery, slotQuality, pendingTitle, recordTitle, commonQuality, checkScope, checkBody, resetNote, bulkResetText } from '../static/js/lib/records.js';
+import { recordView, recordHasWork, slotStates, hasExtraSlots, extraCodecs, runSlot, trackState, trackCountText, checkText, checkRunning, applyCheckFeed, songsIn, recordQuery, slotQuality, pendingTitle, recordTitle, commonQuality, checkScope, checkBody, resetNote, bulkResetText } from '../static/js/lib/records.js';
 
 const rec = (fields = {}) => ({ id: '1', name: 'A', state: 'none', tracks_done: 0, tracks_wanted: 9, withheld_count: 0, paused: false, resolved_at: '2026-11-02T00:00:00Z', catalog_state: 'ok', ...fields });
 
 test('a record reads its run first, then paused, then its state, with its flags', () => {
   assert.equal(recordView(rec({ active_job_id: 'j' })).view.label, 'In the queue');
+  assert.equal(recordView(rec({ active_job_id: 'j' }), 'queued').view.label, 'In the queue');
+  assert.equal(recordView(rec({ active_job_id: 'j' }), 'running').view.label, 'Running', 'as its row in Activity says');
+  assert.equal(recordView(rec({ active_job_id: 'j', state: 'complete' }), 'completed').view.label, 'Downloaded', 'a run that ended, before the record is read again');
   assert.equal(recordView(rec({ paused: true })).view.label, 'Paused');
   assert.equal(recordView(rec({ state: 'complete', tracks_done: 9 })).view.label, 'Downloaded');
   assert.equal(recordView(rec({ state: 'partial', tracks_done: 3 })).view.label, '3 of 9');
@@ -28,6 +31,36 @@ test('a track reads its main slot, and the storefront and wanted flag first', ()
   const failed = trackState(t([{ slot: 'main', audio_state: 'given_up', last_error: 'boom' }]));
   assert.deepEqual([failed.view.label, failed.note], ['Given up', 'boom']);
   assert.deepEqual(songsIn({ tracks: [t([{ slot: 'main', audio_state: 'missing' }])] }, ['missing']), ['7']);
+});
+
+test('a track with another quality says each quality\'s own state', () => {
+  const t = (files) => ({ song_id: '7', name: 'S', wanted: true, availability: 'available', files });
+  // Add quality queued AAC: the ALAC file is done, the AAC one is not.
+  const queued = t([{ slot: 'main', audio_state: 'done', codec: 'alac', quality_label: '16-bit/44 kHz' }, { slot: 'aac', audio_state: 'pending' }]);
+  assert.deepEqual(
+    slotStates(queued).map((s) => [s.codec, s.view.label]),
+    [['ALAC', 'Downloaded'], ['AAC', 'Waiting']],
+  );
+  assert.equal(slotStates(queued)[0].label, 'ALAC 16-bit/44 kHz: Downloaded');
+  const done = t([{ slot: 'main', audio_state: 'done', codec: 'alac' }, { slot: 'aac', audio_state: 'done', codec: 'aac', quality_label: '262Kbps', last_job_id: 'job_b' }]);
+  assert.equal(slotStates(done)[1].label, 'AAC 262 kbps: Downloaded');
+  const record = { tracks: [queued, done, t([{ slot: 'main', audio_state: 'done', last_job_id: 'job_a' }])] };
+  assert.equal(hasExtraSlots(record), true);
+  assert.equal(hasExtraSlots({ tracks: [t([{ slot: 'main', audio_state: 'done' }])] }), false);
+  assert.deepEqual(extraCodecs(record), ['AAC']);
+  assert.equal(runSlot(record, 'job_b'), 'AAC', 'the run that wrote the AAC files');
+  assert.equal(runSlot(record, 'job_a'), '');
+  assert.equal(runSlot(record, 'job_x'), '');
+});
+
+test('a record has something to pause only while a run could still do something', () => {
+  const t = (state, extra = {}) => ({ wanted: true, availability: 'available', files: [{ slot: 'main', audio_state: state }], ...extra });
+  assert.equal(recordHasWork(rec({ state: 'complete', tracks: [t('done'), t('done')] })), false);
+  assert.equal(recordHasWork(rec({ tracks: [t('unavailable'), t('pending', { availability: 'unavailable' })] })), false, 'nothing offered');
+  assert.equal(recordHasWork(rec({ tracks: [t('done'), t('pending')] })), true);
+  assert.equal(recordHasWork(rec({ tracks: [t('failed')] })), true, 'a failed slot is retried');
+  assert.equal(recordHasWork(rec({ active_job_id: 'j', tracks: [t('done')] })), true);
+  assert.equal(recordHasWork(rec({ resolved_at: undefined, tracks: [] })), true);
 });
 
 test('counts, checks and queries read as the page shows them', () => {

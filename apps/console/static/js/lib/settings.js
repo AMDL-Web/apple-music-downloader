@@ -101,7 +101,7 @@ export const FIELDS = [
       { value: 'ac3', label: 'Dolby Digital (AC-3)', hint: 'Dolby Digital surround' },
       { value: 'aac', label: 'AAC (Enhanced HLS)', hint: 'The Enhanced HLS AAC stream' },
       { value: 'aac-binaural', label: 'AAC binaural', hint: 'Spatial audio rendered for headphones' },
-      { value: 'aac-downmix', label: 'AAC Dolby downmix', hint: 'Spatial audio downmixed to stereo' },
+      { value: 'aac-downmix', label: 'AAC downmix', hint: 'Dolby spatial audio downmixed to stereo' },
     ],
   },
   {

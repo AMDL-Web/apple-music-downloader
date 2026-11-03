@@ -1,21 +1,23 @@
 // Record drawer (#/library/albums/:id, #/library/playlists/:id): one album or
 // playlist record from GET /library/{kind}/{id}. The head (cover, title,
-// artist, facts with the tracks the storefront withholds, its state and
-// Paused), the actions (Pause or Resume, Reset, Add quality, Download
-// missing last, so it appears without moving the others, then Check this
-// album and Remove from amdl), how its last disk check
-// ended, each track with its main slot's state and its other qualities as
-// chips, and its runs. Kept fresh by the feed's resource_updated and
+// artist, facts with the tracks the storefront withholds, its qualities, its
+// state, with its active run's status, and Paused), the actions (Reset and
+// Add quality, which keep their cells, then Resume, or Pause while it has
+// something to download, and Download missing last, so it appears without
+// moving the others, then Check this album and Remove from amdl), how its
+// last disk check ended, each track with its state (each quality's own
+// state once it has more than one), and its runs, a run of another quality
+// naming it. Kept fresh by the feed's resource_updated and
 // check_updated; what it changes it tells the app (recordsChanged), since
 // a pause, resume or removal with no run sends no resource_updated.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { getRecord, pauseRecord, resumeRecord, resetRecord, deleteRecord, downloadRecord, startCheck, listDownloads } from '../api.js';
 import { artPalette, paletteStyle, artWidths, trackLength, count } from '../lib/format.js';
-import { recordTitle, recordSub, recordArt, recordPalette, recordView, trackState, slotQuality, audioView, trackCountText, kindWord, commonQuality, checkScope, checkText, checkBody, resetNote } from '../lib/records.js';
+import { recordTitle, recordSub, recordArt, recordPalette, recordView, trackState, slotQuality, audioView, slotStates, hasExtraSlots, extraCodecs, runSlot, recordHasWork, trackCountText, kindWord, commonQuality, checkScope, checkText, checkBody, resetNote } from '../lib/records.js';
 import { slotChoices, CHOICE_LABEL } from '../lib/download-ask.js';
 import { buildHash } from '../lib/route.js';
-import { useApp, Artwork, Badge, Button, Empty, ErrorNote, SkeletonRows, StatusText, Chip, RelTime, Notice } from '../ui/components.js';
+import { useApp, Artwork, Badge, Button, Empty, ErrorNote, SkeletonRows, StatusText, Chip, RelTime, Notice, Icon } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { MenuButton } from '../ui/menu.js';
 import { JobRow } from './queue-row.js';
@@ -128,12 +130,17 @@ export function RecordDrawer({ record: ref, onClose }) {
 function RecordBody({ kind, record, runs, reload, onClose }) {
   const app = useApp();
   const palette = artPalette(recordPalette(record));
-  const { view, flags } = recordView(record);
+  const run = record.active_job_id ? runs.find((j) => j.id === record.active_job_id) : null;
+  const { view, flags } = recordView(record, run ? run.status : '');
   const sub = recordSub(record);
   const year = record.release_date ? record.release_date.slice(0, 4) : '';
   const meta = [kindWord(kind) === 'album' ? 'Album' : 'Playlist', year, record.genre, trackCountText(record), record.storefront_read ? record.storefront_read.toUpperCase() : ''].filter(Boolean).join(' · ');
-  // The quality most tracks have is said once; a track shows a chip only where it differs, and for its other qualities.
+  // The quality most tracks have is said once, with the record's other
+  // qualities; a track shows a chip only where its main quality differs.
+  // With another quality, each track's state names every quality it has.
   const usual = commonQuality(record);
+  const multi = hasExtraSlots(record);
+  const qualities = [usual, ...extraCodecs(record)].filter(Boolean).join(' · ');
   const [busy, setBusy] = useState('');
   const [ask, setAsk] = useState(null);
   const active = Boolean(record.active_job_id);
@@ -212,7 +219,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
         <h2 id="drawer-title" class=${record.name ? 'drawer-title' : 'drawer-title is-unresolved'} dir="auto">${name}</h2>
         ${sub ? html`<p class="drawer-artist" dir="auto">${sub}</p>` : null}
         ${meta ? html`<p class="drawer-meta">${meta}</p>` : null}
-        ${usual ? html`<p class="drawer-meta drawer-summary">${usual}</p>` : null}
+        ${qualities ? html`<p class="drawer-meta drawer-summary">${qualities}</p>` : null}
         ${record.last_checked_at ? html`<p class="drawer-meta">Checked <${RelTime} value=${record.last_checked_at} /></p>` : null}
         <div class="drawer-badges">
           <${Badge} view=${view} />
@@ -223,9 +230,6 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
 
     <div class="drawer-actions">
       <div class="drawer-actions-row">
-        ${record.paused
-          ? html`<${Button} variant="primary" icon="play" disabled=${Boolean(busy)} onClick=${() => act('resume', () => resumeRecord(kind, record.id), 'Resumed')}>Resume</${Button}>`
-          : html`<${Button} icon="pause" disabled=${Boolean(busy)} onClick=${() => act('pause', () => pauseRecord(kind, record.id), 'Paused')}>Pause</${Button}>`}
         <${MenuButton} className="record-reset" text="Reset" icon="rotate" label="Reset" title=${active ? 'Pause it first' : undefined} heading=${name} disabled=${Boolean(busy) || active} items=${RESET_ITEMS} onChoose=${onReset} />
         <${MenuButton}
           className="record-add"
@@ -238,6 +242,11 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
           items=${slotChoices([]).map((c) => ({ id: c, label: CHOICE_LABEL[c] || c }))}
           onChoose=${addQuality}
         />
+        ${record.paused
+          ? html`<${Button} variant="primary" icon="play" disabled=${Boolean(busy)} onClick=${() => act('resume', () => resumeRecord(kind, record.id), 'Resumed')}>Resume</${Button}>`
+          : recordHasWork(record)
+            ? html`<${Button} icon="pause" disabled=${Boolean(busy)} onClick=${() => act('pause', () => pauseRecord(kind, record.id), 'Paused')}>Pause</${Button}>`
+            : null}
         ${record.tracks_missing
           ? html`<${Button} icon="download" className="record-missing" disabled=${Boolean(busy) || active} title=${active ? 'Pause it first' : undefined} onClick=${() => act('missing', () => resetRecord(kind, record.id, { what: 'audio', states: ['missing'] }), (out) => resetNote(out, record, `Downloading ${count(record.tracks_missing)} missing`))}>Download missing</${Button}>`
           : null}
@@ -262,7 +271,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
       ${tracks.length === 0
         ? html`<${Empty} icon="list" title=${record.resolved_at ? 'No tracks' : 'Not read yet'} />`
         : html`<ol class="rtracks">
-            ${tracks.map((t, i) => html`<${RecordTrack} key=${t.song_id} t=${t} n=${t.position !== undefined ? t.position + 1 : t.song_number || i + 1} artist=${record.artist_name} usual=${usual} disabled=${Boolean(busy) || active} onReset=${(what) => resetWhat(what, [t.song_id])} />`)}
+            ${tracks.map((t, i) => html`<${RecordTrack} key=${t.song_id} t=${t} n=${t.position !== undefined ? t.position + 1 : t.song_number || i + 1} artist=${record.artist_name} usual=${usual} multi=${multi} disabled=${Boolean(busy) || active} onReset=${(what) => resetWhat(what, [t.song_id])} />`)}
           </ol>`}
     </section>
 
@@ -270,7 +279,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
       ? html`<section class="drawer-section" aria-labelledby="runs-title">
           <div class="section-head"><h3 id="runs-title" class="section-title">Runs</h3></div>
           <ul class="job-list record-runs">
-            ${runs.map((j) => html`<li key=${j.id} class="job-item"><${JobRow} job=${j} href=${buildHash('queue', {}, j.id)} /></li>`)}
+            ${runs.map((j) => html`<li key=${j.id} class="job-item"><${JobRow} job=${j} href=${buildHash('queue', {}, j.id)} also=${runSlot(record, j.id)} /></li>`)}
           </ul>
         </section>`
       : null}
@@ -304,10 +313,16 @@ const TRACK_ITEMS = [
   { id: 'lyrics', label: 'Lyrics again' },
 ];
 
-/** One track: number, title, its qualities as chips, its main slot's state, a menu to reset it. */
-function RecordTrack({ t, n, artist, usual, disabled, onReset }) {
+/**
+ * One track: number, title, its main quality as a chip where it differs
+ * from the record's, its state, a menu to reset it. In a record with more
+ * than one quality (`multi`) the state names each quality with its own
+ * state ("✓ ALAC ◌ AAC"), so one still waiting never reads as downloaded.
+ */
+function RecordTrack({ t, n, artist, usual, multi, disabled, onReset }) {
   const s = trackState(t);
-  const slots = [s.main, ...s.extra].filter((f) => f && !(f.slot === 'main' && slotQuality(f) === usual));
+  const slots = s.main && slotQuality(s.main) !== usual ? [s.main] : [];
+  const each = multi && t.wanted && t.availability !== 'unavailable' ? slotStates(t) : [];
   const done = s.main && s.main.audio_state === 'done';
   return html`<li class="rtrack" data-row tabindex="-1" data-state=${s.main ? s.main.audio_state : 'none'} data-wanted=${t.wanted ? undefined : 'false'}>
     <span class="track-index num">${n}</span>
@@ -319,11 +334,15 @@ function RecordTrack({ t, n, artist, usual, disabled, onReset }) {
       ${slots.map((f) => {
         const q = slotQuality(f);
         const v = audioView(f.audio_state);
-        return q ? html`<span key=${f.slot} class="rtrack-slot" data-slot=${f.slot} data-state=${f.audio_state} title=${f.slot === 'main' ? `${q}: ${v.label}` : `Another quality, ${q}: ${v.label}`}><${Chip}>${q}</${Chip}></span>` : null;
+        return q ? html`<span key=${f.slot} class="rtrack-slot" data-slot=${f.slot} data-state=${f.audio_state} title=${`${q}: ${v.label}`}><${Chip}>${q}</${Chip}></span>` : null;
       })}
     </span>
     <span class="rtrack-len num">${trackLength(t.duration_ms)}</span>
-    <span class="rtrack-state"><${StatusText} view=${s.view} /></span>
+    <span class="rtrack-state">
+      ${each.length
+        ? html`<span class="rtrack-each">${each.map((e) => html`<span key=${e.key} class="status-text" data-role=${e.view.role} title=${e.label}><${Icon} name=${e.view.icon} size="sm" /><span aria-hidden="true">${e.codec}</span><span class="sr-only">${e.label}</span></span>`)}</span>`
+        : html`<${StatusText} view=${s.view} />`}
+    </span>
     <span class="rtrack-menu">
       ${done || (s.main && ['failed', 'given_up', 'missing'].includes(s.main.audio_state))
         ? html`<${MenuButton} className="rtrack-btn" size="sm" label=${`Actions for ${t.name}`} title=${disabled ? 'Pause it first' : 'More actions'} heading=${t.name} disabled=${disabled} items=${TRACK_ITEMS} onChoose=${onReset} />`

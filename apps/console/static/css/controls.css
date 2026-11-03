@@ -451,16 +451,17 @@
   background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
 }
 
-/* Running, tracks resolved, none finished: the job's overall progress fills
-   the cells in order, each to its share (--f), or the bar, translucent like
-   the drawer's album bar (--live-fill; currentColor follows a section's text
-   color). */
+/* Running, tracks resolved: the job's overall progress fills the cells in
+   order, each to its share (--f), or the bar, translucent like the drawer's
+   album bar (--live-fill; currentColor follows a section's text color). A
+   finished track's cell has its own color, so only the remaining ones take
+   the fill. */
 .jprog[data-working] :is(.pcell, .pbar) {
   position: relative;
   overflow: hidden;
 }
 
-.jprog[data-working] .pcell::before,
+.jprog[data-working] .pcell[data-state="remaining"]::before,
 .jprog-live {
   content: "";
   position: absolute;
