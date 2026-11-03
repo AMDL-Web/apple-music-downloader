@@ -23,7 +23,7 @@ if [ "$os" = darwin ]; then w="$HOME/Library/Application Support/AMDL/wrapper"; 
 mkdir -p "$w/logs" "$w/assets/0123456789ab"
 head -c 4194304 /dev/urandom >"$w/data.img"
 digest=$(printf 'a%.0s' $(seq 64))
-port=$((20000 + RANDOM % 20000))
+port=${LEGACY_PORT:-$((20000 + RANDOM % 20000))}
 printf '{"id":"0123456789ab","commit":"0123456789abcdef0123456789abcdef01234567","artifact_id":1,"sha256":"%s","source":"artifact 1","installed_at":"2026-10-01T00:00:00Z","port":%s,"qemu":"%s"}\n' \
 	"$digest" $((port + 1)) "$(command -v true)" >"$w/installed.json"
 disk=$(sha "$w/data.img")

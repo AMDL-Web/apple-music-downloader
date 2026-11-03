@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -107,8 +108,16 @@ func runGate(t *testing.T, mode string) (string, error) {
 	if err := os.MkdirAll(work, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The cases run in parallel: a port the system handed out keeps them from
+	// drawing the same random one.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	ln.Close()
 	cmd := exec.Command("bash", "legacy-guest.sh", cand, work)
-	cmd.Env = append(os.Environ(), "UPGRADECHECK_FAKE="+mode, "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "LEGACY_WAIT=2")
+	cmd.Env = append(os.Environ(), "UPGRADECHECK_FAKE="+mode, "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "LEGACY_WAIT=2", "LEGACY_PORT="+port)
 	cmd.WaitDelay = 5 * time.Second
 	timer := time.AfterFunc(90*time.Second, func() { _ = cmd.Process.Kill() })
 	defer timer.Stop()
