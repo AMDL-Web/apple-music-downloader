@@ -20,6 +20,23 @@ test('one matching path among many is enough', () => {
 });
 
 test('an unknown change list runs every job', () => {
-  assert.deepEqual(classify([]), { guestboot: true });
-  assert.deepEqual(classify(['', '\n']), { guestboot: true });
+  assert.deepEqual(classify([]), { go: true, guestboot: true });
+  assert.deepEqual(classify(['', '\n']), { go: true, guestboot: true });
+});
+
+test('documentation, rules, the website and the console skip the Go jobs', () => {
+  for (const f of ['docs/api.md', 'README.md', 'README.zh-CN.md', 'AGENTS.md', 'internal/jobs/AGENTS.md', 'apps/console/AGENTS.md',
+    '.claude/skills/amdl-release/SKILL.md', '.claude/hooks/guard-commands.mjs', 'apps/site/build.mjs', 'apps/console/static/app.js',
+    '.github/release-notes/v2.0.0.md', 'LICENSE']) {
+    assert.equal(classify([f]).go, false, f);
+  }
+  assert.equal(classify(['docs/api.md', 'apps/console/static/app.js', 'apps/site/content/en.json']).go, false);
+});
+
+test('anything else, embedded Markdown included, runs the Go jobs', () => {
+  for (const f of ['internal/jobs/jobs.go', 'apps/amdl/skill/SKILL.md', 'configs/config.example.yaml', 'Makefile', 'go.mod',
+    '.github/workflows/ci.yml', '.github/scripts/shard.mjs', 'deploy/server/Dockerfile', 'tools/upgradecheck/run.sh', 'apps/desktop/internal/ui/x.go']) {
+    assert.equal(classify([f]).go, true, f);
+  }
+  assert.equal(classify(['docs/api.md', 'internal/jobs/jobs.go']).go, true);
 });

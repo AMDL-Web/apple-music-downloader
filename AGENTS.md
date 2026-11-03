@@ -184,7 +184,7 @@ sit in front of it and adds the login API the console uses; a bare wrapper-lite 
 
 | Rule | Enforced by |
 | --- | --- |
-| gofmt, build, vet, tests, race detector, govulncheck, Node tests | CI, one step per `make` target; the race detector is two parallel jobs, `make race-ui` and `make race-rest`, which together cover every package |
+| gofmt, build, vet, tests, race detector, govulncheck, Node tests | CI, one step per `make` target; the race detector is three parallel `make race-*` jobs covering every package |
 | The Docker image builds | CI docker build job |
 | Config example key set and defaults match the struct | tests in `internal/config` |
 | Routes, error codes and runtime config keys match `internal/api/openapi.yaml` | parity tests in `internal/api` |

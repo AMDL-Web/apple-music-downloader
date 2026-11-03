@@ -63,8 +63,8 @@ make check
 ```
 
 It runs, in order: `gofmt` check, build, vet, tests, the race detector, `govulncheck`
-and the Node script tests. CI runs the tests with a coverage summary (`make cover`)
-and the race detector as two parallel jobs (`make race-ui`, `make race-rest`).
+and the Node script tests. CI runs the tests with a coverage summary (`make cover-ui`, `make cover-rest`)
+and the race detector (`make race-ui`, `make race-app`, `make race-rest`) as parallel jobs.
 `make help` lists the narrower targets, and `make dev` starts the API in simulate mode
 on `127.0.0.1:18080`, which needs no wrapper.
 
