@@ -1,0 +1,547 @@
+{
+  "version": 1,
+  "storefront": "cn",
+  "created": "2026-11-03",
+  "about": "The kept benchmark corpus: what to download, in which codecs. Captures live outside the repo (see docs/benchmarks-corpus.md).",
+  "not_covered": {
+    "alac-192k": "no 192 kHz album in the library and none found in a short catalog search",
+    "music-video": "amdl downloads audio only (README, Audio only)"
+  },
+  "items": [
+    {
+      "id": "album-1580904295",
+      "url": "https://music.apple.com/cn/album/1580904295",
+      "name": "月姫 -A piece of blue glass moon- THEME SONG E.P.",
+      "kind": "album",
+      "tracks": 8,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-96k-24"
+      ],
+      "shapes": [
+        "ep"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": true,
+      "note": "the 2026-08 and 2026-11-01 benchmark album"
+    },
+    {
+      "id": "album-1876728371",
+      "url": "https://music.apple.com/cn/album/1876728371",
+      "name": "second person (Yorushika)",
+      "kind": "album",
+      "tracks": 22,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-96k-24",
+        "atmos",
+        "aac-binaural",
+        "aac-downmix"
+      ],
+      "shapes": [
+        "album"
+      ],
+      "codecs": [
+        "alac",
+        "ec3",
+        "aac-binaural",
+        "aac-downmix"
+      ],
+      "compare": true,
+      "compare_codecs": [
+        "alac",
+        "ec3",
+        "aac-binaural"
+      ]
+    },
+    {
+      "id": "album-6784529612",
+      "url": "https://music.apple.com/cn/album/6784529612",
+      "name": "致並跡 (MyGO!!!!!)",
+      "kind": "album",
+      "tracks": 10,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-96k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "album"
+      ],
+      "codecs": [
+        "alac",
+        "ec3"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1807241685",
+      "url": "https://music.apple.com/cn/album/1807241685",
+      "name": "Completeness (Ave Mujica)",
+      "kind": "album",
+      "tracks": 7,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-96k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "ep"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1496711358",
+      "url": "https://music.apple.com/cn/album/1496711358",
+      "name": "Quiet Winter Night (Hoff Ensemble, 2L)",
+      "kind": "album",
+      "tracks": 6,
+      "discs": 1,
+      "source": "catalog",
+      "formats": [
+        "alac-88.2k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "album"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false,
+      "note": "not in the library; the highest sample rate found (no 192 kHz album in the library)"
+    },
+    {
+      "id": "album-1858184006",
+      "url": "https://music.apple.com/cn/album/1858184006",
+      "name": "月に向かって撃て - EP (Hoshimachi Suisei)",
+      "kind": "album",
+      "tracks": 5,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-48k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "ep"
+      ],
+      "codecs": [
+        "alac",
+        "ec3"
+      ],
+      "compare": true
+    },
+    {
+      "id": "album-1650841512",
+      "url": "https://music.apple.com/cn/album/1650841512",
+      "name": "Midnights (3am Edition) (Taylor Swift)",
+      "kind": "album",
+      "tracks": 20,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-48k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "album"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1468058165",
+      "url": "https://music.apple.com/cn/album/1468058165",
+      "name": "Lover (Taylor Swift)",
+      "kind": "album",
+      "tracks": 18,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "album"
+      ],
+      "codecs": [
+        "alac",
+        "ec3"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1576634760",
+      "url": "https://music.apple.com/cn/album/1576634760",
+      "name": "Fate/stay night [Realta Nua] Soundtrack Reproduction",
+      "kind": "album",
+      "tracks": 62,
+      "discs": 3,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-16"
+      ],
+      "shapes": [
+        "multi-disc",
+        "compilation"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": true,
+      "note": "the 2026-08 and 2026-11-01 benchmark album"
+    },
+    {
+      "id": "album-1712044142",
+      "url": "https://music.apple.com/cn/album/1712044142",
+      "name": "Fate/Grand Order -絶対魔獣戦線バビロニア- & -終局特異点 冠位時間神殿ソロモン- Original Soundtrack",
+      "kind": "album",
+      "tracks": 103,
+      "discs": 4,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-16"
+      ],
+      "shapes": [
+        "long",
+        "multi-disc"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": true
+    },
+    {
+      "id": "album-1594147504",
+      "url": "https://music.apple.com/cn/album/1594147504",
+      "name": "月姫 -A piece of blue glass moon- Original Soundtrack",
+      "kind": "album",
+      "tracks": 96,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-16"
+      ],
+      "shapes": [
+        "long",
+        "compilation"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1239706770",
+      "url": "https://music.apple.com/cn/album/1239706770",
+      "name": "進撃の巨人 Season 2 Original Soundtrack",
+      "kind": "album",
+      "tracks": 33,
+      "discs": 2,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-16"
+      ],
+      "shapes": [
+        "multi-disc"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1831715434",
+      "url": "https://music.apple.com/cn/album/1831715434",
+      "name": "1 Billion Streams Club",
+      "kind": "album",
+      "tracks": 57,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-16"
+      ],
+      "shapes": [
+        "compilation"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1472726420",
+      "url": "https://music.apple.com/cn/album/1472726420",
+      "name": "天気の子 (RADWIMPS)",
+      "kind": "album",
+      "tracks": 31,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-16",
+        "atmos"
+      ],
+      "shapes": [
+        "album"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1603820296",
+      "url": "https://music.apple.com/cn/album/1603820296",
+      "name": "Kyougen (Ado)",
+      "kind": "album",
+      "tracks": 14,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-44.1k-16",
+        "atmos"
+      ],
+      "shapes": [
+        "album"
+      ],
+      "codecs": [
+        "alac",
+        "ec3"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1537248340",
+      "url": "https://music.apple.com/cn/album/1537248340",
+      "name": "MEMORIA - EP (藍井エイル)",
+      "kind": "album",
+      "tracks": 4,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "aac-only"
+      ],
+      "shapes": [
+        "ep"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": true,
+      "note": "no lossless stream: alac with codec fallback ends on AAC-LC"
+    },
+    {
+      "id": "album-1535817964",
+      "url": "https://music.apple.com/cn/album/1535817964",
+      "name": "ideal white - EP (綾野ましろ)",
+      "kind": "album",
+      "tracks": 4,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "aac-only"
+      ],
+      "shapes": [
+        "ep"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-6781591897",
+      "url": "https://music.apple.com/cn/album/6781591897",
+      "name": "Amore - Single (ReoNa)",
+      "kind": "album",
+      "tracks": 1,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-96k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "single"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": true
+    },
+    {
+      "id": "album-1721450220",
+      "url": "https://music.apple.com/cn/album/1721450220",
+      "name": "Sunny - Single (Yorushika)",
+      "kind": "album",
+      "tracks": 1,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-96k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "single"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "album-1595423133",
+      "url": "https://music.apple.com/cn/album/1595423133",
+      "name": "Red (Taylor's Version) [Video Deluxe]",
+      "kind": "album",
+      "tracks": 30,
+      "discs": 1,
+      "source": "library",
+      "formats": [
+        "alac-96k-24",
+        "atmos"
+      ],
+      "shapes": [
+        "album",
+        "has-videos"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false,
+      "note": "amdl skips the album's music videos by design (audio only)"
+    },
+    {
+      "id": "playlist-tenki",
+      "url": "https://music.apple.com/cn/playlist/pl.u-mJy8gd7tzxJKPlD",
+      "name": "天気の子 (own, shared)",
+      "kind": "playlist",
+      "tracks": 16,
+      "source": "library",
+      "formats": [
+        "mixed"
+      ],
+      "shapes": [
+        "user-playlist"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": true
+    },
+    {
+      "id": "playlist-fate-strange-fake",
+      "url": "https://music.apple.com/cn/playlist/pl.f491e0a41b7d49c8869cd4bbf6873117",
+      "name": "Fate/strange Fake (editorial)",
+      "kind": "playlist",
+      "tracks": 17,
+      "source": "library",
+      "formats": [
+        "mixed"
+      ],
+      "shapes": [
+        "editorial-playlist"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "playlist-kaguya",
+      "url": "https://music.apple.com/cn/playlist/pl.6546380c92bd4266a03b38b869b01e71",
+      "name": "Kaguya-sama: Love Is War Essentials (editorial)",
+      "kind": "playlist",
+      "tracks": 25,
+      "source": "library",
+      "formats": [
+        "mixed"
+      ],
+      "shapes": [
+        "editorial-playlist"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "playlist-replay-2025",
+      "url": "https://music.apple.com/cn/playlist/pl.rp-L2M2tRZ9bgnw",
+      "name": "音乐回忆 2025 (Replay)",
+      "kind": "playlist",
+      "tracks": 99,
+      "source": "library",
+      "formats": [
+        "mixed"
+      ],
+      "shapes": [
+        "big-playlist",
+        "replay-playlist"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "playlist-own-40",
+      "url": "https://music.apple.com/cn/playlist/pl.u-mJy8150CzxJKPlD",
+      "name": "1292321😴 (own, shared)",
+      "kind": "playlist",
+      "tracks": 40,
+      "source": "library",
+      "formats": [
+        "mixed"
+      ],
+      "shapes": [
+        "user-playlist"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": false
+    },
+    {
+      "id": "private-playlist-dream",
+      "urls": [
+        "https://music.apple.com/cn/song/1833372290",
+        "https://music.apple.com/cn/song/1542953977",
+        "https://music.apple.com/cn/song/1536129357",
+        "https://music.apple.com/cn/song/1536130473",
+        "https://music.apple.com/cn/song/1696604900",
+        "https://music.apple.com/cn/song/1603163786",
+        "https://music.apple.com/cn/song/1490256995",
+        "https://music.apple.com/cn/song/1542182544",
+        "https://music.apple.com/cn/song/1509494402"
+      ],
+      "name": "像是一个很长的梦 (library-only playlist, as its song links)",
+      "kind": "songs",
+      "tracks": 9,
+      "source": "library",
+      "formats": [
+        "mixed"
+      ],
+      "shapes": [
+        "private-playlist"
+      ],
+      "codecs": [
+        "alac"
+      ],
+      "compare": true,
+      "note": "a library-only playlist has no catalog link; amdl and the other tools download it per song"
+    }
+  ]
+}
