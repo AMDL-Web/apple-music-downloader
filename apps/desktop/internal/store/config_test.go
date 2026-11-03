@@ -121,7 +121,7 @@ func (f *fakeBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // live connects a store to the fake backend. Its posts queue up and run on
 // the test's goroutine in settle, as the UI thread runs them.
-func live(t *testing.T, f *fakeBackend) (*Store, func(until func() bool)) {
+func live(t *testing.T, f http.Handler) (*Store, func(until func() bool)) {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)

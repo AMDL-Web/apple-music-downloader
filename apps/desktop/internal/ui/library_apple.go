@@ -59,7 +59,31 @@ func (a *App) appleList(c *ui.Context, k *Tokens) {
 		for _, it := range items {
 			a.appleRow(c, k, it)
 		}
+		a.appleMore(c, k)
 	}).Grow(1).Background(k.Ground)
+}
+
+// appleMore reads the list's next page as the end comes near, and holds
+// the row under the list that says when that read failed.
+func (a *App) appleMore(c *ui.Context, k *Tokens) {
+	s := a.Store
+	l := &s.Library
+	if len(l.Apple.Items) >= l.Apple.Total {
+		return
+	}
+	ui.Row(c.Key("more")).Height(groupRow).Gap(10).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+		if l.AppleMore == store.PageFailed {
+			ui.Text(c, "Could not load more.").FontSize(12).TextColor(k.Bad)
+			if button(c, k, buttonGhost, "Try again", nil).Clicked() {
+				s.MoreApple()
+			}
+		}
+	})
+	if l.AppleMore == store.PageIdle {
+		if st := a.scrolls["apple"]; st == nil || st.MaxY-st.Y < loadAhead {
+			s.MoreApple()
+		}
+	}
 }
 
 // appleAccounts switches between the accounts whose Apple library amdl
