@@ -26,7 +26,7 @@ Reversible work, stating any assumption that matters:
   databases are refused.
 - Deleting branches, tags, releases or GHCR images.
 - Repository and account settings: branch protection, secrets, repo variables such
-  as `CLAUDE_AUTO_REVIEW` and `CODEX_AUTO_REVIEW`, installed apps.
+  as `CLAUDE_AUTO_REVIEW`, installed apps.
 - A new mechanism (CI step, hook, check, scheduled job), after the agent says what
   it prevents, when it runs and who reads it.
 
@@ -67,7 +67,7 @@ and the work proceeds on that reading.
 
 ## Review bots
 
-Claude and Codex review every non-draft PR and follow [REVIEW.md](REVIEW.md).
+Claude and Devin review every non-draft PR and follow [REVIEW.md](REVIEW.md).
 Agents fix real defects in one push after the first batch of reviews, answer
 edge-case findings with a reason, and stop to rethink the approach if a third round
 still finds new blocking problems.
