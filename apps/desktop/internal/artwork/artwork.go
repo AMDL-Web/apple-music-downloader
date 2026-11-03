@@ -5,6 +5,7 @@ package artwork
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -29,10 +30,24 @@ const (
 	retryMost  = 5 * time.Minute
 )
 
+// userAgent and referer make a cover request look like the web player's.
+// Apple's image CDN answers 403 to Go's default User-Agent for a size it has
+// not rendered before, so without them some covers never load.
+const (
+	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+	referer   = "https://music.apple.com/"
+)
+
+// fallbackPx are the smaller sizes a cover is asked for when its size is
+// refused: an Apple-generated playlist cover serves 512 pixels to nobody.
+var fallbackPx = []int{256, 128}
+
 // Cache holds decoded covers. Use Get on the UI thread.
 type Cache struct {
-	post    func(func())
-	http    *http.Client
+	post func(func())
+	http *http.Client
+	// disk, when set, keeps fetched covers across launches.
+	disk    *diskCache
 	slots   chan struct{}
 	entries map[coverKey]*entry
 	swept   time.Time
@@ -102,7 +117,7 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 	e.used = now
 	if e.img == nil && !e.loading && (e.failures == 0 || now.Sub(e.failedAt) >= retryWait(e.failures)) {
 		e.loading = true
-		go c.fetch(URL(key.template, key.px), e)
+		go c.fetch(key, e)
 	}
 	if now.Sub(c.swept) > idleRelease/2 {
 		c.sweep(now)
@@ -124,16 +139,21 @@ func bucket(px int) int {
 	return 1200
 }
 
-func (c *Cache) fetch(url string, e *entry) {
+func (c *Cache) fetch(key coverKey, e *entry) {
 	c.slots <- struct{}{}
 	defer func() { <-c.slots }()
-	img, status, err := c.load(url)
+	url := URL(key.template, key.px)
+	img, status, err := c.loadSized(key)
 	c.post(func() {
 		e.loading = false
 		if err != nil {
 			e.failures++
 			e.failedAt = c.now()
-			slog.Debug("artwork fetch failed", "url", url, "status", status, "failures", e.failures, "err", err)
+			if e.failures == 1 {
+				slog.Warn("artwork fetch failed", "url", url, "status", status, "err", err)
+			} else {
+				slog.Debug("artwork fetch failed again", "url", url, "status", status, "failures", e.failures, "err", err)
+			}
 			// The view asks again only as it redraws: one is due then.
 			time.AfterFunc(retryWait(e.failures), func() { c.post(func() {}) })
 			return
@@ -142,15 +162,56 @@ func (c *Cache) fetch(url string, e *entry) {
 	})
 }
 
-// load reads and decodes the cover at url, with the HTTP status it came
-// with, 0 when none came.
+// loadSized loads the cover at its size, or, when the CDN refuses that size,
+// at the next smaller one that it serves.
+func (c *Cache) loadSized(key coverKey) (ui.ImageSource, int, error) {
+	img, status, err := c.load(URL(key.template, key.px))
+	if err == nil || !refused(status) || !strings.Contains(key.template, "{w}") {
+		return img, status, err
+	}
+	for _, px := range fallbackPx {
+		if px >= key.px {
+			continue
+		}
+		if smaller, _, ferr := c.load(URL(key.template, px)); ferr == nil {
+			return smaller, http.StatusOK, nil
+		}
+	}
+	return img, status, err
+}
+
+// refused reports a status that another size of the same cover may not get.
+func refused(status int) bool { return status == http.StatusForbidden || status == http.StatusNotFound }
+
+// load reads and decodes the cover at url, from the disk cache when it holds
+// it, with the HTTP status it came with: 200 from the disk, 0 when none came.
 func (c *Cache) load(url string) (ui.ImageSource, int, error) {
+	if data, ok := c.disk.get(url); ok {
+		if img, err := ui.DecodeImage(data); err == nil {
+			return img, http.StatusOK, nil
+		}
+	}
+	data, status, err := c.download(url)
+	if err != nil {
+		return nil, status, err
+	}
+	img, err := ui.DecodeImage(data)
+	if err != nil {
+		return nil, status, err
+	}
+	c.disk.put(url, data)
+	return img, status, nil
+}
+
+func (c *Cache) download(url string) ([]byte, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, 0, err
 	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Referer", referer)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, 0, err
@@ -159,12 +220,15 @@ func (c *Cache) load(url string) (ui.ImageSource, int, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, resp.StatusCode, fmt.Errorf("artwork %s: %s", url, resp.Status)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	const limit = 16 << 20
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
-	img, err := ui.DecodeImage(data)
-	return img, resp.StatusCode, err
+	if len(data) > limit {
+		return nil, resp.StatusCode, errors.New("artwork larger than 16 MiB")
+	}
+	return data, resp.StatusCode, nil
 }
 
 // sweep drops covers not asked for lately, failed ones too.

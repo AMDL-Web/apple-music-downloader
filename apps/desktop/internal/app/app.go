@@ -117,7 +117,7 @@ func (a *App) ready() {
 	dirs := a.dirs
 
 	a.store = store.New(a.post, nil)
-	art := artwork.New(a.post)
+	art := artwork.New(a.post).WithDisk(filepath.Join(dirs.Cache, "artwork"))
 	if a.demo != nil {
 		art = artwork.NewWith(a.post, a.demo.Transport())
 	}
