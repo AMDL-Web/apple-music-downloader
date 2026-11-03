@@ -1,0 +1,43 @@
+name: Set up Go with a build cache
+description: >-
+  Installs the Go in go.mod and restores the module and build caches, saving
+  them again under this commit's key when the job succeeds. setup-go's own cache
+  is keyed on go.sum, so it is written once per dependency change and goes
+  stale, which leaves every test binary and package to compile again; this one
+  is written on every run and restored from the newest earlier entry.
+
+inputs:
+  name:
+    description: >-
+      Which cache family: plain for ordinary builds and tests, race for -race
+      (its objects differ), so one family's entries do not push out another's.
+    default: plain
+  scope:
+    description: >-
+      Which job or matrix shard writes the entry. Jobs on one commit would
+      otherwise share a key, and actions/cache never overwrites an existing
+      key, so the first job to finish (often one that only builds) would win
+      and the test shards would restore binaries they do not need. Empty uses
+      the job id; matrix jobs pass their target and strategy.job-index.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: Restore the Go caches
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: go-${{ runner.os }}-${{ inputs.name }}-${{ inputs.scope || github.job }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ inputs.name }}-${{ inputs.scope || github.job }}-${{ hashFiles('go.sum') }}-
+          go-${{ runner.os }}-${{ inputs.name }}-${{ inputs.scope || github.job }}-
+          go-${{ runner.os }}-${{ inputs.name }}-

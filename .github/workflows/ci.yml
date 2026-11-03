@@ -3,9 +3,14 @@ name: CI
 # Build, test and scan every push to main and dev (agents push to dev directly)
 # and every pull request. Setup steps install the toolchain README.md lists
 # (Go, Node.js, ffmpeg); each check step then calls one Makefile target, so
-# `make check` locally runs what this workflow runs (here `make cover` stands for
-# `make test`, and the race detector runs as two shards, `make race-ui` and
-# `make race-rest`, which together are `make race`).
+# `make check` locally runs what this workflow runs. Here `make cover-ui` and
+# `make cover-rest` stand for `make test`, run as parallel jobs (the ui one in
+# slices), and the race detector runs as `make race-ui` (in slices),
+# `make race-app` and `make race-rest`, which together are `make race`.
+#
+# A change to only documentation, rules, the website or the console skips the
+# Go jobs and runs the light one (changes job); Build and test still requires
+# whichever of the two the paths call for.
 
 on:
   push:
@@ -30,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      go: ${{ steps.paths.outputs.go }}
       guestboot: ${{ steps.paths.outputs.guestboot }}
     steps:
       - name: Checkout repository
@@ -60,9 +66,15 @@ jobs:
           [ -n "$files" ] || echo "the changed paths are unknown; every optional job runs"
           printf '%s\n' "$files" | node .github/scripts/changed-paths.mjs
 
+  # Formatting, the build, vet, the browser build of the terminal interface,
+  # the vulnerability scan and the script tests: everything in `make check` but
+  # the tests, which run in the test and race jobs.
   unit:
-    name: Unit tests and checks
+    name: Build and checks
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -70,21 +82,12 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
+        uses: ./.github/actions/go
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: '26'
-
-      # The media tests that remux, decode or integrity-check real audio skip
-      # when ffmpeg is not on PATH; the runner image does not ship it.
-      - name: Install ffmpeg
-        timeout-minutes: 5
-        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg
 
       - name: Check formatting
         run: make fmt-check
@@ -101,35 +104,127 @@ jobs:
       - name: Terminal interface browser build
         run: make tui-web
 
-      # The same packages as `make test`, plus a statement-coverage summary on the
-      # run page. It is display only: no threshold, and it never fails a run.
-      - name: Test
-        run: make cover
-
       - name: Vulnerability scan
         run: make vuln
 
       - name: Script tests
         run: make node-test
 
-  # The race detector is the slowest check, so it runs apart from the unit job,
-  # split into two shards that run in parallel. The desktop ui package alone
-  # takes about as long as every other package together. The shards are cut from
-  # one `go list ./...` in the Makefile, so every package is in exactly one of
-  # them and a package added later cannot fall through.
-  race:
-    name: Race detector (${{ matrix.name }})
+  # The same packages as `make test`, plus a statement-coverage summary on each
+  # run page (display only: no threshold, and it never fails a run), in parallel
+  # jobs. The desktop ui package alone takes about as long as every other
+  # package together, so its tests are cut into three slices by name
+  # (.github/scripts/shard.mjs): every test is in exactly one. The rest is every
+  # other package, cut from one `go list ./...` in the Makefile.
+  test:
+    name: Tests (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
-      # Keep the other shard running so one run shows every failing shard.
+      # Keep the other jobs running so one run shows every failure.
       fail-fast: false
       matrix:
         include:
-          - name: desktop ui
-            target: race-ui
-          - name: rest
-            target: race-rest
+          - { name: rest, target: cover-rest, shard: '' }
+          - { name: desktop ui 1/3, target: cover-ui, shard: 1/3 }
+          - { name: desktop ui 2/3, target: cover-ui, shard: 2/3 }
+          - { name: desktop ui 3/3, target: cover-ui, shard: 3/3 }
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install ffmpeg
+        uses: ./.github/actions/ffmpeg
+        with:
+          phase: start
+
+      - name: Set up Go
+        uses: ./.github/actions/go
+        with:
+          scope: test-${{ matrix.target }}-${{ strategy.job-index }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      # The media tests that remux, decode or integrity-check real audio skip
+      # when ffmpeg is not on PATH; the runner image does not ship it.
+      - name: Wait for ffmpeg
+        uses: ./.github/actions/ffmpeg
+        with:
+          phase: wait
+
+      - name: Test
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: make ${{ matrix.target }}
+
+  # The race detector is the slowest check, so it runs apart from the build job,
+  # in parallel shards: the desktop ui package in two slices of its tests, the
+  # app package (TestRenderSetupShots alone takes minutes under the detector)
+  # and every other package. The Makefile cuts them from one `go list ./...`,
+  # so every package is in exactly one, and a package added later cannot fall
+  # through.
+  race:
+    name: Race detector (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # Keep the other shards running so one run shows every failing shard.
+      fail-fast: false
+      matrix:
+        include:
+          - { name: desktop ui 1/2, target: race-ui, shard: 1/2 }
+          - { name: desktop ui 2/2, target: race-ui, shard: 2/2 }
+          - { name: desktop app, target: race-app, shard: '' }
+          - { name: rest, target: race-rest, shard: '' }
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install ffmpeg
+        uses: ./.github/actions/ffmpeg
+        with:
+          phase: start
+
+      - name: Set up Go
+        uses: ./.github/actions/go
+        with:
+          name: race
+          scope: race-${{ matrix.target }}-${{ strategy.job-index }}
+
+      # The media tests skip without ffmpeg, as in the test jobs.
+      - name: Wait for ffmpeg
+        uses: ./.github/actions/ffmpeg
+        with:
+          phase: wait
+
+      - name: Race detector
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: make ${{ matrix.target }}
+
+  # For a change to only documentation, rules, the website or the console: the
+  # checks that can see it. The repository checks (links, paths, AGENTS.md
+  # sizes), the console's Go tests, the Go tests that read a console or docs
+  # file (tools/repocheck TestLightPathsReadByGoTestsAreCovered keeps that list
+  # complete), the Node tests of the scripts, hooks, console and website, and a
+  # build that compiles what the console embeds.
+  light:
+    name: Light checks
+    needs: changes
+    if: needs.changes.outputs.go != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -137,18 +232,21 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: ./.github/actions/go
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
-          go-version-file: go.mod
-          cache: true
+          node-version: '26'
 
-      # The media tests skip without ffmpeg, as in the unit job.
-      - name: Install ffmpeg
-        timeout-minutes: 5
-        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg
+      - name: Build
+        run: make build
 
-      - name: Race detector
-        run: make ${{ matrix.target }}
+      - name: Repository and console tests
+        run: go test -count=1 ./tools/repocheck/ ./apps/console/... ./internal/progress/ ./internal/api/
+
+      - name: Script tests
+        run: make node-test
 
   # Boots the pinned manager guest in QEMU the way the desktop app does and
   # waits for its manager (internal/wrapperhost, TestGuestBoot). It runs when a
@@ -177,13 +275,15 @@ jobs:
   # failed or was cancelled: a job skipped because a dependency failed reports
   # as passing to branch protection.
   #
-  # Two lists soften that. OPTIONAL jobs may be skipped, because their paths
-  # did not change. ADVISORY jobs may also fail: a gate that is new, and red on
-  # a defect the code under test still has, stays visible without blocking
-  # merges until the defect is fixed. Empty ADVISORY once guestboot is green.
+  # Skips are accepted only where the paths explain them. GATED jobs are
+  # skipped when the changes job says no Go job is needed (go is false) and
+  # must succeed when it is true; light is the reverse; OPTIONAL jobs may always
+  # be skipped. ADVISORY jobs may also fail: a gate that is new, and red on a
+  # defect the code under test still has, stays visible without blocking merges
+  # until the defect is fixed. Empty ADVISORY once guestboot is green.
   build-and-test:
     name: Build and test
-    needs: [changes, unit, race, upgrade, guestboot]
+    needs: [changes, unit, test, race, light, temaridiff, dist, upgrade, docker, guestboot]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -191,15 +291,24 @@ jobs:
       - name: Require every needed job to succeed
         env:
           NEEDS: ${{ toJSON(needs) }}
+          GO: ${{ needs.changes.outputs.go }}
+          GATED: unit test race temaridiff dist upgrade docker
+          LIGHT: light
           OPTIONAL: guestboot
           ADVISORY: guestboot
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$NEEDS" | jq -e --arg optional "$OPTIONAL" --arg advisory "$ADVISORY" '
-            ($optional | split(" ")) as $o | ($advisory | split(" ")) as $a
-            | to_entries | all(.[]; .value.result == "success"
-                or (.key as $k | $o | index($k)) != null and .value.result == "skipped"
-                or (.key as $k | $a | index($k)) != null)' > /dev/null
+          echo "go: $GO"
+          echo "$NEEDS" | jq -e --arg go "$GO" --arg gated "$GATED" --arg light "$LIGHT" --arg optional "$OPTIONAL" --arg advisory "$ADVISORY" '
+            def has($list; $k): ($list | split(" ") | index($k)) != null;
+            ($go == "true" or $go == "false") and
+            (to_entries | all(.[]; .key as $k | .value.result as $r
+              | $r == "success"
+              or ($r == "skipped" and (
+                   (has($gated; $k) and $go == "false")
+                or (has($light; $k) and $go == "true")
+                or has($optional; $k)))
+              or has($advisory; $k)))' > /dev/null
 
   # make temaridiff checks internal/fairplay byte for byte against the upstream
   # Temari library it was translated from, and checks that rounds_gen.go is the
@@ -210,6 +319,8 @@ jobs:
   # internal/fairplay needs re-translating (tools/temaridiff/doc.go).
   temaridiff:
     name: Temari parity
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -235,6 +346,8 @@ jobs:
   # This builds and renders them for a made-up version on every push.
   dist:
     name: Release files
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -244,10 +357,7 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
+        uses: ./.github/actions/go
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -262,6 +372,8 @@ jobs:
   # wrapper guest is the retired bare-lite one (tools/upgradecheck/run.sh).
   upgrade:
     name: Upgrade check
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -271,10 +383,7 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
+        uses: ./.github/actions/go
 
       - name: Start the build on the previous release's files
         env:
@@ -283,6 +392,8 @@ jobs:
 
   docker:
     name: Docker build
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

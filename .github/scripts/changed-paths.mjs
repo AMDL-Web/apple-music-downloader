@@ -9,24 +9,46 @@
 import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// The paths that make a job run. The guest boot runs for the code that builds
-// the QEMU command and every internal package it imports (tools/repocheck
-// checks the list against `go list -deps`), the pin, and its own files.
+// What a change to only these needs no Go build, vet, test, race, release build,
+// image or upgrade check: documentation and rules (the repository checks in
+// tools/repocheck still run), the website (its Node tests run) and the web
+// console (its Go and Node tests run). Markdown is code only where it is
+// embedded (apps/amdl/skill), so the list names the documents, not *.md.
+export const light = [
+  /^docs\//,
+  /^\.github\/release-notes\//,
+  /^\.claude\//,
+  /^apps\/(site|console)\//,
+  /^(README|README\.zh-CN|CONTRIBUTING|GLOSSARY|HUMAN|REVIEW)\.md$/,
+  /^LICENSE$/,
+  /(^|\/)(AGENTS|CLAUDE)\.md$/,
+];
+
+// The jobs. `any` runs a job when a changed path matches one of its patterns;
+// `unless` when a changed path matches none (so a change to only light files
+// skips it). The guest boot runs for the code that builds the QEMU command and
+// every internal package it imports (tools/repocheck checks the list against
+// `go list -deps`), the pin, and its own files.
 export const rules = {
-  guestboot: [
-    /^internal\/(wrapperhost|client|config|domain|ext4|fairplay|limits|sysproc|wrapper)\//,
-    /^go\.(mod|sum)$/,
-    /^\.github\/scripts\/wrapper-pin/,
-    /^\.github\/actions\/guestboot\//,
-    /^\.github\/workflows\/(ci|guestboot|wrapper-pin)\.yml$/,
-    /^\.github\/scripts\/changed-paths\./,
-  ],
+  go: { unless: light },
+  guestboot: {
+    any: [
+      /^internal\/(wrapperhost|client|config|domain|ext4|fairplay|limits|sysproc|wrapper)\//,
+      /^go\.(mod|sum)$/,
+      /^\.github\/scripts\/wrapper-pin/,
+      /^\.github\/actions\/guestboot\//,
+      /^\.github\/workflows\/(ci|guestboot|wrapper-pin)\.yml$/,
+      /^\.github\/scripts\/changed-paths\./,
+    ],
+  },
 };
 
 // classify returns, per job, whether any of files matches its rules.
 export function classify(files) {
   const known = files.map((f) => f.trim()).filter(Boolean);
-  return Object.fromEntries(Object.entries(rules).map(([job, res]) => [job, known.length === 0 || known.some((f) => res.some((re) => re.test(f)))]));
+  const hit = (res) => (f) => res.some((re) => re.test(f));
+  return Object.fromEntries(Object.entries(rules).map(([job, rule]) => [job,
+    known.length === 0 || (rule.any ? known.some(hit(rule.any)) : known.some((f) => !hit(rule.unless)(f)))]));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

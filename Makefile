@@ -24,7 +24,7 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet tui-web test cover race race-ui race-rest vuln node-test check temaridiff guestboot upgradecheck docker dist dist-check desktop desktop-web site
+.PHONY: help build run dev fmt fmt-check vet tui-web test cover cover-ui cover-rest race race-ui race-app race-rest vuln node-test check temaridiff guestboot upgradecheck docker dist dist-check desktop desktop-web site
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
@@ -71,39 +71,69 @@ test: ## Run the test suite
 
 COVER_PROFILE ?= coverage.out
 
-# CI's test step. The same packages as `make test`, with a statement-coverage
-# profile on top; the summary is display only and has no threshold. A summary
-# that cannot be built warns and never fails the run, a failing test always does.
-cover: ## Run the test suite with a coverage profile and print a summary (CI's test step)
+# The slow packages, which CI runs apart so its jobs go in parallel: the
+# desktop ui package takes most of the test time (its tests are cut into slices
+# with SHARD=k/n), and ui and app take most of the race time (app is one test,
+# TestRenderSetupShots, that alone runs for minutes under the detector). The shards
+# and the remainder are cut from one `go list ./...` with these patterns, so
+# every package is in exactly one of them and a package added later cannot fall
+# through; a selection that comes out empty fails, because an empty list would
+# make `go test` run the current directory.
+UI_RE = ^amdl/apps/desktop/internal/ui(/|$$)
+APP_RE = ^amdl/apps/desktop/internal/app(/|$$)
+
+# $(call run-tests,<go test flags>,<grep flags and pattern>) tests the packages
+# `go list ./...` shows that grep selects. With SHARD=k/n it runs only the k-th
+# of n slices of the one package's tests (every n-th name of `go test -list`,
+# .github/scripts/shard.mjs), so the slices together hold every test once.
+define run-tests
+@list="$$($(GO) list ./...)" || exit 1; \
+pkgs="$$(printf '%s\n' "$$list" | grep $(2))"; \
+test -n "$$pkgs" || { echo "no package matches $(2)" >&2; exit 1; }; \
+echo "$$(printf '%s\n' "$$pkgs" | wc -l | tr -d ' ') package(s)$(if $(SHARD), shard $(SHARD))"; \
+if [ -z "$(SHARD)" ]; then $(GO) test $(1) $$pkgs; else \
+	test "$$(printf '%s\n' "$$pkgs" | wc -l)" -eq 1 || { echo "SHARD needs exactly one package" >&2; exit 1; }; \
+	re="$$($(GO) test -list . $$pkgs | node .github/scripts/shard.mjs $(SHARD))" || exit 1; \
+	$(GO) test $(1) -run "$$re" $$pkgs; fi
+endef
+
+# The statement-coverage summary of $(COVER_PROFILE): display only, with no
+# threshold. One that cannot be built warns and never fails the run.
+define cover-summary
+@summary="$$(sh .github/scripts/cover-summary.sh $(COVER_PROFILE))" \
+	&& echo "$$summary" \
+	&& { [ -z "$$GITHUB_STEP_SUMMARY" ] || echo "$$summary" >> "$$GITHUB_STEP_SUMMARY"; } \
+	|| echo "cover: no coverage summary" >&2
+endef
+
+# CI's test steps. The same packages as `make test`, with a statement-coverage
+# profile on top, in two kinds of job: cover-ui SHARD=k/n runs a slice of the
+# desktop ui package's tests, and cover-rest every other package.
+cover: ## Run the test suite with a coverage profile and print a summary
 	$(GO) test -covermode=set -coverprofile=$(COVER_PROFILE) ./...
-	@summary="$$(sh .github/scripts/cover-summary.sh $(COVER_PROFILE))" \
-		&& echo "$$summary" \
-		&& { [ -z "$$GITHUB_STEP_SUMMARY" ] || echo "$$summary" >> "$$GITHUB_STEP_SUMMARY"; } \
-		|| echo "cover: no coverage summary" >&2
+	$(cover-summary)
+
+cover-ui: ## Coverage run of the desktop ui package (SHARD=k/n for one slice of its tests), a CI test job
+	$(call run-tests,-covermode=set -coverprofile=$(COVER_PROFILE),-E '$(UI_RE)')
+	$(cover-summary)
+
+cover-rest: ## Coverage run of every package but the desktop ui, a CI test job
+	$(call run-tests,-covermode=set -coverprofile=$(COVER_PROFILE),-Ev '$(UI_RE)')
+	$(cover-summary)
 
 race: ## Run the test suite under the race detector
 	$(GO) test -race ./...
 
-# CI runs the race detector as two parallel jobs. The desktop ui package alone
-# takes about as long as every other package together, so it is its own shard.
-# Both lists are cut from the same `go list ./...` with the same pattern, so every
-# package lands in exactly one shard, and a shard whose list comes out empty fails
-# (an empty list would make `go test` run the current directory instead).
-RACE_UI_RE = ^amdl/apps/desktop/internal/ui(/|$$)
+# CI runs the race detector as parallel jobs: the desktop ui package in slices
+# (SHARD=k/n), the app package, and the rest.
+race-ui: ## Race detector on the desktop ui package (SHARD=k/n for one slice of its tests), a CI shard
+	$(call run-tests,-race,-E '$(UI_RE)')
 
-race-ui: ## Race detector on the desktop ui package, one of CI's two race shards
-	@list="$$($(GO) list ./...)" || exit 1; \
-	pkgs="$$(printf '%s\n' "$$list" | grep -E '$(RACE_UI_RE)')"; \
-	test -n "$$pkgs" || { echo "race-ui: no package matches $(RACE_UI_RE)" >&2; exit 1; }; \
-	echo "race-ui: $$(printf '%s\n' "$$pkgs" | wc -l | tr -d ' ') package(s)"; \
-	$(GO) test -race $$pkgs
+race-app: ## Race detector on the desktop app package, a CI shard
+	$(call run-tests,-race,-E '$(APP_RE)')
 
-race-rest: ## Race detector on every package but the desktop ui, the other race shard
-	@list="$$($(GO) list ./...)" || exit 1; \
-	pkgs="$$(printf '%s\n' "$$list" | grep -Ev '$(RACE_UI_RE)')"; \
-	test -n "$$pkgs" || { echo "race-rest: go list left no package" >&2; exit 1; }; \
-	echo "race-rest: $$(printf '%s\n' "$$pkgs" | wc -l | tr -d ' ') package(s)"; \
-	$(GO) test -race $$pkgs
+race-rest: ## Race detector on every package but the desktop ui and app, a CI shard
+	$(call run-tests,-race,-Ev '$(UI_RE)|$(APP_RE)')
 
 vuln: ## Scan dependencies with govulncheck
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
@@ -113,7 +143,7 @@ node-test: ## Run the Node tests for release tooling, the guard hook, console JS
 	@if [ -z "$(strip $(NODE_TESTS))" ]; then echo "node-test: no *.test.mjs files found"; exit 1; fi
 	node --test $(NODE_TESTS)
 
-check: fmt-check build vet tui-web test race vuln node-test ## The CI gate: everything above, in CI's order (CI swaps in cover for test and splits race into two jobs)
+check: fmt-check build vet tui-web test race vuln node-test ## The CI gate: everything above, in CI's order (CI splits test and race into parallel jobs)
 
 temaridiff: ## Compare internal/fairplay with upstream Temari (own CI job; downloads Temari's cdylib)
 	cd tools/temaridiff && $(GO) test -count=1 ./...

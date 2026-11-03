@@ -349,7 +349,8 @@ script tests.
 | `make check` | The CI gate: gofmt check, build, vet, tests, race detector, `govulncheck`, Node script tests |
 | `make test`, `make race` | The test suite, without or with the race detector |
 | `make cover` | The test suite with a coverage profile (`coverage.out`) and a summary; CI shows the summary on the run page |
-| `make race-ui`, `make race-rest` | The race detector split in two, as CI runs it: the desktop ui package, and every other package |
+| `make cover-ui`, `make cover-rest` | `make cover` split as CI runs it: the desktop ui package (`SHARD=k/n` runs one slice of its tests), and every other package |
+| `make race-ui`, `make race-app`, `make race-rest` | The race detector split as CI runs it: the desktop ui package (`SHARD=k/n` for a slice of its tests), the desktop app package, and every other package |
 | `make dev` | The API in simulate mode on `127.0.0.1:18080`, with a throwaway config and database under `data/dev/` |
 | `make docker` | Build the container image locally |
 | `node apps/site/build.mjs --serve 8080` | Build the website and preview it on `127.0.0.1:8080` |

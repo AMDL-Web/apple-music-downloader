@@ -344,7 +344,9 @@ wait:
 		t.Errorf("%s could not start the guest, which fell back to tcg", accel)
 	}
 	console, _ := watch.console()
-	if want := "[init] starting wrapper-manager with: " + strings.Join(managerArgs(in.Lite), " "); !strings.Contains(console, want) {
+	// The guest prints the arguments one per line, a bare-lite init on one; only
+	// their order and values matter.
+	if want := "[init] starting wrapper-manager with: " + strings.Join(managerArgs(in.Lite), " "); !strings.Contains(strings.Join(strings.Fields(console), " "), want) {
 		fail("init did not start the manager with the pinned payload: want %q", want)
 	}
 	time.Sleep(3 * time.Second)
