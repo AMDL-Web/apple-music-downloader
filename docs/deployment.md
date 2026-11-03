@@ -232,7 +232,7 @@ connection with `GET /api/v1/wrapper/status`.
 
 | Option | Upstream | Port | Login |
 | --- | --- | --- | --- |
-| wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager fork, `v2` branch](https://github.com/AMDL-Web/wrapper-manager/tree/v2): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
+| wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager fork, `manager/` in AMDL-Web/wrapper](https://github.com/AMDL-Web/wrapper/tree/lite/manager): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
 | wrapper-lite | [AMDL-Web's wrapper fork, `lite` branch](https://github.com/AMDL-Web/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
 amdl 2.0 supports one wrapper account with either option: log one account into
@@ -268,7 +268,7 @@ succeed there. Docker blocks them by default, so the wrapper-manager service run
 
 A host without user namespaces, such as Synology DSM, cannot run that launcher. Run
 wrapper-manager v2's QEMU variant instead (the fork's section
-["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/AMDL-Web/wrapper-manager/tree/v2#run-on-any-os-via-qemu-wrapper-manager-qemu)),
+["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/AMDL-Web/wrapper/tree/lite/manager#run-on-any-os-via-qemu-wrapper-manager-qemu)),
 which runs the manager inside a QEMU guest with its own kernel and needs `/dev/kvm`:
 
 - The container needs access to `/dev/kvm` and nothing else: no `privileged` and no added

@@ -111,7 +111,7 @@ services:
   # session service to "http://wrapper-manager:8080" in Settings and restart.
   # Then log in on the console's Account page.
   # wrapper-manager:
-  #   build: https://github.com/AMDL-Web/wrapper-manager.git#v2
+  #   build: https://github.com/AMDL-Web/wrapper.git#lite:manager
   #   image: wrapper-manager:latest
   #   container_name: wrapper-manager
   #   restart: unless-stopped

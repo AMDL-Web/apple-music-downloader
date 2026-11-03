@@ -107,7 +107,7 @@ directory; the first start creates `configs/` and `data/` next to it.
 
 ### With wrapper-manager v2 (recommended)
 
-[wrapper-manager v2](https://github.com/AMDL-Web/wrapper-manager/tree/v2) runs
+[wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager) runs
 wrapper-lite for you and lets you log in from the console.
 
 1. In `docker-compose.yml`, uncomment the `wrapper-manager` service and the `volumes:`

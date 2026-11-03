@@ -32,7 +32,7 @@ needs the API changes below before it works against 2.0.
    instead of being cancelled.
 7. Replace the 1.x wrapper-manager with a wrapper-lite based wrapper (see
    [Wrapper](#wrapper) and [Deployment](deployment.md#the-wrapper)): either
-   [wrapper-manager v2](https://github.com/AMDL-Web/wrapper-manager/tree/v2),
+   [wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager),
    which fronts wrapper-lite over HTTP and has the login API the console's Account page
    uses, or a bare
    [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), logged in
