@@ -542,9 +542,17 @@ func TestRecordRunExtraSlotsAreSuffixedOrUnavailable(t *testing.T) {
 			t.Fatalf("request %s: %v", codec, err)
 		}
 	}
-	if _, err := h.m.Reset(ctx, jobs.ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: jobs.ResetAudio, Slot: "aac"}); err != nil {
-		t.Fatal(err)
-	}
+	// A requested slot can start a run of its own; the reset waits for it.
+	h.waitFor("the reset", func() bool {
+		_, err := h.m.Reset(ctx, jobs.ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: jobs.ResetAudio, Slot: "aac"})
+		if errors.Is(err, db.ErrRunActive) {
+			return false
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return true
+	})
 	h.waitFor("the extra slots", func() bool {
 		states := map[string]domain.AudioState{}
 		for _, f := range h.files(domain.ResourceAlbum, "100") {
