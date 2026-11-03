@@ -139,7 +139,7 @@ and console checks and the report format.
 | Go logic | the package's tests, then `make test` |
 | Bug fix with a test | `go run ./tools/revertproof -test <file> -run <new tests>` after committing ([amdl-verify](.claude/skills/amdl-verify/SKILL.md#revert-proof)) |
 | Decryption (`internal/fairplay`, `tools/temaridiff`) | `go test ./internal/fairplay/`, `make temaridiff` (not in `make check`) |
-| Wrapper guest (`internal/wrapperhost`), upgrades | its tests, `make guestboot`, `make upgradecheck` (not in `make check`) |
+| Wrapper guest (`internal/wrapperhost`), upgrades | tests, `make guestboot`, `make upgradecheck` (not in `make check`) |
 | Concurrency (jobs, media pools, events, SSE) | `make race` |
 | API routes, schemas, SSE | `go test ./internal/api/` and a live check with `make dev` |
 | Config keys | `go test ./internal/config/ ./internal/api/`, then reread the key's example comment |
