@@ -84,9 +84,9 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 
 The backend holds no Apple account session and no decryption keys of its own. It talks
 over HTTP (`wrapper.address`) to one of two services, which look the same to
-`internal/wrapper#Client`: [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite) (AMDL-Web's fork, [why](deployment.md#the-wrapper)),
+`internal/wrapper#Client`: [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/amdl) (AMDL-Web's fork, [why](deployment.md#the-wrapper)),
 which holds one logged-in account, or [wrapper-manager
-v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager), which runs one
+v2](https://github.com/AMDL-Web/wrapper/tree/amdl/manager), which runs one
 wrapper-lite per account behind a single port (at most 10 accounts) and forwards each
 request to an account whose storefront can serve it. `internal/accounts` reads the
 accounts from `/status` into the `accounts` table; `internal/usertoken` picks the

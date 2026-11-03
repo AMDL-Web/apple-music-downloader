@@ -93,7 +93,7 @@ wrapper 部署方式都以注释掉的服务写在里面。把它复制到一个
 
 ### 搭配 wrapper-manager v2（推荐）
 
-[wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager) 替你运行
+[wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/amdl/manager) 替你运行
 wrapper-lite，并且可以在控制台里登录。
 
 1. 在 `docker-compose.yml` 里取消注释 `wrapper-manager` 服务和文件末尾的 `volumes:` 块。
@@ -103,7 +103,7 @@ wrapper-lite，并且可以在控制台里登录。
    docker compose up -d
    ```
 
-   Compose 会从 `v2` 分支构建 wrapper-manager，它第一次启动时会下载 wrapper-lite 的程序包，
+   Compose 会从 fork 的 `amdl` 分支构建 wrapper-manager，它第一次启动时会下载它锁定的 wrapper-lite 程序包，
    所以 wrapper 主机需要能上网。
 3. 打开 `http://localhost:18080/`，进入 **Settings › Account**，把 **Session service** 改成
    `http://wrapper-manager:8080`，保存后在出现的提示里重启。然后用 Apple ID 登录。Apple 要求
@@ -112,7 +112,7 @@ wrapper-lite，并且可以在控制台里登录。
 
 ### 搭配单独的 wrapper-lite
 
-[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite)（AMDL-Web 维护的上游 fork，见
+[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/amdl)（AMDL-Web 维护的上游 fork，见
 [The wrapper](docs/deployment.md#the-wrapper)）只服务一个账号，在它自己的命令行里登录，不能从控制台登录。
 
 - **作为 Compose 服务：** 取消注释 `wrapper-lite` 服务，把 **Settings › Account › Session

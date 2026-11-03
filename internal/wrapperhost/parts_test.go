@@ -72,7 +72,8 @@ func (c countingWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// artifactServer stands in for nightly.link and the blob host behind it.
+// artifactServer stands in for GitHub's release download URL and the blob host
+// behind it.
 type artifactServer struct {
 	body    []byte
 	noRange bool
@@ -341,7 +342,7 @@ func TestRangedDownloadResolvesAgainWhenTheURLExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := a.resolves.Load(); got != 2 {
-		t.Errorf("nightly.link was asked %d times, want 2: the first, and one for all workers after the expiry", got)
+		t.Errorf("the release URL was asked %d times, want 2: the first, and one for all workers after the expiry", got)
 	}
 	sameFile(t, path, a.body)
 }

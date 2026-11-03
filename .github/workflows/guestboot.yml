@@ -1,8 +1,8 @@
 # Boots the wrapper guest this source pins (internal/wrapperhost#Builtin) in
 # QEMU and waits for its manager, as the desktop app does. ci.yml runs the same
 # boot when a change touches the code behind it; this weekly run catches the
-# rest: a pinned artifact that expired, nightly.link or GitHub changing under
-# the pin, a runner image change. wrapper-pin.yml boots each candidate pin
+# rest: a pinned release asset that went away, GitHub changing under the pin,
+# a runner image change. wrapper-pin.yml boots each candidate pin
 # before committing it, so the published pin is covered there.
 name: Guest boot
 

@@ -173,10 +173,10 @@ conversations block a merge, report what blocks it and wait.
 
 ## Related repositories
 
-[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), AMDL-Web's fork of upstream's
+[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/amdl), AMDL-Web's fork of upstream's
 (patch: [The wrapper](docs/deployment.md#the-wrapper)), holds the Apple Music account session and serves manifests, licenses, lyrics and per-key
 decryption templates over HTTP (`internal/wrapper`); the backend decrypts in-process.
-[wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager) may
+[wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/amdl/manager) may
 sit in front of it and adds the login API the console uses; a bare wrapper-lite answers
 `501 login_unsupported`.
 

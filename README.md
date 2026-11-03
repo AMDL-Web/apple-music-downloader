@@ -107,7 +107,7 @@ directory; the first start creates `configs/` and `data/` next to it.
 
 ### With wrapper-manager v2 (recommended)
 
-[wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager) runs
+[wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/amdl/manager) runs
 wrapper-lite for you and lets you log in from the console.
 
 1. In `docker-compose.yml`, uncomment the `wrapper-manager` service and the `volumes:`
@@ -118,8 +118,8 @@ wrapper-lite for you and lets you log in from the console.
    docker compose up -d
    ```
 
-   Compose builds wrapper-manager from its `v2` branch, and its first start downloads the
-   wrapper-lite payload, so the wrapper host needs internet access.
+   Compose builds wrapper-manager from the fork's `amdl` branch, and its first start downloads
+   the wrapper-lite payload it pins, so the wrapper host needs internet access.
 3. Open `http://localhost:18080/`, go to **Settings › Account**, set **Session service**
    to `http://wrapper-manager:8080`, save, and restart from the notice that appears. Then
    log in with your Apple ID. If Apple asks for a two-step code, the console asks you for it.
@@ -127,7 +127,7 @@ wrapper-lite for you and lets you log in from the console.
 
 ### With a bare wrapper-lite
 
-[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), AMDL-Web's fork of upstream's (see
+[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/amdl), AMDL-Web's fork of upstream's (see
 [The wrapper](docs/deployment.md#the-wrapper)), serves one account and logs in from its
 own command line, not from the console.
 

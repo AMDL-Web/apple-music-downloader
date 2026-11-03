@@ -196,25 +196,25 @@ amdl only needs its address. Four ways to get one:
 - **On macOS, Windows, or Linux without user namespaces** (such as Synology DSM), run
   upstream's `wrapper-lite-qemu` yourself, which boots wrapper-lite in a small QEMU guest
   and forwards its port to the host; the
-  [wrapper-lite README](https://github.com/AMDL-Web/wrapper/tree/lite#run-with-qemu-recommended)
-  calls it the recommended way to run. wrapper-manager v2 has an equivalent,
+  [wrapper-lite README](https://github.com/AMDL-Web/wrapper/tree/amdl#run-with-qemu)
+  describes it. wrapper-manager v2 has an equivalent,
   `wrapper-manager-qemu`
-  ([its README](https://github.com/AMDL-Web/wrapper/tree/lite/manager#run-on-any-os-via-qemu-wrapper-manager-qemu)).
+  ([its README](https://github.com/AMDL-Web/wrapper/tree/amdl/manager#run-on-any-os-via-qemu-wrapper-manager-qemu)).
 
 Notes on `wrapper-lite-qemu`, from its sources:
 
 - Its packages, with QEMU and its firmware bundled, are build artifacts of the
-  `build-lite` workflow on the `lite` branch of AMDL-Web's fork
+  `build-lite` workflow on the `amdl` branch of AMDL-Web's fork
   ([why](deployment.md#the-wrapper)), not GitHub releases:
   `wrapper-lite-qemu-macos-aarch64`, `-windows-x86_64`, `-linux-x86_64` and
   `-linux-aarch64`. There is none for Intel Macs. GitHub serves artifacts only to
   signed-in users and deletes them after 90 days; nightly.link serves them without a
   sign-in, for example
-  `https://nightly.link/AMDL-Web/wrapper/workflows/build-lite.yml/lite/wrapper-lite-qemu-macos-aarch64.zip`.
+  `https://nightly.link/AMDL-Web/wrapper/workflows/build-lite.yml/amdl/wrapper-lite-qemu-macos-aarch64.zip`.
 - The guest is x86_64. The launcher accelerates it with KVM on Linux and WHPX on
   Windows, and falls back to TCG, software emulation, when those are unavailable. On
   Apple Silicon it always uses TCG, since HVF cannot run an x86_64 guest
-  ([`wrapper-lite-qemu.cpp`](https://github.com/AMDL-Web/wrapper/blob/lite/wrapper-lite-qemu.cpp), `autoAccel`).
+  ([`wrapper-lite-qemu.cpp`](https://github.com/AMDL-Web/wrapper/blob/amdl/wrapper-lite-qemu.cpp), `autoAccel`).
 - Log in once, then serve, as the README shows:
   `./wrapper-lite-qemu --login user:pass --code-from-file`, then `./wrapper-lite-qemu`.
   It listens on `127.0.0.1:12340`, so `--wrapper http://127.0.0.1:12340`.
@@ -232,10 +232,10 @@ amdl wrapper login            # asks for the Apple ID, password and any two-step
 on Windows (pass `--yes` when no one can answer), and prints the package command on
 Linux, where it needs `sudo`; `--qemu PATH` names one elsewhere. It then downloads
 the guest: the kernel, manager initramfs and empty ext4 disk of the
-`manager-qemu-guest` artifact from the `manager.yml` workflow on the `lite` branch
+`manager-qemu-guest` artifact from the `manager.yml` workflow on the `amdl` branch
 of `internal/wrapperhost#GuestRepo`. The manager guest is defined in
-[manager/guest](https://github.com/AMDL-Web/wrapper/tree/lite/manager/guest).
-That repository's `publish` workflow puts each successful build on `lite` up as a
+[manager/guest](https://github.com/AMDL-Web/wrapper/tree/amdl/manager/guest).
+That repository's `publish` workflow puts each successful build on `amdl` up as a
 release asset, `guest-<commit12>/manager-qemu-guest.zip`, byte for byte the
 artifact's zip; amdl downloads it from there, over several connections that resume
 after an interruption, and installs it only if its sha256 matches
@@ -245,7 +245,7 @@ Release assets do not expire. When no pin is downloadable, fetch the asset and r
 Guest files are downloaded at install time, rather than shipped with amdl. The
 guest does not contain wrapper-lite: amdl pins that payload too, as `lite` in the
 same pin: the `wrapper-lite-linux-x86_64` artifact of one successful `build-lite` run
-on `lite` (the guest is x86_64 on every host), published as
+on `amdl` (the guest is x86_64 on every host), published as
 `lite-<commit12>/wrapper-lite-linux-x86_64.zip`. `amdl wrapper install` and `update`
 download it with the guest, and the backend downloads it before a boot when it is
 missing, with progress in `managed.download`. The host serves it to the guest on a

@@ -4,7 +4,7 @@
 # binary, so installs follow new guests between amdl releases. Weekly, the job
 # pins the newest successful manager run's manager-qemu-guest and the newest
 # successful build-lite run's wrapper-lite-linux-x86_64 (the payload the
-# guest's manager is told to install, with its digest), both from the lite
+# guest's manager is told to install, with its digest), both from the amdl
 # branch only and as that repository's publish workflow put them up as release
 # assets, once each one's downloaded bytes match the digest GitHub reports, and
 # commits the file only when it changed, and only after it boots that guest in

@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// GuestRepo builds the manager guest and the wrapper-lite payload on its lite
-// branch, and its publish workflow puts each successful build on lite up as a
+// GuestRepo builds the manager guest and the wrapper-lite payload on its amdl
+// branch, and its publish workflow puts each successful build on amdl up as a
 // release asset: actions artifacts download at about 30 KB/s from China and
 // expire, release assets come from GitHub's CDN and stay.
 const GuestRepo = "AMDL-Web/wrapper"
@@ -38,7 +38,7 @@ func releaseURL(prefix, commit, artifact string) string {
 	return fmt.Sprintf("https://github.com/%s/releases/download/%s-%s/%s.zip", GuestRepo, prefix, commit[:min(12, len(commit))], artifact)
 }
 
-// LitePin names one build-lite build on lite and the exact zip digest of the
+// LitePin names one build-lite build on amdl and the exact zip digest of the
 // wrapper-lite payload the guest's manager installs into its data disk on
 // first boot. amdl downloads it on the host and serves it to the guest; the
 // manager is told the digest, so it installs nothing else.
@@ -69,13 +69,13 @@ const guestHost = "10.0.2.2"
 // managerArgs are the manager's arguments for one boot, one per line in the
 // fw_cfg file the guest's init splits on whitespace: the listen address its
 // default would give, and the pinned payload at payloadURL, where the host
-// serves it. Without -payload-url the manager installs the newest build-lite
-// artifact, whatever its digest.
+// serves it. Without -payload-url the manager downloads the wrapper-lite
+// release it pins itself.
 func managerArgs(l LitePin, payloadURL string) []string {
 	return []string{"-host", "0.0.0.0", "-port", fmt.Sprint(guestPort), "-payload-url", payloadURL, "-payload-sha256", l.SHA256}
 }
 
-// Pin names one successful manager build on lite, the exact zip digest of its
+// Pin names one successful manager build on amdl, the exact zip digest of its
 // release asset, and the wrapper-lite payload that guest installs.
 type Pin struct {
 	Artifact string  `json:"artifact"`
@@ -90,19 +90,19 @@ func (p Pin) Asset() Asset {
 	return Asset{URL: releaseURL("guest", p.Commit, p.Artifact), SHA256: p.SHA256, Size: p.Size}
 }
 
-// Builtin pins a successful manager build on lite and a successful build-lite
+// Builtin pins a successful manager build on amdl and a successful build-lite
 // build; SHA256 is GitHub's digest of each release asset. Install verifies
 // both downloads before unpacking, and the manager verifies the payload.
 var Builtin = Pin{
 	Artifact: GuestArtifact,
-	Commit:   "bb4d4d86f6cd166c585edb5aa70441d079e07624",
-	SHA256:   "e47c0923c1fd540444f864fbcb38e1a753b97a28c2e960fdedc88d02c08e45d2",
-	Size:     30008241,
+	Commit:   "90a0be8ace2fbd0c30882740e77050f02832ad0f",
+	SHA256:   "d28b3141f7a05d67fd9417a949bfa0ef8cf2f8fbb114ec1a8515d41b19fd835b",
+	Size:     21260294,
 	Lite: LitePin{
 		Artifact: LiteArtifact,
-		Commit:   "38bebfc834e944b5664d15f1bb0cf9b6005d79e5",
-		SHA256:   "01437bc27ebc1728aae71a28781bad14fe29375388428ae16b124918c44758f0",
-		Size:     30642052,
+		Commit:   "8885e67ac96b2b0c370f18e5b7c5a7edc5f19190",
+		SHA256:   "10e16cdce9ee2648e1bfcbd3b8b138737bb90041e7a27e7971830c6a6aefe290",
+		Size:     30641054,
 	},
 }
 

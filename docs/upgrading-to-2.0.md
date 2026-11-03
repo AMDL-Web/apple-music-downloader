@@ -32,10 +32,10 @@ needs the API changes below before it works against 2.0.
    instead of being cancelled.
 7. Replace the 1.x wrapper-manager with a wrapper-lite based wrapper (see
    [Wrapper](#wrapper) and [Deployment](deployment.md#the-wrapper)): either
-   [wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager),
+   [wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/amdl/manager),
    which fronts wrapper-lite over HTTP and has the login API the console's Account page
    uses, or a bare
-   [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), logged in
+   [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/amdl), logged in
    with its own `--login`. Set `wrapper.address` to its URL in `config.yaml`, or after the
    first start in the console's Settings › Account › Session service (then restart from
    its notice), such as `http://wrapper-manager:8080` or `http://127.0.0.1:12340`. Without Docker, the

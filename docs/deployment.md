@@ -232,8 +232,8 @@ connection with `GET /api/v1/wrapper/status`.
 
 | Option | Upstream | Port | Login |
 | --- | --- | --- | --- |
-| wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager fork, `manager/` in AMDL-Web/wrapper](https://github.com/AMDL-Web/wrapper/tree/lite/manager): supervises one wrapper-lite per account behind one HTTP port, at most 10 accounts | 8080 | From the console's Account page, through its `POST /login` |
-| wrapper-lite | [AMDL-Web's wrapper fork, `lite` branch](https://github.com/AMDL-Web/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
+| wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager, `manager/` in AMDL-Web/wrapper](https://github.com/AMDL-Web/wrapper/tree/amdl/manager): supervises one wrapper-lite per account behind one HTTP port, at most 10 accounts | 8080 | From the console's Account page, through its `POST /login` |
+| wrapper-lite | [AMDL-Web's wrapper fork, `amdl` branch](https://github.com/AMDL-Web/wrapper/tree/amdl): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
 The local managed guest runs wrapper-manager too. Wrapper-manager holds up to 10 accounts, and amdl serves them all: each account's
 storefront is served by its own account, and the console's Settings page switches library
@@ -244,25 +244,31 @@ run `amdl config set wrapper.token=<key>` ([configuration.md](configuration.md#w
 domain to a Worker: mainland China blocks `workers.dev`.
 
 The wrapper-lite that amdl points to is AMDL-Web's fork of
-[upstream's `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite)
-with three changes. Upstream keeps the FairPlay decrypt context of every `/key`; after
-1024 of them in one process every `/key` fails
+[upstream's `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite),
+on the fork's `amdl` branch. Upstream builds older than the fork's fixes, which
+upstream merged (WorldObservationLog/wrapper#78 and #79), keep the FairPlay decrypt
+context of every `/key`; after 1024 of them in one process every `/key` fails
 (`KDCanProcessCKC status: -42786` in the wrapper's log, `wrapper /key: code 500` in
-amdl's) until the wrapper restarts. The fork frees each context once its template is
-copied. It also fetches the persistent key once per `/key` instead of twice, which
-halves the time a `/key` takes, and adds `GET /token`, which returns the account's
-music token: whoever reaches the wrapper's port can read it. The managed wrapper and
-both compose wrapper services run the fork.
+amdl's) until the wrapper restarts. Current upstream frees each context once its
+template is copied and fetches the persistent key once per `/key` instead of twice,
+which halves the time a `/key` takes. The fork adds `GET /token`, which returns the
+account's music token: whoever reaches the wrapper's port can read it. It also
+records the Apple ID an account logged in with for `/status` and refreshes a stale
+token a few seconds after it starts. The managed wrapper and both compose wrapper
+services run the fork.
 
-wrapper-manager is AMDL-Web's fork of [upstream's `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2),
-changed to download the fork's wrapper-lite and to forward its `GET /token`. It
-records where its installed payload came from and, on start, replaces one installed by
-upstream's wrapper-manager, keeping the accounts; an existing `wrapper-data` volume or
-QEMU `data.img` switches on the first start of the fork's build. If that download
-fails, it keeps the old payload and tries again on the next start. It does not pick up
-a newer build of the fork by itself: start it once with `-update-wrapper` to replace
-the payload. Neither upstream nor the fork builds a native arm64 wrapper-lite, so on
-arm64 wrapper-manager runs only as its QEMU variant.
+wrapper-manager is AMDL-Web's MIT re-implementation of
+[upstream's `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2),
+written from a description of its behavior without its code. It serves the same API,
+forwards the fork's `GET /token`, and installs the wrapper-lite release asset it pins
+(`lite-<commit12>` of the fork), checked against its sha256. It records where its
+installed payload came from and, on start, replaces one from any other source, such
+as upstream's wrapper-manager or an earlier build, keeping the accounts; an existing
+`wrapper-data` volume or QEMU `data.img` switches on the first start of a new build.
+If that download fails, it keeps the old payload and tries again on the next start; a
+download whose sha256 differs stops the manager. Neither upstream nor the fork builds
+a native arm64 wrapper-lite, so on arm64 wrapper-manager runs only as its QEMU
+variant.
 
 Run natively or in upstream's Docker image, both use `wrapper-lite-rootless`, which needs
 user namespaces and `chroot` on a Linux host: `unshare -Ur true` must
@@ -273,7 +279,7 @@ succeed there. Docker blocks them by default, so the wrapper-manager service run
 
 A host without user namespaces, such as Synology DSM, cannot run that launcher. Run
 wrapper-manager v2's QEMU variant instead (the fork's section
-["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/AMDL-Web/wrapper/tree/lite/manager#run-on-any-os-via-qemu-wrapper-manager-qemu)),
+["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/AMDL-Web/wrapper/tree/amdl/manager#run-on-any-os-via-qemu-wrapper-manager-qemu)),
 which runs the manager inside a QEMU guest with its own kernel and needs `/dev/kvm`:
 
 - The container needs access to `/dev/kvm` and nothing else: no `privileged` and no added
@@ -314,7 +320,7 @@ then restart from the notice:
 
 - wrapper-manager as a compose service: `http://wrapper-manager:8080`. It keeps its
   accounts and the wrapper-lite payload in the `wrapper-data` volume; the first start
-  downloads the payload from nightly.link, so it needs internet access. Log in on the
+  downloads the payload release asset it pins from GitHub, so it needs internet access. Log in on the
   console's Account page, then check that `GET /api/v1/wrapper/status` lists a region and `GET /api/v1/accounts` the account.
 - wrapper-lite as a compose service: `http://wrapper-lite:12340`. Put `USERNAME` and
   `PASSWORD` in a `.env` file next to the compose file for the first start, which logs

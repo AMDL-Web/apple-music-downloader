@@ -1,4 +1,4 @@
-// Finds the manager guest of the newest successful manager run on the lite
+// Finds the manager guest of the newest successful manager run on the amdl
 // branch of AMDL-Web's wrapper fork (internal/wrapperhost#GuestRepo) and the
 // wrapper-lite-linux-x86_64 payload of the newest successful build-lite run
 // there (the payload the guest's manager installs), as that repository's
@@ -15,16 +15,18 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const repo = 'AMDL-Web/wrapper';
+// branch is where the fork builds what amdl pins; its lite branch mirrors upstream.
+const branch = 'amdl';
 const api = `https://api.github.com/repos/${repo}`;
 
 // tagOf is the release a run's artifact is published under.
 export const tagOf = (prefix, run) => `${prefix}-${run.head_sha.slice(0, 12)}`;
 
 // pickAsset chooses the asset called name.zip to pin from the release of a run
-// of workflow: the run must have succeeded on lite.
+// of workflow: the run must have succeeded on amdl.
 function pickAsset(workflow, prefix, name, run, release) {
-  if (run.head_branch !== 'lite' || run.conclusion !== 'success' || !/^[0-9a-f]{40}$/.test(run.head_sha ?? '')) {
-    throw new Error(`expected a successful ${workflow} run on lite with a commit`);
+  if (run.head_branch !== branch || run.conclusion !== 'success' || !/^[0-9a-f]{40}$/.test(run.head_sha ?? '')) {
+    throw new Error(`expected a successful ${workflow} run on ${branch} with a commit`);
   }
   if (release?.tag_name !== tagOf(prefix, run)) throw new Error(`run ${run.id} has no ${tagOf(prefix, run)} release`);
   const a = release.assets?.find((x) => x.name === `${name}.zip`);
@@ -72,9 +74,9 @@ export async function sha256Of(url, timeoutMs = 10 * 60_000) {
 }
 
 async function newestSuccess(workflow, prefix) {
-  const runs = await json(`${api}/actions/workflows/${workflow}/runs?branch=lite&event=push&status=success&per_page=1`);
+  const runs = await json(`${api}/actions/workflows/${workflow}/runs?branch=${branch}&event=push&status=success&per_page=1`);
   const run = runs.workflow_runs?.[0];
-  if (!run) throw new Error(`no successful ${workflow} run on lite`);
+  if (!run) throw new Error(`no successful ${workflow} run on ${branch}`);
   return { run, release: await json(`${api}/releases/tags/${tagOf(prefix, run)}`) };
 }
 
