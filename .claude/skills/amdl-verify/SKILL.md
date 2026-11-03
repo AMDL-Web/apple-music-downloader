@@ -7,8 +7,9 @@ description: Verify an amdl change before pushing to dev or reporting it done - 
 
 ## Local gates
 
-Run the rows of root `AGENTS.md` "Verification" that the change touches, and
-`make check` before pushing to `dev`. A bug fix with a regression test also needs
+Run the rows of root `AGENTS.md` "Verification" that the change touches before
+pushing to `dev`; CI runs `make check` on the push, and a red run is fixed next.
+A bug fix with a regression test also needs
 the [revert proof](#revert-proof). Before committing, check each added comment
 against `.claude/rules/go.md`:
 

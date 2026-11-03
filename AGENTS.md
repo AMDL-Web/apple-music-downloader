@@ -149,7 +149,7 @@ and console checks and the report format.
 | Dependencies | `make vuln` |
 | Scripts, release tooling | `make node-test` |
 | Dockerfile, entrypoint | `make docker` |
-| Before pushing to dev | `make check` |
+| Before pushing to dev | the touched packages; CI runs `make check` |
 
 Add a behavior test where a regression is likely, not one that restates the
 implementation. Say what you could not verify and why.
