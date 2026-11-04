@@ -91,6 +91,16 @@ func jobMark(j *store.Job) store.MarkState {
 	return store.MarkNone
 }
 
+// runListed reports whether a run has named every track it holds, so a
+// song of the album it does not name is outside it: a song's run holds the
+// one song from the start, an album's once its items match its total.
+func runListed(j *store.Job, items []domain.JobItem) bool {
+	if j == nil {
+		return false
+	}
+	return j.Type == "song" || j.TotalItems > 0 && len(items) >= j.TotalItems
+}
+
 // albumTracks lists the album's songs by disc: in the state the page's
 // download gives each, else the album's mark through a download the feed
 // does not hold, and a song's own download.
@@ -99,14 +109,17 @@ func (a *App) albumTracks(c *ui.Context, k *Tokens, j *store.Job, items []domain
 	p := &s.Search.Album
 	al := &p.Album
 	mark := store.MarkNone
+	run := j
 	if j != nil {
 		mark = jobMark(j)
 	} else {
 		var job string
 		if mark, job = s.HitMark(p.Hit); mark != store.MarkNone {
 			items = s.JobItems(job)
+			run = s.Job(job)
 		}
 	}
+	listed := runListed(run, items)
 	lines := make([]trackMark, len(al.Tracks))
 	for i, t := range al.Tracks {
 		lines[i].mark, lines[i].item = s.TrackMark(t, mark, items)
@@ -125,7 +138,7 @@ func (a *App) albumTracks(c *ui.Context, k *Tokens, j *store.Job, items []domain
 				})
 			}
 			nextLit := i+1 < len(lines) && lines[i+1].lit()
-			a.trackLine(c, k, t, al.ArtistName, mark, lines[i], nextLit, accent, bar, still)
+			a.trackLine(c, k, t, al.ArtistName, mark, listed, lines[i], nextLit, accent, bar, still)
 		}
 	}).Grow(1)
 }
@@ -214,10 +227,10 @@ func (m trackMark) lit() bool { return m.item != nil && trackLit(m.item) }
 // length, and its state: the job's for a song its album's job holds, else
 // a check for one on disk, the queue's mark for one on its way, else a
 // download of the song alone while the row is pointed at.
-func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArtist string, albumMark store.MarkState, m trackMark, nextLit bool, accent ui.Color, bar float32, still bool) {
+func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArtist string, albumMark store.MarkState, listed bool, m trackMark, nextLit bool, accent ui.Color, bar float32, still bool) {
 	s := a.Store
 	// A job just started has not listed its tracks yet: they wait with it.
-	queued := albumMark == store.MarkActive && m.item == nil && m.mark == store.MarkNone
+	queued := albumMark == store.MarkActive && !listed && m.item == nil && m.mark == store.MarkNone
 	th := store.TrackHit(t)
 	since, starting := s.Search.Starting[a.hitKey(th)]
 	wait := waited(c, starting, since)

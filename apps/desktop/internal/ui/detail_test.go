@@ -261,3 +261,29 @@ func TestAPartAlbumOpensItsRecordsPageNotItsRun(t *testing.T) {
 		}
 	}
 }
+
+// A song's run holds that one song of its album; the album's other songs
+// are not waiting with it, whatever else the page knows of them.
+func TestASongRunsPageLeavesTheOtherSongsOfItsAlbumOffTheQueue(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	a.Settings.HideSidebar = true
+	now := time.Now()
+	j := &store.Job{Job: domain.Job{ID: "run", Type: "song", Status: domain.JobRunning, Title: "Two", ArtistName: "Someone",
+		ResourceKind: domain.ResourceAlbum, ResourceID: "7", TotalItems: 1, CreatedAt: now, StartedAt: &now},
+		Items: []domain.JobItem{{ID: "i2", Index: 1, AdamID: "b", Title: "Two", Status: domain.ItemDownloading, Progress: domain.ItemProgress{Resolved: true, Download: 0.3}}}}
+	openFixture(a, j)
+	p := &a.Store.Search.Album
+	p.Status, p.Album = store.SearchReady, client.Album{ID: "7", Title: "Album", ArtistName: "Someone", Tracks: []client.AlbumTrack{
+		{ID: "a", TrackNumber: 1, Name: "One", DurationMS: 61_000},
+		{ID: "b", TrackNumber: 2, Name: "Two", DurationMS: 62_000},
+		{ID: "c", TrackNumber: 3, Name: "Three", DurationMS: 63_000},
+	}}
+	tt := ui.NewTester(detailView(a), 1280, 800)
+	tt.Frame()
+	if tt.HasText("Waiting") {
+		t.Errorf("a song's run shows songs it does not hold as waiting: %q", tt.Texts())
+	}
+	if !tt.HasText("30%") {
+		t.Errorf("the run's own song does not show its progress: %q", tt.Texts())
+	}
+}
