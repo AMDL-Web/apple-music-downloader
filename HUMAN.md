@@ -8,7 +8,8 @@ report. Rules for agents are in [AGENTS.md](AGENTS.md); outside contributors fol
 
 Reversible work, stating any assumption that matters:
 
-- branches, signed-off commits and pushes to `dev`;
+- branches, signed-off commits, pushes and merges to `dev`, release candidates;
+- judging their own test results and carrying on, without a "looks OK?" stop;
 - fixes, tests, docs and skills;
 - breaking changes to the API, config keys or DB schema that meet
   [Contracts and breaking changes](AGENTS.md#contracts-and-breaking-changes);
@@ -17,7 +18,9 @@ Reversible work, stating any assumption that matters:
 
 ## Waits for you
 
-- Merging the `dev` → `main` release PR; publishing a release or image tag.
+- Merging the `dev` → `main` release PR; publishing a final (non-candidate) release.
+- A checklist item that removes or replaces something you use
+  ([amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md#the-checklist)).
 - Any branch-protection bypass such as `gh pr merge --admin`, approved per bypass.
 - Output-path changes (templates, `{Quality}` labels, name cleaning, sidecar names).
 - Applying a schema migration to a real database.
@@ -40,7 +43,8 @@ Reversible work, stating any assumption that matters:
 | "Your call", "go with your recommendation" | proceeds on the recommended option and does not ask again for the same kind of step |
 | Names a model, tool or a linked session | uses exactly that; when it cannot, says why before substituting |
 | "X is broken" plus what you saw | reproduces, fixes with a regression test and pushes to `dev` (amdl-diagnose) |
-| "Implement X" | implements, verifies (amdl-verify) and pushes to `dev`, or opens a PR when you ask |
+| "Implement X" | implements, verifies (amdl-verify) and pushes to `dev`, or opens a PR when you ask; it is done once accepted (amdl-accept) |
+| Several requests in one go | turns them into checklist items you review before work starts (amdl-coordinate) |
 | "A draft is fine" | stops at a draft PR |
 | "Release vX.Y.Z" | prepares the release PR and notes (amdl-release), then waits for your merge |
 | "From now on, …" | records the rule in AGENTS.md, this page or a skill in the same change |

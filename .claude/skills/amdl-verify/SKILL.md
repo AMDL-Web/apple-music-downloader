@@ -5,6 +5,10 @@ description: Verify an amdl change before pushing to dev or reporting it done - 
 
 # Verify a change
 
+These are the author's checks. Whether the change does what the maintainer asked,
+on every surface, is a separate step by someone else:
+[amdl-accept](../amdl-accept/SKILL.md).
+
 ## Local gates
 
 Run the rows of root `AGENTS.md` "Verification" that the change touches before
@@ -118,14 +122,12 @@ When `apps/console` changed: with `make dev` running, open
 changed view renders, the browser console has no errors, and a submitted job
 updates live. Attach a screenshot per width and theme.
 
-Before showing console work to the maintainer, run
-[apps/console/tools/ui-audit](../../../apps/console/tools/ui-audit/README.md),
-read its layout-shift and flicker findings, and look at the screenshots yourself,
-for every page and state, not only the one you changed. Fix what it finds in this order: layout that jumps during an action,
-misalignment, then polish. Also look for zero-value or empty rows that add height,
-hover shapes that do not match their container's corners, flicker and cramped rows.
-A person's flaw report about one screen is a prompt to check the same flaw on every
-screen. For a review you did not write, use a reviewer with a clean context.
+While iterating, run
+[apps/console/tools/ui-audit](../../../apps/console/tools/ui-audit/README.md) and
+fix its layout-shift and flicker findings before handing the item to acceptance,
+which runs it again over every page and state. Also look for zero-value or empty
+rows that add height, hover shapes that do not match their container's corners,
+and cramped rows.
 
 ## Report
 

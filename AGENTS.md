@@ -34,9 +34,9 @@ link, then download, decrypt, remux and tag each track. Code map: the
 - Every wait and every outbound call is bounded: `timeout` on shell waits, a context
   deadline or client timeout in Go. A step that runs longer than expected goes to the
   background, and the report says what it is waiting on.
-- A change to something a person uses is done only after you used it end to end
-  yourself (for the console: start a download from the page and watch it finish). A
-  gap you find is fixed or named in the report.
+- User-facing work is done once a verifier who did not write it accepts it
+  ([amdl-accept](.claude/skills/amdl-accept/SKILL.md)); batches go through
+  [amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md).
 - Docs change in the commit that changes the behavior. `rg` the changed symbols,
   keys and rule words across `README.md`, `README.zh-CN.md`, `docs/`, the AGENTS.md
   files, `REVIEW.md`, `GLOSSARY.md`, `.claude/`, `internal/api/openapi.yaml`,
