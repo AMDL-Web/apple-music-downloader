@@ -47,7 +47,9 @@ func TestAShortWindowKeepsThreeRowsOfTheQueue(t *testing.T) {
 			}
 			continue
 		}
-		top, bottom := find("DOWNLOADING NOW"), find(a.heroProgressText(a.Store.Now()))
+		// The hero has no label: its title is the top of its words, and
+		// the first element showing the job's name.
+		top, bottom := find(a.Store.Now().Name()), find(a.heroProgressText(a.Store.Now()))
 		if d := top.Y - cover.Y; d < -1 || d > 1 {
 			t.Errorf("%v: the compact cover's top is at %.0f, the words' at %.0f", sz, cover.Y, top.Y)
 		}
