@@ -40,9 +40,16 @@ type recordView struct {
 type listedRecord struct {
 	ID string `json:"id"`
 	recordView
-	TracksFailed  int `json:"tracks_failed"`
-	TracksGivenUp int `json:"tracks_given_up"`
-	TracksMissing int `json:"tracks_missing"`
+	TracksFailed  int                 `json:"tracks_failed"`
+	TracksGivenUp int                 `json:"tracks_given_up"`
+	TracksMissing int                 `json:"tracks_missing"`
+	CatalogState  domain.CatalogState `json:"catalog_state"`
+}
+
+// failed reports whether the record belongs on the Failed tab: a track
+// failed, was given up or is missing, or Apple does not list the record.
+func (l listedRecord) failed() bool {
+	return l.TracksFailed+l.TracksGivenUp+l.TracksMissing > 0 || l.CatalogState != domain.CatalogOK
 }
 
 type detailTrack struct {
@@ -79,7 +86,9 @@ type surfaces struct {
 	playlists map[string]listedRecord
 	doneTotal int
 	failTotal int
-	needsRuns []domain.Job
+	// failedFlag is the total of ?flag=failed alone.
+	failedFlag int
+	needsRuns  []domain.Job
 	// orphans are the runs of no record, as the queues read them beside the
 	// records (resource_kind=none).
 	orphans   []domain.Job
@@ -132,6 +141,8 @@ func (r *rig) read() surfaces {
 		s.doneTotal += page.Total
 		r.call(http.MethodGet, "/library/"+kind+"?flag=failed&flag=given_up&flag=missing&limit=1", "", http.StatusOK, &page)
 		s.failTotal += page.Total
+		r.call(http.MethodGet, "/library/"+kind+"?flag=failed&limit=1", "", http.StatusOK, &page)
+		s.failedFlag += page.Total
 		r.call(http.MethodGet, "/library/"+kind+"?flag=waiting&limit=1", "", http.StatusOK, &page)
 		s.waitTotal += page.Total
 	}
@@ -328,7 +339,7 @@ func (r *rig) check(step string, known ...knownDefects) surfaces {
 				if rec.State == domain.RecordComplete {
 					listedDone++
 				}
-				if rec.TracksFailed+rec.TracksGivenUp+rec.TracksMissing > 0 {
+				if rec.failed() {
 					listedFail++
 				}
 			}
@@ -337,7 +348,10 @@ func (r *rig) check(step string, known ...knownDefects) surfaces {
 			t.Errorf("Done: summary %d, ?state=complete total %d, listed complete %d", done, s.doneTotal, listedDone)
 		}
 		if s.failTotal != listedFail {
-			t.Errorf("Failed: ?flag= total %d, listed with failed tracks %d", s.failTotal, listedFail)
+			t.Errorf("Failed: ?flag= total %d, listed with failed tracks or not listed by Apple %d", s.failTotal, listedFail)
+		}
+		if failed := s.summary.Albums.Flags["failed"] + s.summary.Playlists.Flags["failed"]; failed != s.failedFlag {
+			t.Errorf("summary failed %d, ?flag=failed total %d", failed, s.failedFlag)
 		}
 		if n := s.summary.Albums.Total + s.summary.Playlists.Total; n != len(s.albums)+len(s.playlists) {
 			t.Errorf("summary totals %d, listed records %d", n, len(s.albums)+len(s.playlists))
@@ -368,7 +382,7 @@ func (r *rig) check(step string, known ...knownDefects) surfaces {
 			if j.ResourceID == "" || !ok {
 				continue
 			}
-			if rec.State == domain.RecordComplete && rec.TracksFailed+rec.TracksGivenUp+rec.TracksMissing == 0 {
+			if rec.State == domain.RecordComplete && !rec.failed() {
 				t.Errorf("failed run %s needs attention, yet its record %s is complete with nothing failed", j.ID, j.ResourceID)
 			}
 		}
@@ -663,6 +677,10 @@ func TestStuckAndUnseenStatesClear(t *testing.T) {
 	s := r.check("album not in the storefront")
 	if a, ok := s.albums["500"]; !ok || a.State != domain.RecordNone {
 		t.Errorf("album 500 = %+v (%v), want a record with nothing downloaded", a, ok)
+	}
+	if a := s.albums["500"]; a.CatalogState != domain.CatalogNotInStorefront || s.failedFlag != 1 || !s.needsAttention("500") {
+		t.Errorf("album 500 %s: ?flag=failed total %d, its run needs attention %v; want it failed on every surface",
+			a.CatalogState, s.failedFlag, s.needsAttention("500"))
 	}
 	r.catalog.setAlbum("500", []string{"51"})
 	if code := r.status(http.MethodPost, "/library/albums/500/download", ""); code != http.StatusAccepted {

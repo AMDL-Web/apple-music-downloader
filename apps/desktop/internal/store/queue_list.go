@@ -703,8 +703,8 @@ func recordOnTab(r Record, t Tab) bool {
 	return t == TabAll
 }
 
-// failedOf reports whether r has a failed, given-up or missing track.
-func failedOf(r Record) bool { return r.TracksFailed+r.TracksGivenUp+r.TracksMissing > 0 }
+// failedOf reports whether r is on the Failed tab: r.Failed.
+func failedOf(r Record) bool { return r.Failed() }
 
 // runOnTab reports whether a run of no record j belongs on tab t's list.
 func runOnTab(j *Job, t Tab) bool {

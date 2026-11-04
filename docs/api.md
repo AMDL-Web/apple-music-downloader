@@ -359,7 +359,9 @@ curl http://localhost:18080/api/v1/library/albums/1463409338
 A record's rollup is stored with it: `tracks_wanted` (wanted tracks its storefront
 lists, less those whose main slot no codec offers), `tracks_done` (of those, the ones whose main slot is done), `tracks_failed`,
 `tracks_given_up`, `tracks_missing`, and `state`, `complete` when every wanted track is
-done. `withheld_count` counts tracks of the release its storefront does not list;
+done. The `failed` flag, as a filter and in the summary's counts, also takes a record whose
+`catalog_state` is not `ok` (Apple does not list it in its storefront, or it is gone): what was
+asked for is not downloaded, and a download or reset of the record reads it again. `withheld_count` counts tracks of the release its storefront does not list;
 they are not counted and not retried. `activity_at` is when one of the record's runs
 last changed (its finish, else its last update), or `added_at` while it has none;
 `sort=activity` lists the newest first. A track's `files` are its slots: `main`, the first

@@ -2662,8 +2662,9 @@ components:
       name: flag
       in: query
       description: >-
-        Only records with any of these flags: failed, given_up, missing (a
-        track has a slot in that state), waiting (a failed slot of a wanted,
+        Only records with any of these flags: failed (a track has a failed
+        slot, or the catalog does not have the record: catalog_state is not
+        ok), given_up, missing (a track has a slot in that state), waiting (a failed slot of a wanted,
         listed track waits for its automatic retry), paused, unresolved (no
         read listed its tracks yet).
       schema:

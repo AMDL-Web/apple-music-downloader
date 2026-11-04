@@ -53,11 +53,20 @@ export function streamQuery(name, filters, offset = 0, limit = STREAM_PAGE) {
   return q;
 }
 
+/**
+ * Whether a record is on the Failed tab, as the backend's `failed`,
+ * `given_up` and `missing` flags read: a track failed, was given up or is
+ * missing, or Apple does not list the record (`catalog_state` not ok). A
+ * Retry reads it again.
+ */
+export const recordFailed = (r) =>
+  Boolean(r && (r.tracks_failed || r.tracks_given_up || r.tracks_missing || (r.catalog_state && r.catalog_state !== 'ok')));
+
 /** Whether a record belongs on a tab's stream (the search is the server's to judge). */
 export function recordOnTab(r, tab) {
   if (!r) return false;
   if (tab === 'done') return r.state === 'complete';
-  if (tab === 'failed') return Boolean(r.tracks_failed || r.tracks_given_up || r.tracks_missing);
+  if (tab === 'failed') return recordFailed(r);
   return tab === 'all';
 }
 
@@ -260,7 +269,7 @@ export function recordMenu(r, run = null, place = {}, link = '') {
   // A complete record reads Downloaded however its paused flag stands, as its pill does.
   if (r && r.paused && r.state !== 'complete' && !active) ids.push('resume');
   else if (active || (r && r.state !== 'complete')) ids.push('pause');
-  if (!active && r && (r.tracks_failed || r.tracks_given_up || r.tracks_missing)) ids.push('retry');
+  if (!active && recordFailed(r)) ids.push('retry');
   if (!active && r && r.tracks_done) ids.push('again');
   if (link || (r && r.url)) ids.push('-', 'copy');
   if (!active) ids.push('-', 'remove');
@@ -273,8 +282,7 @@ export const MOVE_LABELS = { top: MENU.top, bottom: MENU.bottom };
 /**
  * What a selection of rows allows, each the rows it applies to:
  * {retry, again, pause, remove}. Retry: failed or cancelled station runs,
- * records whose tracks failed, were given up or are missing (not while a
- * run is under way). Download again: records with downloaded tracks and no
+ * records on the Failed tab (recordFailed; not while a run is under way). Download again: records with downloaded tracks and no
  * run under way. Pause: records running or with something to download that
  * are not paused, and queued or running station runs (a cancel). Remove:
  * records with no run under way, and finished station runs (their history).
@@ -291,7 +299,7 @@ export function rowPlan(rows) {
     }
     const r = row.record;
     const active = Boolean(row.live || r.active_job_id);
-    if (!active && (r.tracks_failed || r.tracks_given_up || r.tracks_missing)) plan.retry.push(row);
+    if (!active && recordFailed(r)) plan.retry.push(row);
     if (!active && r.tracks_done) plan.again.push(row);
     if (active || (!r.paused && r.state !== 'complete')) plan.pause.push(row);
     if (!active) plan.remove.push(row);

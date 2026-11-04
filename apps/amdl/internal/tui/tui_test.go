@@ -350,3 +350,13 @@ func TestPrintedTextFollowsTheColorProfile(t *testing.T) {
 		t.Errorf("a 256-color terminal gets 24-bit colors in scrollback: %q", out)
 	}
 }
+
+// A record Apple does not list says why on its /library line.
+func TestARecordLineSaysAppleDoesNotListIt(t *testing.T) {
+	var l client.AlbumRecords
+	l.Items = []client.AlbumRecord{{Album: domain.Album{ID: "1", Name: "Away", CatalogState: domain.CatalogNotInStorefront}}, {Album: domain.Album{ID: "2", Name: "Gone", CatalogState: domain.CatalogGone}}}
+	out := recordLines(l)
+	if !strings.Contains(out, "Away —") || !strings.Contains(out, "not in your region") || !strings.Contains(out, "gone from Apple") {
+		t.Errorf("record lines:\n%s", out)
+	}
+}

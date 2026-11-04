@@ -15,7 +15,9 @@ import (
 type RecordFlag string
 
 const (
-	// FlagFailed: a wanted track has a failed slot.
+	// FlagFailed: a wanted track has a failed slot, or the catalog does not
+	// have the record (catalog_state not ok): either way what was asked for
+	// is not downloaded, and a manual download or reset tries again.
 	FlagFailed RecordFlag = "failed"
 	// FlagGivenUp: a wanted track has a given-up slot.
 	FlagGivenUp RecordFlag = "given_up"
@@ -182,7 +184,7 @@ func recordWhere(kind domain.ResourceKind, f RecordFilter) (string, []any, error
 	for _, flag := range f.Flags {
 		switch flag {
 		case FlagFailed:
-			flagConds = append(flagConds, `r.tracks_failed > 0`)
+			flagConds = append(flagConds, `(r.tracks_failed > 0 OR r.catalog_state <> 'ok')`)
 		case FlagGivenUp:
 			flagConds = append(flagConds, `r.tracks_given_up > 0`)
 		case FlagMissing:
@@ -263,7 +265,7 @@ func (s *Store) CountRecords(ctx context.Context, kind domain.ResourceKind, now 
 	var none, partial, complete, failed, givenUp, missing, paused, unresolved, waiting int
 	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*),
 		COALESCE(SUM(state = 'none'), 0), COALESCE(SUM(state = 'partial'), 0), COALESCE(SUM(state = 'complete'), 0),
-		COALESCE(SUM(tracks_failed > 0), 0), COALESCE(SUM(tracks_given_up > 0), 0), COALESCE(SUM(tracks_missing > 0), 0),
+		COALESCE(SUM(tracks_failed > 0 OR catalog_state <> 'ok'), 0), COALESCE(SUM(tracks_given_up > 0), 0), COALESCE(SUM(tracks_missing > 0), 0),
 		COALESCE(SUM(paused = 1), 0), COALESCE(SUM(resolved_at IS NULL), 0),
 		(SELECT COUNT(DISTINCT w.owner_id) FROM files w WHERE `+waitingSlotSQL(kind)+`)
 		FROM `+table, formatTime(now)).Scan(

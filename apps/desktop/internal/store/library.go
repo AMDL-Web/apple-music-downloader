@@ -51,6 +51,14 @@ type Record struct {
 	ActivityAt time.Time
 }
 
+// Failed reports whether r is on the Failed tab, as the backend's failed,
+// given_up and missing flags read: a track failed, was given up or is
+// missing, or Apple does not list r (Catalog not ok). A download of r reads
+// it again.
+func (r Record) Failed() bool {
+	return r.TracksFailed+r.TracksGivenUp+r.TracksMissing > 0 || (r.Catalog != "" && r.Catalog != domain.CatalogOK)
+}
+
 // TrackCount is the album's track count where the record knows it, else
 // its wanted tracks.
 func (r Record) TrackCount() int {

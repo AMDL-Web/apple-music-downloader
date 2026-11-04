@@ -127,8 +127,8 @@ func (a *App) recordFrom(ref domain.ResourceRef) string {
 	return a.texts.recordFrom.of(ref, func(r domain.ResourceRef) string { return "row:" + string(r.Kind) + ":" + r.ID })
 }
 
-// failedOf reports whether r has a failed, given-up or missing track.
-func failedOf(r *store.Record) bool { return r.TracksFailed+r.TracksGivenUp+r.TracksMissing > 0 }
+// failedOf reports whether r is on the Failed tab (store.Record.Failed).
+func failedOf(r *store.Record) bool { return r.Failed() }
 
 // recordSub is a record's second line: its artist or curator and its kind,
 // as a job's row says them.
@@ -148,7 +148,7 @@ type recordNoteKey struct{ failed, givenUp, missing, withheld int }
 // tracks that failed, gave up or went missing, else the quality of its
 // last run.
 func (a *App) recordNote(r *store.Record, k *Tokens, last *store.Job) (string, ui.Color) {
-	if failedOf(r) {
+	if r.TracksFailed+r.TracksGivenUp+r.TracksMissing > 0 {
 		col := k.Bad
 		if r.TracksFailed+r.TracksGivenUp == 0 {
 			col = k.Warn

@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"amdl/internal/client"
+	"amdl/internal/domain"
 	"amdl/internal/format"
 )
 
@@ -649,6 +650,10 @@ func recordLines(l client.AlbumRecords) string {
 			line += "  ↻ downloading"
 		case r.Paused:
 			line += "  ‖ paused"
+		case r.CatalogState == domain.CatalogGone:
+			line += "  gone from Apple"
+		case r.CatalogState == domain.CatalogNotInStorefront:
+			line += "  not in your region"
 		case r.TracksGivenUp > 0:
 			line += fmt.Sprintf("  %d given up", r.TracksGivenUp)
 		case r.TracksMissing > 0:

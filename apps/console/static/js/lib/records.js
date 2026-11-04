@@ -39,7 +39,7 @@ export function recordView(r, runStatus = '') {
   if (active && runStatus === 'running') view = { icon: 'dot', role: 'info', label: 'Running', pulse: true };
   else if (active) view = { icon: 'clock', role: 'info', label: 'In the queue' };
   else if (r.paused && r.state !== 'complete') view = { icon: 'pause', role: 'neutral', label: 'Paused' };
-  else if (r.catalog_state && r.catalog_state !== 'ok') view = { icon: 'circle-slash', role: 'warning', label: r.catalog_state === 'gone' ? 'Gone from Apple Music' : 'Not in your storefront' };
+  else if (r.catalog_state && r.catalog_state !== 'ok') view = { icon: 'circle-slash', role: 'warning', label: r.catalog_state === 'gone' ? 'Gone from Apple Music' : 'Not in your region' };
   else if (r.state === 'complete') view = { icon: 'circle-check', role: 'success', label: 'Downloaded' };
   else if (r.state === 'partial') view = { icon: 'circle-dashed', role: 'info', label: `${done} of ${wanted}` };
   else if (!r.resolved_at) view = { icon: 'circle-dashed', role: 'neutral', label: 'Not read yet' };

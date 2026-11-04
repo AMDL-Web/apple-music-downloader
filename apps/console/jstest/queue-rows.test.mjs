@@ -43,6 +43,12 @@ test('what belongs on a tab', () => {
   assert.ok(!recordOnTab(rec('a', 1, { state: 'partial' }), 'done'));
   assert.ok(recordOnTab(rec('a', 1, { tracks_missing: 1 }), 'failed'));
   assert.ok(!recordOnTab(rec('a', 1), 'failed'));
+  const away = rec('a', 1, { tracks_done: 0, state: 'none', catalog_state: 'not_in_storefront' });
+  assert.ok(recordOnTab(away, 'failed'), 'a record Apple does not list is failed, as the backend flag reads');
+  assert.ok(recordOnTab(rec('a', 1, { catalog_state: 'gone' }), 'failed'));
+  assert.ok(!recordOnTab(rec('a', 1, { catalog_state: 'ok' }), 'failed'));
+  assert.ok(menu(away).includes('retry'), 'its Retry reads it again');
+  assert.deepEqual(rowPlan([{ kind: 'albums', record: away }]).retry.length, 1);
   assert.ok(stationOnTab(st('s', 1, 'failed'), 'failed'));
   assert.ok(!stationOnTab({ ...st('s', 1), resource: { kind: 'album', id: '1' } }, 'all'), 'a record run is not a station row');
 });

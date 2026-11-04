@@ -174,3 +174,37 @@ func TestRecordListByActivity(t *testing.T) {
 		t.Errorf("activity of no record: %v", err)
 	}
 }
+
+// A record Apple does not list carries the failed flag, in the list and in
+// the counts, though none of its tracks failed: what was asked for is not
+// downloaded.
+func TestARecordAppleDoesNotListIsFailed(t *testing.T) {
+	store := openRecordStore(t)
+	ctx := context.Background()
+	now := mustTime(t, "2026-11-01T10:00:00Z")
+	for _, id := range []string{"1", "2", "3"} {
+		_, err := store.AddAlbum(ctx, AlbumAdd{ID: id, WantedAll: true, Source: domain.SourceManual, Now: now})
+		must(t, err)
+	}
+	must(t, store.SetCatalogState(ctx, domain.ResourceAlbum, "1", domain.CatalogNotInStorefront, now))
+	must(t, store.SetCatalogState(ctx, domain.ResourceAlbum, "2", domain.CatalogGone, now))
+	failed, total, err := store.ListAlbums(ctx, RecordFilter{Flags: []RecordFlag{FlagFailed}, Now: now})
+	must(t, err)
+	ids := []string{}
+	for _, it := range failed {
+		ids = append(ids, it.Record.ID)
+	}
+	slices.Sort(ids)
+	if total != 2 || !slices.Equal(ids, []string{"1", "2"}) {
+		t.Errorf("?flag=failed = %v of %d, want the albums not in the storefront and gone", ids, total)
+	}
+	counts, err := store.CountRecords(ctx, domain.ResourceAlbum, now)
+	must(t, err)
+	if counts.Flags[FlagFailed] != 2 {
+		t.Errorf("failed count %d, want 2", counts.Flags[FlagFailed])
+	}
+	must(t, store.SetCatalogState(ctx, domain.ResourceAlbum, "1", domain.CatalogOK, now))
+	if counts, err = store.CountRecords(ctx, domain.ResourceAlbum, now); err != nil || counts.Flags[FlagFailed] != 1 {
+		t.Errorf("after Apple lists album 1 again: failed count %d (%v), want 1", counts.Flags[FlagFailed], err)
+	}
+}

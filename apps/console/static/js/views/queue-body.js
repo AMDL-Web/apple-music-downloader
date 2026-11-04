@@ -17,6 +17,7 @@ import { RecordMenu } from './queue-record-menu.js';
 import { useRegions } from './region-tag.js';
 import { regionTag } from '../lib/accounts.js';
 import { JobGrip } from './queue-order.js';
+import { recordFailed } from '../lib/queue-rows.js';
 
 const RETRY_STATES = ['failed', 'given_up', 'missing'];
 
@@ -45,7 +46,7 @@ export function QueueRows({ rows, params, selecting, selected, onToggle, order, 
       !selecting &&
       (row.kind === 'station'
         ? job.status === 'failed' && !isNotFound(job.error)
-        : !row.live && !r.active_job_id && Boolean(r.tracks_failed || r.tracks_given_up || r.tracks_missing));
+        : !row.live && !r.active_job_id && recordFailed(r));
     const sortable = Boolean(row.live) && order.draggable && row.live.status === 'queued';
     const drag = sortable
       ? { ...order.sort.row(row.live.id), 'data-sortable': '', 'aria-keyshortcuts': 'Alt+ArrowUp Alt+ArrowDown Alt+Home Alt+End', onKeyDown: (e) => order.keyDown(e, row.live) }
