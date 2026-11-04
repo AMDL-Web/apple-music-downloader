@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/netproxy"
@@ -75,6 +76,23 @@ const (
 	sameFrame = 4 * time.Millisecond
 )
 
+// A download gives up once no byte came for stallAfter, response headers
+// included, and once it took downloadMost in all. Not a deadline on the
+// whole picture: a private playlist's presigned picture, served from
+// Apple's blobstore at its uploaded size and no other, takes 25 to 35 s on
+// a slow link, more with others loading beside it. What a download that
+// gave up had received stays, up to partsMost in all, and its next try asks
+// for the rest (download).
+const (
+	stallAfter   = 15 * time.Second
+	downloadMost = 5 * time.Minute
+	partsMost    = 64 << 20
+	pictureMost  = 16 << 20
+)
+
+// errStalled ends a download that received nothing for stallAfter.
+var errStalled = errors.New("artwork download stalled")
+
 // fallbackPx are the smaller sizes a cover is asked for when its size is
 // refused: an Apple-generated playlist cover serves 512 pixels to nobody.
 var fallbackPx = []int{256, 128}
@@ -93,6 +111,12 @@ type Cache struct {
 	queue                         []coverKey
 	running                       int
 	pumpQueued, pumpNext, waiting bool
+	// parts are the downloads that gave up, by the picture's key (keyOf),
+	// partBytes what they hold; fetches running beside each other share
+	// them under partMu.
+	partMu    sync.Mutex
+	parts     map[string]part
+	partBytes int
 	// bytes is what the decoded covers of entries take, and keep its bound:
 	// keepBytes but in tests.
 	bytes, keep int
@@ -140,9 +164,10 @@ func New(post func(func())) *Cache {
 // NewWith is New with covers fetched through rt, such as the demo's
 // backend.
 func NewWith(post func(func()), rt http.RoundTripper) *Cache {
+	// No client timeout: download bounds each request (stallAfter).
 	return &Cache{
 		post:    post,
-		http:    &http.Client{Transport: rt, Timeout: 30 * time.Second},
+		http:    &http.Client{Transport: rt},
 		entries: map[coverKey]*entry{},
 		keep:    keepBytes,
 		now:     time.Now,
@@ -432,32 +457,105 @@ func decode(data []byte) (ui.ImageSource, error) {
 	return ui.NewBitmap(dst), nil
 }
 
+// part is what a download that gave up had received of a picture, and the
+// validator (ETag or Last-Modified) it came with, which the rest must match.
+type part struct {
+	data      []byte
+	validator string
+}
+
+func (c *Cache) takePart(key string) part {
+	c.partMu.Lock()
+	defer c.partMu.Unlock()
+	p := c.parts[key]
+	delete(c.parts, key)
+	c.partBytes -= len(p.data)
+	return p
+}
+
+func (c *Cache) keepPart(key string, p part) {
+	if len(p.data) == 0 || len(p.data) > partsMost {
+		return
+	}
+	c.partMu.Lock()
+	defer c.partMu.Unlock()
+	if c.parts == nil || c.partBytes+len(p.data) > partsMost {
+		// The ones kept are dropped, not trimmed: past the bound a slow
+		// link is the least of the trouble.
+		c.parts, c.partBytes = map[string]part{}, 0
+	}
+	c.parts[key] = p
+	c.partBytes += len(p.data)
+}
+
+// download reads the picture at url, going on from what an earlier
+// download of it received when the server takes a Range and the picture
+// is the same (If-Range).
 func (c *Cache) download(ctx context.Context, url string) ([]byte, int, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	key := keyOf(url)
+	have := c.takePart(key)
+	ctx, cancel := context.WithTimeout(ctx, downloadMost)
 	defer cancel()
+	ctx, stall := context.WithCancelCause(ctx)
+	idle := time.AfterFunc(stallAfter, func() { stall(errStalled) })
+	defer idle.Stop()
+	// The cause: errStalled, the deadline, or a fetch given up (pump).
+	why := func(err error) error {
+		if cause := context.Cause(ctx); cause != nil {
+			return fmt.Errorf("artwork %s: %w", url, cause)
+		}
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, 0, err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Referer", referer)
+	if len(have.data) > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", len(have.data)))
+		if have.validator != "" {
+			req.Header.Set("If-Range", have.validator)
+		}
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, 0, err
+		c.keepPart(key, have)
+		return nil, 0, why(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	validator := resp.Header.Get("ETag")
+	if validator == "" {
+		validator = resp.Header.Get("Last-Modified")
+	}
+	var data []byte
+	switch {
+	case resp.StatusCode == http.StatusPartialContent && len(have.data) > 0 &&
+		strings.HasPrefix(resp.Header.Get("Content-Range"), fmt.Sprintf("bytes %d-", len(have.data))):
+		data, validator = have.data, have.validator
+	case resp.StatusCode == http.StatusOK:
+		// The whole picture: the server took no Range, or it changed.
+	default:
 		return nil, resp.StatusCode, fmt.Errorf("artwork %s: %s", url, resp.Status)
 	}
-	const limit = 16 << 20
-	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err != nil {
-		return nil, resp.StatusCode, err
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			idle.Reset(stallAfter)
+			data = append(data, buf[:n]...)
+			if len(data) > pictureMost {
+				return nil, resp.StatusCode, errors.New("artwork larger than 16 MiB")
+			}
+		}
+		if err == io.EOF {
+			return data, http.StatusOK, nil
+		}
+		if err != nil {
+			c.keepPart(key, part{data, validator})
+			return nil, resp.StatusCode, why(err)
+		}
 	}
-	if len(data) > limit {
-		return nil, resp.StatusCode, errors.New("artwork larger than 16 MiB")
-	}
-	return data, resp.StatusCode, nil
 }
 
 // sweep forgets covers that failed and are not asked for, then releases
