@@ -149,11 +149,16 @@ func (m *Manager) resolveRow(ctx context.Context, row domain.PendingAdd) error {
 		resume := false
 		paused = &resume
 	}
+	// An add whose tracks are all downloaded queues no run, and the pending
+	// row is deleted once it resolves: the log says what became of it.
 	album := func(id string, wantedAll bool, songIDs []string, source domain.RecordSource) error {
-		_, _, err := m.addAlbum(ctx, db.AlbumAdd{
+		outcome, _, err := m.addAlbum(ctx, db.AlbumAdd{
 			ID: id, WantedAll: wantedAll, SongIDs: songIDs, Source: source, Priority: row.Priority,
 			Overrides: row.Overrides, Paused: paused, Storefront: row.Storefront, Now: now,
 		}, triggerFor(source))
+		if err == nil && outcome == AddAlreadyDone {
+			m.logger.Info("pending add already downloaded", "pending_id", row.ID, "kind", row.Kind, "catalog_id", row.CatalogID, "album_id", id)
+		}
 		return err
 	}
 	storefront := func(catalog Catalog) (string, error) {

@@ -22,16 +22,20 @@ var ErrQueueFull = errors.New("job queue is full")
 var ErrJobNotRetryable = errors.New("only failed or cancelled jobs can be retried")
 
 // SubmitBatch validates and adds each url independently (design §3.1). An
-// album, an album-track link and a catalog playlist (pl.) become records, and
-// the add queues the record's run in the same step when it needs one; a song
-// without its album, an artist and a library playlist's songs become pending
-// adds the resolver reads; a station, and a library playlist the Apple
-// library cache does not hold, is a one-off run as before. Two URLs of one
-// request that name the same thing are refused as duplicate_in_request.
+// album, an album-track link, a song an album record already lists and a
+// catalog playlist (pl.) become records, and the add queues the record's run
+// in the same step when it needs one; any other song without its album, an
+// artist and a library playlist's songs become pending adds the resolver
+// reads; a station, and a library playlist the Apple library cache does not
+// hold, is a one-off run as before. Two URLs of one request that name the
+// same thing are refused as duplicate_in_request.
 //
 // An accepted result carries the record's new run, so a caller can wait for
 // it; a record whose run is already active answers duplicate_active with that
-// run's id, as before. A record with every wanted track done answers
+// run's id, as before, unless the add wanted more of the album: that is
+// accepted, with the run while it is still queued (it takes the new tracks),
+// else with none (the picker queues the rest after it). A record with every
+// wanted track done answers
 // already_downloaded, an add the resolver must read answers pending, and an
 // accepted result carries no run when the record waits (a failed slot's
 // retry, a full queue the picker drains later).
@@ -128,9 +132,20 @@ func (m *Manager) submitOne(ctx context.Context, url, key string, valid Validati
 			ID: valid.ID, WantedAll: true, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Storefront: pin, Now: now,
 		}, domain.TriggerManual))
 	case "song":
-		if valid.AlbumID != "" {
-			return addResult(url, domain.ResourceAlbum, valid.AlbumID)(m.addAlbum(ctx, db.AlbumAdd{
-				ID: valid.AlbumID, SongIDs: []string{valid.ID}, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Storefront: pin, Now: now,
+		albumID := valid.AlbumID
+		if albumID == "" {
+			// A song an album record already lists needs no catalog read
+			// for its album: it is added there, as an album-track link
+			// is, and answers at once.
+			held, err := m.store.SongMarks(ctx, []string{valid.ID})
+			if err != nil {
+				return storeFailure(url, "look up the song's album record", err)
+			}
+			albumID = held[valid.ID].ID
+		}
+		if albumID != "" {
+			return addResult(url, domain.ResourceAlbum, albumID)(m.addAlbum(ctx, db.AlbumAdd{
+				ID: albumID, SongIDs: []string{valid.ID}, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Storefront: pin, Now: now,
 			}, domain.TriggerManual))
 		}
 		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: valid.ID, Source: domain.SourceManual, Overrides: overrides, Storefront: pin, AddedAt: now})

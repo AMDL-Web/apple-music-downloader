@@ -410,8 +410,9 @@ answers `{reset, skipped_active}`; an audio reset by the `failed`, `given_up` or
 flag re-arms only the slots in that state, so the second line above downloads every
 missing file again.
 
-**Pending adds.** A song link without its album, an artist link and a library playlist's
-songs need a catalog read before they become records. `POST /downloads` answers them
+**Pending adds.** A song link without its album (unless an album record already lists the
+song), an artist link and a library playlist's songs need a catalog read before they
+become records. `POST /downloads` answers them
 `pending`; the resolver reads them in the background, and one it gives up on is `failed`
 with `last_error` in `GET /library/pending` until a retry or a delete.
 
@@ -452,12 +453,12 @@ and, unless it was accepted, an `error` object `{code, message, details?}`:
 
 | `status` | `error.code` |
 | --- | --- |
-| `accepted` | — (`resource` names the record; `job` is its queued run, absent when the record waits for a retry or the queue is full) |
+| `accepted` | — (`resource` names the record; `job` is its queued run, absent when the record waits for a retry, the queue is full, or a running run of the record downloads the rest first) |
 | `pending` | — (the link is read into records first; no `job` yet) |
 | `already_downloaded` | — (`resource` names the record; every wanted track is done, nothing was queued) |
 | `invalid` | `invalid_url`, `unsupported_input`, `decryptor_unavailable` (`details`: `storefront`, `supported_storefronts` when the wrapper does not serve the storefront the run reads in), `invalid_configuration` |
 | `duplicate_in_request` | `duplicate_in_request` |
-| `duplicate_active` | `duplicate_active` (`existing_job_id` names the running job) |
+| `duplicate_active` | `duplicate_active` (`existing_job_id` names the running job; the link asked for nothing it does not already take) |
 | `queue_full` | `queue_full` |
 | `error` | `store_error`, `internal_error` — the server failed; the same submit may succeed when retried |
 
@@ -467,10 +468,14 @@ error whose `details` is that same body: `500 store_error` if any URL failed in 
 store (`500 internal_error` if the only server failure was an unexpected validator error),
 else `422 no_urls_accepted`.
 
-An album link, an album-track link and a catalog playlist (`pl.`) add or extend a
-[record](#library), set the failed, given-up and missing slots of what the link names
-pending, and queue its run when the record needs one; a record with an active run
-answers `duplicate_active` with that run's id. Every download is a new job. A record is
+An album link, an album-track link, a song link whose song an album record already lists
+and a catalog playlist (`pl.`) add or extend a [record](#library), set the failed,
+given-up and missing slots of what the link names pending, and queue its run when the
+record needs one. A record with an active run answers `duplicate_active` with that run's
+id, unless the link wants tracks the record did not: the whole album after one of its
+songs, say. That is `accepted`, with the run as `job` while it is still queued (it takes
+the new tracks), else without a `job`: the scheduler queues a run for them once the
+running one ends. Every download is a new job. A record is
 read in its pinned storefront (`pinned_storefront`): the link's when an account serves it,
 else the default account's, so a `jp` link downloads the `jp` track list with a `jp`
 account and the default account's list without one. The wrapper must serve the pinned
@@ -870,16 +875,16 @@ tracks_wanted, withheld_count, wanted_all, active_job_id?, paused, song_state?}`
 the [records](#library) and never from the disk: a file moved away still counts until a disk
 check marks it missing. A song is marked with the album record that holds it and its main
 slot's state as `song_state`. An object amdl has no record of has no `resource`.
-
-| Case | Answer |
-| --- | --- |
-| An album id that is not digits, a bad `storefront` | `400 invalid_request` |
-| Apple answers 404 (an unknown album id, or one the storefront does not have) | `404 catalog_not_found` |
 `wanted_all` is false for an album record of songs added one by one: its `state` and counts
 cover those songs, so a `complete` one holds the whole album only when `tracks_done`
 reaches the album's track count less `withheld_count`. The console, the desktop app and the
 TUI show it as partly downloaded otherwise, and their Download adds the whole album, which
 queues a run for the tracks it lacks.
+
+| Case | Answer |
+| --- | --- |
+| An album id that is not digits, a bad `storefront` | `400 invalid_request` |
+| Apple answers 404 (an unknown album id, or one the storefront does not have) | `404 catalog_not_found` |
 | The catalog read fails otherwise | `502 upstream_error` |
 | No answer within 15 seconds | `504 upstream_timeout` |
 

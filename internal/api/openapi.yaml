@@ -2107,8 +2107,9 @@ paths:
         submit may succeed when retried), 500 internal_error if the only server
         failure was an unexpected validator error, else 422 no_urls_accepted.
         Accepted, pending and already_downloaded count as accepted. An album,
-        an album-track link and a catalog playlist (pl.) add or extend a record
-        and queue its run (job) when the record needs one; a song without its
+        an album-track link, a song link whose song an album record already
+        lists and a catalog playlist (pl.) add or extend a record and queue
+        its run (job) when the record needs one; any other song without its
         album, an artist and a library playlist's songs become pending adds
         that the resolver reads into records (status pending, no job yet); a
         record whose every wanted track is done answers already_downloaded and
@@ -4321,15 +4322,18 @@ components:
           description: >-
             accepted: the link added or extended a record and job is its queued
             run, absent when the record waits (a failed slot's automatic retry,
-            or a full queue the scheduler drains later), or a station's one-off
-            run was queued. pending: the link needs a catalog read before it
-            becomes records (a song without its album, an artist, a library
-            playlist's songs); they appear in GET /library/albums once read.
+            a full queue the scheduler drains later, or a running run the link
+            added tracks to, which the scheduler downloads after it), or a
+            station's one-off run was queued. pending: the link needs a catalog
+            read before it becomes records (a song without its album that no
+            album record lists, an artist, a library playlist's songs); they
+            appear in GET /library/albums once read.
             already_downloaded: every wanted track of the link's record is done;
             nothing was queued (reset it to download again). invalid: the URL will not be accepted as
             it is (error.code says why). duplicate_in_request: an earlier URL in
             the same request names the same download. duplicate_active: a queued
-            or running job already downloads it. queue_full: the job queue is
+            or running job already downloads it and the link asked for nothing
+            more. queue_full: the job queue is
             full; retry later. error: the server failed while handling the URL
             (store_error); the same submit may succeed when retried.
         resource:
@@ -5001,10 +5005,6 @@ components:
         withheld_count:
           type: integer
           description: Tracks of the release the account storefront does not list; 0 for playlists.
-        active_job_id:
-          type: string
-          description: The record's queued or running run; absent without one.
-        paused: {type: boolean}
         wanted_all:
           type: boolean
           description: >-
@@ -5013,6 +5013,10 @@ components:
             only those tracks: complete then means they are done, not the
             album. Clients compare tracks_done with the album's track count
             less withheld_count to tell.
+        active_job_id:
+          type: string
+          description: The record's queued or running run; absent without one.
+        paused: {type: boolean}
         song_state:
           $ref: '#/components/schemas/AudioState'
           description: For a song, its main slot state in this album record.

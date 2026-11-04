@@ -197,13 +197,23 @@ func (m *Manager) AddAlbums(ctx context.Context, source domain.RecordSource, sto
 }
 
 // addAlbum stores an album add and queues its run when the record needs one.
+// An add that wants more of the album than the record did while its run is
+// running is AddRecorded, not AddActive: that run planned its slots before
+// the add, and the picker queues a run for the new tracks once it ends. A
+// queued audio run plans when it starts and takes them, so the add reports
+// it as AddQueued.
 func (m *Manager) addAlbum(ctx context.Context, add db.AlbumAdd, trigger domain.RunTrigger) (AddOutcome, domain.Job, error) {
 	if add.Now.IsZero() {
 		add.Now = time.Now().UTC()
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, err := m.store.AddAlbum(ctx, add); err != nil {
+	before, err := m.store.GetAlbum(ctx, add.ID)
+	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return "", domain.Job{}, err
+	}
+	after, err := m.store.AddAlbum(ctx, add)
+	if err != nil {
 		return "", domain.Job{}, err
 	}
 	if trigger == domain.TriggerManual {
@@ -211,7 +221,15 @@ func (m *Manager) addAlbum(ctx context.Context, add db.AlbumAdd, trigger domain.
 			return "", domain.Job{}, err
 		}
 	}
-	return m.afterAddLocked(ctx, domain.ResourceAlbum, add.ID, trigger, add.Now)
+	outcome, job, err := m.afterAddLocked(ctx, domain.ResourceAlbum, add.ID, trigger, add.Now)
+	widened := after.TracksWanted > before.TracksWanted || (after.WantedAll && !before.WantedAll)
+	if err != nil || outcome != AddActive || !widened {
+		return outcome, job, err
+	}
+	if plan, err := ParsePlan(job); err == nil && plan.Scope == ScopeAudio && job.Status == domain.JobQueued {
+		return AddQueued, job, nil
+	}
+	return AddRecorded, domain.Job{}, nil
 }
 
 // rearmLocked sets the failed, given-up and missing slots of a record the
