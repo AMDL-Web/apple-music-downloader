@@ -121,12 +121,12 @@ func TestFolderAndNameChangesAskFirst(t *testing.T) {
 
 	// A fresh window, so the click lands where Find places the field.
 	_, tt = filesApp(t)
-	clickFieldOf(t, tt, "Songs, albums and artists.")
+	clickFieldOf(t, tt, "{SongNumber} is the position in the playlist.")
 	tt.Type(" ({ReleaseYear})")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	if !tt.HasText("Change how files are named?") {
-		t.Errorf("a new library template applied without asking: %q", tt.Texts())
+		t.Errorf("a new playlist template applied without asking: %q", tt.Texts())
 	}
 }
 

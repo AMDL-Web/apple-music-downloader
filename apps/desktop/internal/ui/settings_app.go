@@ -101,7 +101,9 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 					a.runTest(*addr, c.Now())
 				}
 			})
-			ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)
+			if help != "" {
+				ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)
+			}
 		})
 		// The last results stay, dimmed, until the new ones replace them,
 		// so the card keeps its height.
@@ -114,7 +116,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		}
 	}
 	if d.Mode != mode.Standalone {
-		card(c, k).Gap(14).Children(func() { address(&d.RemoteURL, "Server address", "The web console's address.") })
+		card(c, k).Gap(14).Children(func() { address(&d.RemoteURL, "Server address", "") })
 	} else {
 		// Where the wrapper runs, as the setup screen asks it: this
 		// computer's guest shows how it runs and has no address to type;
