@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"amdl/internal/jobs"
 )
@@ -48,6 +49,22 @@ func (d *Downloader) RunStorefront(ctx context.Context, pin string) (string, err
 		return pin, nil
 	}
 	return d.AccountStorefront(ctx)
+}
+
+// otherStorefronts are the storefronts of the logged-in accounts other
+// than storefront, in account order, each once.
+func (d *Downloader) otherStorefronts(storefront string) []string {
+	seen := map[string]bool{strings.ToLower(storefront): true}
+	var out []string
+	for _, a := range d.tokens.Accounts() {
+		region := strings.ToLower(a.Region)
+		if !a.Active || region == "" || seen[region] {
+			continue
+		}
+		seen[region] = true
+		out = append(out, region)
+	}
+	return out
 }
 
 // SongAlbumID implements jobs.Catalog with the song's required metadata read.

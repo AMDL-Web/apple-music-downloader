@@ -348,7 +348,9 @@ release. Unknown variables are preserved literally.
 
 An album or catalog playlist that amdl downloads is a record, and its records alone say
 what is downloaded: no search, lookup or plan stats a file. A run of a record resolves it
-in its pinned storefront (the link's when an account serves it, else the default account's) and plans its slots from the records
+in its pinned storefront (the link's when an account serves it, else the default account's; one
+that storefront does not have is looked for in the other accounts' storefronts and pinned to
+the first that has it, `internal/media#Downloader.resolveRecord`) and plans its slots from the records
 (`internal/jobs#Manager.PlanRun`): the main quality of each wanted track that is pending,
 or failed with its backoff over. Each slot claims its path in the store before anything
 is downloaded (`internal/jobs#Manager.ClaimSlot`), so two records whose templates give

@@ -323,7 +323,10 @@ while another account serves it, else they fail with `decryptor_unavailable`.
 A link is pinned to its storefront when an account serves that storefront, and read in the
 default account's storefront when none does. A record carries that as `pinned_storefront`
 (absent: the default account's), a pending add as `storefront`, and a record added by
-library sync is pinned to the syncing account's storefront. Add an account with
+library sync is pinned to the syncing account's storefront. A record its storefront does
+not have (`catalog_state` `not_in_storefront`) moves: a run that does not find it there
+reads it in the other logged-in accounts' storefronts and pins it to the first that has
+it, and an add of a link whose storefront an account serves pins it there. Add an account with
 `POST /wrapper/login` ([Wrapper](#wrapper)).
 
 ## Library

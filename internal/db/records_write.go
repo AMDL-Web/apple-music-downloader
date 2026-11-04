@@ -38,7 +38,9 @@ type AlbumAdd struct {
 	// existing record's flag alone and makes a new one unpaused.
 	Paused *bool
 	// Storefront is the pin of a new record (pinned_storefront): the
-	// storefront its runs read it in. An existing record keeps its pin.
+	// storefront its runs read it in. An existing record keeps its pin,
+	// unless its storefront did not have it (catalog_state not ok): an add
+	// naming a storefront moves it there.
 	Storefront string
 	Now        time.Time
 }
@@ -132,6 +134,7 @@ func upsertRecord(ctx context.Context, tx *sql.Tx, kind domain.ResourceKind, id 
 			paused = CASE WHEN ? THEN excluded.paused ELSE paused END,
 			priority = MIN(priority, excluded.priority),
 			overrides = CASE WHEN ? AND tracks_done = 0 THEN excluded.overrides ELSE overrides END,
+			pinned_storefront = CASE WHEN excluded.pinned_storefront <> '' AND catalog_state <> 'ok' THEN excluded.pinned_storefront ELSE pinned_storefront END,
 			updated_at = excluded.updated_at`,
 		id, newPaused, priority, encoded, strings.ToLower(pin), stamp, stamp,
 		paused != nil, source == domain.SourceManual)
@@ -358,6 +361,16 @@ func (s *Store) SetCatalogState(ctx context.Context, kind domain.ResourceKind, i
 		return err
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE `+table+` SET catalog_state = ?, updated_at = ? WHERE id = ?`, string(state), formatTime(now), id)
+	return requireRow(res, err)
+}
+
+// SetRecordPin pins a record to storefront: its runs read it there.
+func (s *Store) SetRecordPin(ctx context.Context, kind domain.ResourceKind, id, storefront string, now time.Time) error {
+	table, err := recordTable(kind)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE `+table+` SET pinned_storefront = ?, updated_at = ? WHERE id = ?`, strings.ToLower(storefront), formatTime(now), id)
 	return requireRow(res, err)
 }
 

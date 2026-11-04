@@ -129,6 +129,9 @@ type RecordReporter interface {
 	// RecordPin is the storefront the record is read in, "" for the
 	// default account's.
 	RecordPin(ctx context.Context, kind domain.ResourceKind, id string) (string, error)
+	// SetRecordPin moves the record to storefront, where a run found it
+	// after its own storefront did not have it.
+	SetRecordPin(ctx context.Context, kind domain.ResourceKind, id, storefront string) error
 }
 
 var _ RecordReporter = (*Manager)(nil)
@@ -165,6 +168,10 @@ func (m *Manager) ApplyPlaylistRead(ctx context.Context, read db.PlaylistRead) e
 
 func (m *Manager) SetCatalogState(ctx context.Context, kind domain.ResourceKind, id string, state domain.CatalogState) error {
 	return m.store.SetCatalogState(ctx, kind, id, state, time.Now().UTC())
+}
+
+func (m *Manager) SetRecordPin(ctx context.Context, kind domain.ResourceKind, id, storefront string) error {
+	return m.store.SetRecordPin(ctx, kind, id, storefront, time.Now().UTC())
 }
 
 // PlanRun plans a record run from the records, after its resolve: the due

@@ -53,9 +53,15 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 		return err
 	}
 
-	resolved, err := d.resolveRecord(ctx, job, parsed, record, reporter)
+	resolved, err := d.resolveRecord(ctx, job, &parsed, record, reporter)
 	if err != nil {
 		return err
+	}
+	if parsed.Storefront != storefront {
+		// Found in another account's storefront (resolveRecord): the run reads
+		// and decrypts it there.
+		d.storefront = parsed.Storefront
+		job.Storefront = parsed.Storefront
 	}
 	plan, err := record.PlanRun(ctx, job)
 	if err != nil {
@@ -111,18 +117,41 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 }
 
 // resolveRecord makes the run's required read of its record and stores it
-// (ApplyAlbumRead, ApplyPlaylistRead). A 404 in the account storefront marks
-// the record not_in_storefront and fails the run without counting a failure
-// against any slot.
-func (d *Downloader) resolveRecord(ctx context.Context, job domain.Job, parsed applemusic.ParsedURL, record jobs.RecordReporter, reporter jobs.Reporter) (resolvedCollection, error) {
-	collection, _, err := retryValue(ctx, d.cfg.Download.MaxAttempts, retryBackoff, func(int) (applemusic.Collection, error) {
+// (ApplyAlbumRead, ApplyPlaylistRead). A 404 in the run's storefront tries
+// the storefronts of the other logged-in accounts the wrapper serves, in
+// account order; the first that has the record becomes its pin and
+// parsed's storefront. Found nowhere, the record is marked not_in_storefront
+// and the run fails without counting a failure against any slot.
+func (d *Downloader) resolveRecord(ctx context.Context, job domain.Job, parsed *applemusic.ParsedURL, record jobs.RecordReporter, reporter jobs.Reporter) (resolvedCollection, error) {
+	read := func(storefront string) (applemusic.Collection, error) {
 		if parsed.Type == applemusic.TypeAlbum {
-			return d.catalog.Album(ctx, parsed.Storefront, parsed.ID)
+			return d.catalog.Album(ctx, storefront, parsed.ID)
 		}
-		return d.catalog.Playlist(ctx, parsed.Storefront, parsed.ID, d.mediaUserToken())
+		return d.catalog.Playlist(ctx, storefront, parsed.ID, d.mediaUserToken())
+	}
+	collection, _, err := retryValue(ctx, d.cfg.Download.MaxAttempts, retryBackoff, func(int) (applemusic.Collection, error) {
+		return read(parsed.Storefront)
 	}, func(failure retryFailure) {
 		d.emitRetryEvent(ctx, reporter, job.ID, nil, "resolve_tracks", "", failure)
 	})
+	if err != nil && ctx.Err() == nil && isCatalogNotFound(err) {
+		for _, other := range d.otherStorefronts(parsed.Storefront) {
+			if d.validateStorefront(ctx, other, "another account's storefront") != nil {
+				continue
+			}
+			found, otherErr := read(other)
+			if otherErr != nil {
+				continue
+			}
+			if pinErr := record.SetRecordPin(ctx, job.ResourceKind, job.ResourceID, other); pinErr != nil {
+				return resolvedCollection{}, errors.Join(err, pinErr)
+			}
+			logging.FromContext(ctx, d.logger).Info("record found in another account's storefront; pinned there",
+				"from", parsed.Storefront, "to", other)
+			parsed.Storefront, collection, err = other, found, nil
+			break
+		}
+	}
 	if err != nil {
 		if ctx.Err() == nil && isCatalogNotFound(err) {
 			if stateErr := record.SetCatalogState(ctx, job.ResourceKind, job.ResourceID, domain.CatalogNotInStorefront); stateErr != nil {

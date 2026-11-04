@@ -21,6 +21,7 @@ import (
 	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
+	"amdl/internal/usertoken"
 )
 
 // These tests run adds end to end in process: a real store and job manager
@@ -45,6 +46,8 @@ type recordCatalog struct {
 	stations  map[string]applemusic.Collection
 	artists   map[string]applemusic.ArtistAlbums
 	songs     map[string]applemusic.Song
+	// only names the one storefront that has an album; others answer 404.
+	only map[string]string
 }
 
 func newRecordCatalog() *recordCatalog {
@@ -83,9 +86,12 @@ func (c *recordCatalog) SongMetadata(_ context.Context, _, id string) (applemusi
 	return applemusic.Song{}, errCatalogNotFound{"song " + id}
 }
 
-func (c *recordCatalog) Album(_ context.Context, _, id string) (applemusic.Collection, error) {
+func (c *recordCatalog) Album(_ context.Context, storefront, id string) (applemusic.Collection, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if only := c.only[id]; only != "" && only != storefront {
+		return applemusic.Collection{}, errCatalogNotFound{"album " + id + " in " + storefront}
+	}
 	if album, ok := c.albums[id]; ok {
 		return album, nil
 	}
@@ -680,6 +686,50 @@ func TestRecordRunNotInStorefront(t *testing.T) {
 	}
 	if f := h.files(domain.ResourceAlbum, "100")[0]; f.Failures != 0 {
 		t.Fatalf("slot = %+v, want no failure counted", f)
+	}
+}
+
+// A record its storefront does not have is found in another logged-in
+// account's storefront: a Retry (an audio reset) reads it there and moves
+// its pin, and so does an add of a link of that storefront.
+func TestARecordNotInItsStorefrontIsFoundInAnotherAccounts(t *testing.T) {
+	for _, how := range []string{"retry", "link"} {
+		t.Run(how, func(t *testing.T) {
+			cfg := recordTestConfig(t)
+			catalog := newRecordCatalog()
+			catalog.addAlbum("100", "Album", "Artist", 2, 2, 1000, "")
+			catalog.only = map[string]string{"100": "jp"}
+			tokens := usertoken.New()
+			tokens.SetAccounts([]usertoken.Account{{ID: "a-cn", Region: "cn", Position: 0, Active: true}})
+			h := newRecordHarness(t, cfg, nil, catalog)
+			h.d.tokens = tokens
+			h.m.SetStorefronts(tokens)
+			h.start()
+			h.submit("https://music.apple.com/cn/album/album/100")
+			h.waitFor("the first run to end", func() bool {
+				runs := h.runsOf(domain.ResourceAlbum, "100")
+				return len(runs) == 1 && runs[0].Status.IsTerminal()
+			})
+			if album := h.album("100"); album.CatalogState != domain.CatalogNotInStorefront || album.PinnedStorefront != "cn" {
+				t.Fatalf("album = %s pinned %q, want not_in_storefront pinned cn", album.CatalogState, album.PinnedStorefront)
+			}
+
+			// The jp account logs in.
+			tokens.SetAccounts([]usertoken.Account{{ID: "a-cn", Region: "cn", Position: 0, Active: true}, {ID: "a-jp", Region: "jp", Position: 1, Active: true}})
+			if how == "retry" {
+				if _, err := h.m.Reset(context.Background(), jobs.ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: jobs.ResetAudio,
+					States: []domain.AudioState{domain.AudioFailed, domain.AudioGivenUp, domain.AudioMissing}}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				h.submit("https://music.apple.com/jp/album/album/100")
+			}
+			h.waitFor("the album", h.albumComplete("100"))
+			h.waitFor("the run to end", h.idle())
+			if album := h.album("100"); album.CatalogState != domain.CatalogOK || album.PinnedStorefront != "jp" {
+				t.Errorf("album = %s pinned %q, want ok pinned jp", album.CatalogState, album.PinnedStorefront)
+			}
+		})
 	}
 }
 

@@ -208,3 +208,27 @@ func TestARecordAppleDoesNotListIsFailed(t *testing.T) {
 		t.Errorf("after Apple lists album 1 again: failed count %d (%v), want 1", counts.Flags[FlagFailed], err)
 	}
 }
+
+// An add naming a storefront moves the pin of a record its own storefront
+// did not have, and leaves the pin of one it had.
+func TestAnAddMovesThePinOfARecordNotInItsStorefront(t *testing.T) {
+	store := openRecordStore(t)
+	ctx := context.Background()
+	now := mustTime(t, "2026-11-01T10:00:00Z")
+	add := func(id, pin string) {
+		_, err := store.AddAlbum(ctx, AlbumAdd{ID: id, WantedAll: true, Source: domain.SourceManual, Storefront: pin, Now: now})
+		must(t, err)
+	}
+	add("1", "cn")
+	add("2", "cn")
+	must(t, store.SetCatalogState(ctx, domain.ResourceAlbum, "1", domain.CatalogNotInStorefront, now))
+	add("1", "jp")
+	add("2", "jp")
+	for id, want := range map[string]string{"1": "jp", "2": "cn"} {
+		album, err := store.GetAlbum(ctx, id)
+		must(t, err)
+		if album.PinnedStorefront != want {
+			t.Errorf("album %s pinned %q, want %q", id, album.PinnedStorefront, want)
+		}
+	}
+}
