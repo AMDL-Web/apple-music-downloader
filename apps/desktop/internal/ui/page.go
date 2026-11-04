@@ -18,7 +18,10 @@ import (
 // OpenAlbum shows an album or playlist hit's page, which reads its songs, with its
 // download while the feed holds one; Back returns to the screen it was
 // opened from.
-func (a *App) OpenAlbum(h client.SearchHit) {
+func (a *App) OpenAlbum(h client.SearchHit) { a.openAlbumFrom(h, store.PageSource{}) }
+
+// openAlbumFrom is OpenAlbum reading the songs from from.
+func (a *App) openAlbumFrom(h client.SearchHit, from store.PageSource) {
 	s := a.Store
 	ref := domain.ResourceRef{Kind: store.PageKind(h), ID: h.ID}
 	job := s.AlbumJob(ref.Kind, ref.ID)
@@ -32,7 +35,7 @@ func (a *App) OpenAlbum(h client.SearchHit) {
 		}
 	}
 	a.openPage(ref, job)
-	s.OpenAlbum(h)
+	s.OpenAlbumFrom(h, from)
 	if job != "" {
 		s.OpenDetail(job)
 	} else {
@@ -393,6 +396,10 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 		if clicked(buttonOff(c, k, buttonOnArt, "Download again", nil, wait).Label("Download "+h.Name+" again")) && !starting {
 			a.download(h)
 		}
+	}
+	if j == nil && h.URL == "" {
+		// A playlist only the Apple library has downloads song by song.
+		return
 	}
 	if j == nil {
 		switch mark, _ := s.HitMark(h); {

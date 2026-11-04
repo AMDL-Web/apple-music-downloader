@@ -107,44 +107,17 @@ type Library struct {
 	Marks map[domain.ResourceRef]*domain.ResourceMark
 	// Added are the Apple items added here, by URL.
 	Added map[string]domain.SubmitStatus
-	// Tracks are the tracks of the Apple playlists opened, by library id.
-	Tracks map[string][]domain.AppleLibraryTrack
 
 	open bool
 	gen  int
 }
 
 func (l *Library) reset() {
-	*l = Library{AppleKind: AppleKinds[0], Kept: map[string]bool{}, Marks: map[domain.ResourceRef]*domain.ResourceMark{}, Added: map[string]domain.SubmitStatus{},
-		Tracks: map[string][]domain.AppleLibraryTrack{}}
+	*l = Library{AppleKind: AppleKinds[0], Kept: map[string]bool{}, Marks: map[domain.ResourceRef]*domain.ResourceMark{}, Added: map[string]domain.SubmitStatus{}}
 }
 
 // Open reports whether the Library screen follows the Apple library.
 func (l *Library) Open() bool { return l.open }
-
-// OpenApplePlaylist reads the tracks of an Apple library playlist, once.
-func (s *Store) OpenApplePlaylist(id string) {
-	l, c, ctx := &s.Library, s.client, s.ctx
-	if _, read := l.Tracks[id]; read || c == nil {
-		return
-	}
-	l.Tracks[id] = nil
-	account := l.AppleAccount
-	go func() {
-		t, err := c.AppleLibraryPlaylistTracks(ctx, id, account)
-		s.postIf(ctx, func() {
-			if l.AppleAccount != account {
-				return
-			}
-			if err != nil {
-				delete(l.Tracks, id)
-				s.setNotice(Reason(err), true)
-				return
-			}
-			l.Tracks[id] = t.Items
-		})
-	}()
-}
 
 // OpenLibrary reads the Apple library list.
 func (s *Store) OpenLibrary() {
@@ -240,7 +213,6 @@ func (s *Store) SetAppleAccount(id string) {
 	}
 	l.AppleAccount = id
 	l.showApple()
-	l.Tracks = map[string][]domain.AppleLibraryTrack{}
 	l.refresh(s)
 }
 
@@ -329,7 +301,7 @@ func (l *Library) readApple(s *Store, gen int) {
 				l.AppleSync = &st
 			}
 			if l.AppleAccount != account {
-				l.AppleAccount, l.Tracks = account, map[string][]domain.AppleLibraryTrack{}
+				l.AppleAccount = account
 			}
 			// A record the store learned of while the read was out may be
 			// newer than the read's lists: the read never takes its keep away.

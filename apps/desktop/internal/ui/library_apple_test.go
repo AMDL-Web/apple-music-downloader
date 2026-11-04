@@ -230,9 +230,11 @@ func appleItem(s *store.Store, name string) domain.AppleLibraryItem {
 	return domain.AppleLibraryItem{}
 }
 
-// A library-only playlist's cover opens its tracks under its row, each
-// with its own Add, and closes them again.
-func TestALibraryOnlyPlaylistOpensItsTracksUnderItsRow(t *testing.T) {
+// A library-only playlist's cover opens its page, as any playlist of the
+// Library does, with its songs as the library copy has them: each with a
+// download of its own, and no download of the whole playlist, which the
+// catalog does not have.
+func TestALibraryOnlyPlaylistOpensItsPageWithItsSongs(t *testing.T) {
 	a, run := demoApp(t)
 	s := a.Store
 	run(func() bool { return s.Loaded })
@@ -243,29 +245,32 @@ func TestALibraryOnlyPlaylistOpensItsTracksUnderItsRow(t *testing.T) {
 	tt.Frame()
 	run(func() bool { return s.Library.AppleStatus == store.SearchReady })
 	tt.Frame()
-	cover, ok := tt.Find("Favourite Songs")
-	if !ok {
-		t.Fatalf("no Favourite Songs in %q", tt.Texts())
-	}
 	if err := tt.Click("Favourite Songs"); err != nil {
-		t.Fatal(err)
+		t.Fatalf("%v in %q", err, tt.Texts())
 	}
-	run(func() bool { return len(s.Library.Tracks["p.favourites"]) > 0 })
+	p := &s.Search.Album
+	run(func() bool { tt.Frame(); return p.Status == store.SearchReady })
 	tt.Frame()
-	first := s.Library.Tracks["p.favourites"][0]
-	r, ok := tt.Find("Add " + first.Name)
-	if !ok {
-		t.Fatalf("no Add for %q in %q", first.Name, tt.Texts())
+	if a.Screen != ScreenAlbum || p.From.Playlist != "p.favourites" {
+		t.Fatalf("screen %v, page from %+v", a.Screen, p.From)
 	}
-	if r.Y < cover.Y+cover.H {
-		t.Errorf("the tracks show at %v, above the cover's bottom %v", r.Y, cover.Y+cover.H)
+	// The demo's library playlist holds the first four songs of Glass
+	// Weather.
+	for _, name := range []string{"Glass Weather", "Paper Satellites", "Slow Lightning", "Northbound"} {
+		if !tt.HasText(name) {
+			t.Errorf("no %q on the page: %q", name, tt.Texts())
+		}
 	}
-	if err := tt.Click("Favourite Songs"); err != nil {
-		t.Fatal(err)
+	if _, ok := tt.Find("Download Favourite Songs"); ok {
+		t.Error("the page offers to download the whole of a playlist only the library has")
 	}
+	// A song's download shows while its row is pointed at.
+	row, _ := tt.Find("Paper Satellites")
+	tt.Move(row.X+row.W/2, row.Y+row.H/2)
+	tt.Advance(300 * time.Millisecond)
 	tt.Frame()
-	if _, ok := tt.Find("Add " + first.Name); ok {
-		t.Errorf("closed, the tracks still show")
+	if _, ok := tt.Find("Download Paper Satellites"); !ok {
+		t.Errorf("no download of a song of it: %q", tt.Texts())
 	}
 }
 

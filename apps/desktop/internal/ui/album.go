@@ -286,7 +286,9 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 					stateWord(c, icDown, "In the queue", k.Accent)
 				case wait:
 					ui.Text(c, "…").FontSize(13).FontWeight(700).TextColor(k.Muted)
-				default:
+				case th.URL != "":
+					// A song of a library playlist that the catalog does not
+					// have has no download.
 					a.trackDownload(c, k, th, pointed)
 				}
 			})

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 
 	"amdl/internal/client"
@@ -16,9 +17,12 @@ type AlbumPage struct {
 	Hit client.SearchHit
 	// Storefront is the one the hit's link names; the album is read in it.
 	Storefront string
-	Status     SearchStatus
-	Album      client.Album
-	Err        string
+	// From is where its songs are read: the catalog, or the Apple library
+	// copy for a playlist opened from the Library.
+	From   PageSource
+	Status SearchStatus
+	Album  client.Album
+	Err    string
 
 	gen   int
 	cache *lru[client.Album]
@@ -31,17 +35,27 @@ func newAlbumPage() AlbumPage {
 	return AlbumPage{cache: newLRU[client.Album](searchCacheMax), items: map[string][]domain.JobItem{}, read: map[string]bool{}}
 }
 
+// PageSource is where the album screen reads its songs: the catalog, the
+// zero value, or Playlist, a playlist of Account's Apple library copy (""
+// is the default account's), whose own songs, name and cover the page
+// shows, whether or not the catalog has it.
+type PageSource struct{ Playlist, Account string }
+
 // OpenAlbum shows h, an album or playlist hit, on the album screen and
-// reads its songs, from the cache when they were read before.
-func (s *Store) OpenAlbum(h client.SearchHit) {
+// reads its songs from the catalog, from the cache when they were read
+// before.
+func (s *Store) OpenAlbum(h client.SearchHit) { s.OpenAlbumFrom(h, PageSource{}) }
+
+// OpenAlbumFrom is OpenAlbum reading the songs from from.
+func (s *Store) OpenAlbumFrom(h client.SearchHit, from PageSource) {
 	p := &s.Search.Album
-	if h.ID == p.ID && p.Status != SearchIdle && p.Status != SearchFailed {
+	if h.ID == p.ID && from == p.From && p.Status != SearchIdle && p.Status != SearchFailed {
 		p.Hit = h
 		return
 	}
 	p.gen++
-	p.ID, p.Hit, p.Storefront, p.Album, p.Err = h.ID, h, LinkStorefront(h.URL), client.Album{}, ""
-	if a, ok := p.cache.get(albumKey(p.Storefront, h.ID)); ok {
+	p.ID, p.Hit, p.Storefront, p.From, p.Album, p.Err = h.ID, h, LinkStorefront(h.URL), from, client.Album{}, ""
+	if a, ok := p.cache.get(p.cacheKey()); ok {
 		p.Status, p.Album = SearchReady, a
 		return
 	}
@@ -53,7 +67,7 @@ func (s *Store) OpenAlbum(h client.SearchHit) {
 func (s *Store) CloseAlbum() {
 	p := &s.Search.Album
 	p.gen++
-	p.ID, p.Hit, p.Storefront, p.Status, p.Album, p.Err = "", client.SearchHit{}, "", SearchIdle, client.Album{}, ""
+	p.ID, p.Hit, p.Storefront, p.From, p.Status, p.Album, p.Err = "", client.SearchHit{}, "", PageSource{}, SearchIdle, client.Album{}, ""
 }
 
 // PageKind is the kind of record a hit the album screen opens stands for.
@@ -161,12 +175,44 @@ func (s *Store) readAlbum() {
 	}()
 }
 
-// pageRead is the read of the page's songs: the album's, or the playlist's.
+// pageRead is the read of the page's songs: the album's, the playlist's,
+// or a playlist's in the Apple library copy.
 func (s *Store) pageRead() func(ctx context.Context, id, storefront string) (client.Album, error) {
-	if s.Search.Album.Kind() == domain.ResourcePlaylist {
+	p := &s.Search.Album
+	if from := p.From; from.Playlist != "" {
+		c, h := s.client, p.Hit
+		return func(ctx context.Context, _, _ string) (client.Album, error) {
+			t, err := c.AppleLibraryPlaylistTracks(ctx, from.Playlist, from.Account)
+			return libraryAlbum(h, t), err
+		}
+	}
+	if p.Kind() == domain.ResourcePlaylist {
 		return s.client.Playlist
 	}
 	return s.client.Album
+}
+
+// libraryAlbum is a library playlist's tracks as the album screen shows a
+// playlist: h's name, curator and cover over the tracks in their order,
+// each the catalog song it is, or with no link when the catalog has none.
+func libraryAlbum(h client.SearchHit, t client.AppleLibraryTracks) client.Album {
+	a := client.Album{ID: h.ID, URL: h.URL, Title: h.Name, ArtistName: h.ArtistName, ArtworkURL: h.ArtworkURL, TrackCount: len(t.Items)}
+	if len(t.Items) > 0 {
+		a.DiscCount = 1
+	}
+	for i, it := range t.Items {
+		a.Tracks = append(a.Tracks, client.AlbumTrack{ID: cmp.Or(it.CatalogID, it.SongID), URL: it.URL, DiscNumber: 1, TrackNumber: i + 1,
+			Name: it.Name, ArtistName: it.ArtistName, DurationMS: it.DurationMS})
+	}
+	return a
+}
+
+// cacheKey keys the page's songs by where they are read.
+func (p *AlbumPage) cacheKey() string {
+	if p.From.Playlist != "" {
+		return "library:" + p.From.Account + ":" + albumKey("", p.From.Playlist)
+	}
+	return albumKey(p.Storefront, p.ID)
 }
 
 // applyAlbum takes the album read at gen, unless another one opened since.
@@ -179,7 +225,7 @@ func (s *Store) applyAlbum(gen int, id string, a client.Album, err error) {
 		p.Status, p.Err = SearchFailed, err.Error()
 		return
 	}
-	p.cache.put(albumKey(p.Storefront, id), a)
+	p.cache.put(p.cacheKey(), a)
 	p.Status, p.Album = SearchReady, a
 }
 

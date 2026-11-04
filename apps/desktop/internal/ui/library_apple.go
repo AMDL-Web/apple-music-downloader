@@ -114,50 +114,22 @@ func (a *App) appleMotion(c *ui.Context) ui.ElementTransition {
 // home's rows of tiles.
 const appleGridGapY = 24
 
-// applePlace is a row of the Apple grid: the tiles of row, or the tracks
-// of the library-only playlist tracks names, opened under its row.
-type applePlace struct {
-	row    int
-	tracks string
-}
-
 // appleGrid lays the Apple library's albums or playlists out as home's
-// tiles, rows filling the page; a library-only playlist opened shows its
-// tracks under its row. The list builds only the rows in view.
+// tiles, rows filling the page. The list builds only the rows in view.
 func (a *App) appleGrid(c *ui.Context, k *Tokens, items []domain.AppleLibraryItem) {
 	kind := a.Store.Library.AppleKind
 	width := a.pageWidth(c) - 2*libraryPadX
 	cols, size := tileColumns(width), tileSize(width, 0)
-	var places []applePlace
-	for r := 0; r*cols < len(items); r++ {
-		places = append(places, applePlace{row: r})
-		for _, it := range items[r*cols : min(len(items), (r+1)*cols)] {
-			// The tracks take their row once they are read, so the grid
-			// moves once.
-			if a.lib.opened[it.ID] && appleLibraryOnly(kind, it) && len(a.Store.Library.Tracks[it.ID]) > 0 {
-				places = append(places, applePlace{row: r, tracks: it.ID})
-			}
-		}
-	}
+	rows := (len(items) + cols - 1) / cols
 	ui.Box(c.Key("apple-area-" + kind)).Grow(1).MinHeight(0).Background(k.Ground).Transition(a.appleMotion(c)).Children(func() {
 		st := a.scrollState(c, "apple-"+kind)
-		list := ui.List(c.Key("apple-"+kind), a.appleListState(kind), len(places), func(i int) {
-			p := places[i]
-			if p.tracks != "" {
-				a.appleTracks(c, k, p.tracks)
-				return
-			}
+		list := ui.List(c.Key("apple-"+kind), a.appleListState(kind), rows, func(r int) {
 			ui.Row(c).Padding(0, libraryPadX, appleGridGapY, libraryPadX).Gap(tileGap).AlignItems(ui.Start).Children(func() {
-				for _, it := range items[p.row*cols : min(len(items), (p.row+1)*cols)] {
+				for _, it := range items[r*cols : min(len(items), (r+1)*cols)] {
 					a.appleTile(c, k, kind, it, size)
 				}
 			})
-		}).Absolute().Top(0).Left(0).Right(0).Bottom(0).ItemKey(func(i int) any {
-			if p := places[i]; p.tracks != "" {
-				return "tracks:" + p.tracks
-			}
-			return items[places[i].row*cols].ID
-		}).TrackScroll(st)
+		}).Absolute().Top(0).Left(0).Right(0).Bottom(0).ItemKey(func(r int) any { return items[r*cols].ID }).TrackScroll(st)
 		a.fadeEdges(list, st)
 		a.noteView(list)
 	})
@@ -208,20 +180,28 @@ func (a *App) appleTile(c *ui.Context, k *Tokens, kind string, it domain.AppleLi
 }
 
 // appleOpen is what a click on an Apple tile's cover does: an album's opens
-// its page, a library-only playlist's shows or hides its tracks, a catalog
-// playlist's opens its page; nil for a cover that opens nothing.
+// its page, and a playlist's opens its page with its songs as the library
+// copy has them; nil for a cover that opens nothing.
 func (a *App) appleOpen(kind string, it domain.AppleLibraryItem) func() {
 	switch {
 	case kind == "albums" && it.CatalogID != "":
 		return func() { a.openAppleAlbum(it) }
-	case appleLibraryOnly(kind, it):
-		return func() { a.toggleAppleTracks(it.ID) }
 	case kind == "playlists":
-		if h, ok := a.appleHit(kind, it); ok {
-			return func() { a.OpenAlbum(h) }
-		}
+		return func() { a.openApplePlaylist(it) }
 	}
 	return nil
+}
+
+// openApplePlaylist opens a playlist of the Apple library on its page, its
+// songs read from the library copy: a playlist the catalog has downloads
+// whole through its catalog link as its hit's, one only the library has
+// (appleLibraryOnly) song by song.
+func (a *App) openApplePlaylist(it domain.AppleLibraryItem) {
+	h, ok := a.appleHit("playlists", it)
+	if !ok {
+		h = client.SearchHit{Type: "playlist", ID: it.ID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL, TrackCount: it.TrackCount}
+	}
+	a.openAlbumFrom(h, store.PageSource{Playlist: it.ID, Account: a.Store.Library.AppleAccount})
 }
 
 // appleHit is the search hit an Apple album or playlist with a catalog page
@@ -252,14 +232,6 @@ func (a *App) appleFrom(kind string, it domain.AppleLibraryItem) string {
 func (a *App) openAppleAlbum(it domain.AppleLibraryItem) {
 	a.OpenAlbum(client.SearchHit{Type: "album", ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL,
 		Resource: a.Store.RecordMark(domain.ResourceAlbum, it.CatalogID)})
-}
-
-func (a *App) toggleAppleTracks(id string) {
-	if a.lib.opened == nil {
-		a.lib.opened = map[string]bool{}
-	}
-	a.lib.opened[id] = !a.lib.opened[id]
-	a.Store.OpenApplePlaylist(id)
 }
 
 // appleControl is an Apple tile's control, as a search tile's: the check
@@ -293,16 +265,8 @@ func (a *App) appleControl(c *ui.Context, k *Tokens, kind string, it domain.Appl
 		done.show(b, true, false)
 		done.fill(c, b)
 		return
-	case appleLibraryOnly(kind, it):
-		b := tileCorner(c).Label("Show its tracks").Cursor(ui.CursorPointer)
-		if b.Clicked() {
-			a.toggleAppleTracks(it.ID)
-		}
-		look := markLook{glass: true, interactive: true, fg: k.Fg, ic: icChevron}
-		look.show(b, hover || a.lib.opened[it.ID], true)
-		look.fill(c, b)
-		return
-	case it.URL == "":
+	case appleLibraryOnly(kind, it), it.URL == "":
+		// Added song by song, on its page.
 		return
 	}
 	st, sent := l.Added[it.URL]
@@ -346,28 +310,6 @@ func (a *App) appleControl(c *ui.Context, k *Tokens, kind string, it domain.Appl
 	}
 	look.show(b, hover, wait)
 	look.fill(c, b)
-}
-
-// appleTracks is the tracks of the library-only playlist id, opened under
-// its row, each added on its own.
-func (a *App) appleTracks(c *ui.Context, k *Tokens, id string) {
-	tracks := a.Store.Library.Tracks[id]
-	ui.Column(c).Padding(0, libraryPadX, appleGridGapY, libraryPadX).Children(func() {
-		if len(tracks) == 0 {
-			return
-		}
-		ui.Column(c).Padding(6, padCard).Radius(radiusCard).Background(k.Raise).Border(1, k.Line).Children(func() {
-			for _, t := range tracks {
-				ui.Row(c.Key(t.Position)).Height(34).Gap(10).AlignItems(ui.Center).Children(func() {
-					mono(c, fmt.Sprint(t.Position+1), 11).TextColor(k.Faint).Width(22)
-					ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Children(func() {
-						ui.Text(c, t.Name).FontSize(12.5).SingleLine().Ellipsis("…")
-					})
-					a.appleAdd(c, k, t.URL, t.Name)
-				})
-			}
-		})
-	})
 }
 
 // appleAccounts switches between the accounts whose Apple library amdl
