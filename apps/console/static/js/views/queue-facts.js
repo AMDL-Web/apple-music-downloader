@@ -1,7 +1,7 @@
 // What the Queue's tabs count and its Done and Failed tabs head with: the
 // library summary (records per state and flag), the Failed records (one
-// read of flag=failed,given_up,missing for its union total), the station
-// runs per status, and the adds that could not be read. Read again on the
+// read of flag=failed,given_up,missing for its union total), the runs of
+// no record (stations, the 1.x history) per status, and the adds that could not be read. Read again on the
 // feed's record news, an ended station run, a finished disk check, an
 // action (app.recordsStamp) and the page epoch.
 
@@ -25,7 +25,7 @@ export function useQueueFacts(app) {
     Promise.allSettled([
       getLibrarySummary(),
       Promise.all([total(listAlbumRecords({ flag: FAILED_FLAGS, limit: 1 })), total(listPlaylistRecords({ flag: FAILED_FLAGS, limit: 1 }))]),
-      listDownloads({ type: 'station', limit: 1 }),
+      listDownloads({ resource_kind: 'none', limit: 1 }),
       listPendingAdds({ state: 'failed' }),
     ]).then(([s, f, st, p]) => {
       if (!live) return;

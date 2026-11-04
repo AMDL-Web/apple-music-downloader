@@ -1,6 +1,6 @@
 // The Queue's streams: the record lists (GET /library/albums and
-// /library/playlists, sort=activity) and the station runs (GET
-// /downloads?type=station) a tab reads, each paged on its own and merged by
+// /library/playlists, sort=activity) and the runs of no record (GET
+// /downloads?resource_kind=none: stations, the 1.x history) a tab reads, each paged on its own and merged by
 // lib/queue-rows.js. A list seen before is drawn at once and read again
 // behind it; a read again (the feed's news, an action, the page epoch) reads
 // each stream down to what it already holds, so the pages read stay; an
@@ -131,7 +131,7 @@ export function useQueueStreams(app, filters, listKey, key) {
             if (!reads.has(name) || filters.q) continue;
             const next = patchStream(name, streams[name], m.resource, recordOnTab(m.resource, tab));
             if (next !== streams[name]) streams = { ...streams, [name]: next };
-          } else if (m.type === 'download_upserted' && m.job && !m.job.resource && m.job.type === 'station') {
+          } else if (m.type === 'download_upserted' && m.job && !m.job.resource && (filters.type !== 'station' || m.job.type === 'station')) {
             if (!reads.has('stations') || filters.q) continue;
             const next = patchStream('stations', streams.stations, m.job, stationOnTab(m.job, tab));
             if (next !== streams.stations) streams = { ...streams, stations: next };

@@ -245,7 +245,8 @@ func (b *Backend) list(w http.ResponseWriter, r *http.Request) {
 	types, statuses := splitList(q["type"]), splitList(q["status"])
 	l := client.DownloadList{StatusCounts: b.counts(), Limit: client.SnapshotLimit, EventCursor: b.seq, Downloads: []domain.Job{}}
 	for _, j := range b.sortedJobs() {
-		if (len(types) > 0 && !slices.Contains(types, j.Type)) || (len(statuses) > 0 && !slices.Contains(statuses, string(j.Status))) {
+		if (len(types) > 0 && !slices.Contains(types, j.Type)) || (len(statuses) > 0 && !slices.Contains(statuses, string(j.Status))) ||
+			(q.Get("resource_kind") == "none" && j.ResourceID != "") {
 			continue
 		}
 		l.Downloads = append(l.Downloads, j.snapshot())

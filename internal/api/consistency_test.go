@@ -80,6 +80,9 @@ type surfaces struct {
 	doneTotal int
 	failTotal int
 	needsRuns []domain.Job
+	// orphans are the runs of no record, as the queues read them beside the
+	// records (resource_kind=none).
+	orphans   []domain.Job
 	waitTotal int
 	stats     struct {
 		Totals struct {
@@ -141,6 +144,8 @@ func (r *rig) read() surfaces {
 	}
 	r.call(http.MethodGet, "/downloads?status=failed&current=true&limit=200", "", http.StatusOK, &needs)
 	s.needsRuns = needs.Downloads
+	r.call(http.MethodGet, "/downloads?resource_kind=none&limit=200", "", http.StatusOK, &needs)
+	s.orphans = needs.Downloads
 
 	s.details = map[string]*struct {
 		recordView
@@ -275,6 +280,24 @@ func (r *rig) check(step string, known ...knownDefects) surfaces {
 		for id, rec := range s.albums {
 			if want := active[recordKeyOf(domain.ResourceAlbum, id)]; rec.ActiveJobID != want {
 				t.Errorf("album %s active_job_id %q, the queue's active run %q", id, rec.ActiveJobID, want)
+			}
+		}
+		// Every run shows in a queue: as its record's row, or as a run of
+		// no record.
+		orphan := map[string]bool{}
+		for _, j := range s.orphans {
+			orphan[j.ID] = true
+			if j.ResourceID != "" {
+				t.Errorf("run %s of record %s is listed as a run of no record", j.ID, j.ResourceID)
+			}
+		}
+		for _, j := range s.runs {
+			set := s.albums
+			if j.ResourceKind == domain.ResourcePlaylist {
+				set = s.playlists
+			}
+			if _, listed := set[j.ResourceID]; (j.ResourceID == "" && !orphan[j.ID]) || (j.ResourceID != "" && !listed) {
+				t.Errorf("run %s (%s, record %q) shows in no queue", j.ID, j.Type, j.ResourceID)
 			}
 		}
 	})
@@ -482,6 +505,11 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 
 	r.add("playlist|us|pl.1")
 	r.check("playlist added")
+
+	r.add("station|us|ra.1")
+	if s = r.check("a station"); len(s.orphans) != 1 || s.orphans[0].Type != "station" {
+		t.Fatalf("runs of no record = %+v, want the station's", s.orphans)
+	}
 
 	before := r.albumFile("100", "11")
 	var reset struct {

@@ -178,7 +178,8 @@ type JobListFilter struct {
 	Sort     string // created_at (default), updated_at or queue_order
 	Order    string // desc (default) or asc
 	// ResourceKind, ResourceID and Triggers select runs of a record and
-	// runs started a given way.
+	// runs started a given way; ResourceKind NoRecord selects the runs of no
+	// record.
 	ResourceKind domain.ResourceKind
 	ResourceID   string
 	Triggers     []domain.RunTrigger
@@ -188,6 +189,11 @@ type JobListFilter struct {
 	// extra quality's).
 	Current bool
 }
+
+// NoRecord is the JobListFilter.ResourceKind of the runs that download for
+// no record: stations, a library playlist without a catalog id, and the 1.x
+// history whose record the import did not make.
+const NoRecord domain.ResourceKind = "none"
 
 const (
 	JobListSortCreatedAt = "created_at"
@@ -243,7 +249,11 @@ func (f JobListFilter) whereClause() (string, []any) {
 		}
 		conds = append(conds, "j.type IN ("+strings.Join(placeholders, ",")+")")
 	}
-	if f.ResourceKind != "" {
+	switch f.ResourceKind {
+	case "":
+	case NoRecord:
+		conds = append(conds, "j.resource_id IS NULL")
+	default:
 		conds = append(conds, "j.resource_kind = ?")
 		args = append(args, string(f.ResourceKind))
 	}

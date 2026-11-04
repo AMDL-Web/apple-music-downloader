@@ -84,7 +84,8 @@ function detail(w, g) {
 
 /** Whether a run is one of the record a downloads read names (resource_kind and resource_id), or any without them. */
 export const ofResource = (j, q) =>
-  (!q.get('resource_kind') || (j.resource && j.resource.kind === q.get('resource_kind'))) && (!q.get('resource_id') || (j.resource && j.resource.id === q.get('resource_id')));
+  (!q.get('resource_kind') || (q.get('resource_kind') === 'none' ? !j.resource : j.resource && j.resource.kind === q.get('resource_kind'))) &&
+  (!q.get('resource_id') || (j.resource && j.resource.id === q.get('resource_id')));
 
 /** The feed's resource_updated after a record's run's download_upserted, as the server sends it, or null. */
 export function recordMessage(w, job, eventId) {

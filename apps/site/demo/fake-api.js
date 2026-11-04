@@ -556,6 +556,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       (j, i) =>
         (!statuses.length || statuses.includes(j.status)) &&
         (!types.length || types.includes(j.type)) &&
+        (q.get('resource_kind') !== 'none' || !j.resource) &&
         (q.get('current') !== 'true' || current(j, i)) &&
         (!term || `${j.title || ''}\n${j.input}\n${j.artist_name || ''}`.toLowerCase().includes(term)),
     );

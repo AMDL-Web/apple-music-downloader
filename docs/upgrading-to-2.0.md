@@ -459,7 +459,9 @@ except from that copy. The first start runs the migrations, each in its own tran
   playlist jobs the import made no record for, and runs a release candidate kept when it
   deleted their record. A run whose paused add (a job the upgrade stopped) will still make
   its record keeps it. Such a run is shown, retried and removed as a run of no record; the
-  row and its items and events stay.
+  row and its items and events stay. The queue lists these runs, with the finished song
+  and artist jobs, beside the records on the All, Done and Failed tabs, as it lists
+  station runs (`GET /downloads?resource_kind=none`).
 - migration 9 recomputes the counts and state (`tracks_*`, `state`, `completed_at`) of
   each album or playlist record that holds a track no codec offers: that track no
   longer counts as wanted, so a record whose other tracks are all downloaded reads

@@ -161,7 +161,10 @@ type ListQuery struct {
 	Offset int
 	Status []domain.JobStatus
 	Types  []string
-	Search string
+	// NoRecord keeps the runs of no record (resource_kind=none): stations,
+	// a library playlist without a catalog id, the 1.x history.
+	NoRecord bool
+	Search   string
 	// Sort is created_at (the backend's default), updated_at or queue_order.
 	Sort string
 	// Ascending flips the default newest-first order.
@@ -185,6 +188,9 @@ func (q ListQuery) values() url.Values {
 	}
 	if len(q.Types) > 0 {
 		v.Set("type", strings.Join(q.Types, ","))
+	}
+	if q.NoRecord {
+		v.Set("resource_kind", "none")
 	}
 	if q.Search != "" {
 		v.Set("q", q.Search)

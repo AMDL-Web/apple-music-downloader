@@ -1,8 +1,9 @@
 // Pure rules for the Queue's rows: amdl's records (albums and catalog
-// playlists, one row each) and station runs, which have no record. The
+// playlists, one row each) and the runs of no record (stations, the 1.x
+// history; the "station" rows). The
 // queued and running runs head the list (lib/queue-order.js); the rest are
 // read as streams (GET /library/albums and /library/playlists by
-// activity_at, GET /downloads?type=station by updated_at, newest first),
+// activity_at, GET /downloads?resource_kind=none by updated_at, newest first),
 // each paged on its own, and merged here. No DOM.
 
 /** The flags a record on the Failed tab has (one comma-separated query). */
@@ -32,13 +33,15 @@ export function tabStreams(filters) {
 
 /**
  * The GET query of one stream of a tab, `limit` items from `offset`:
- * records sort=activity with the tab's state or flags, stations
- * type=station by updated_at with the tab's status.
+ * records sort=activity with the tab's state or flags; the runs of no
+ * record (stations, the 1.x history) resource_kind=none by updated_at with
+ * the tab's status, only stations under the Stations filter.
  */
 export function streamQuery(name, filters, offset = 0, limit = STREAM_PAGE) {
   const q = { limit, offset };
   if (name === 'stations') {
-    Object.assign(q, { type: 'station', sort: 'updated_at', order: 'desc' });
+    Object.assign(q, { resource_kind: 'none', sort: 'updated_at', order: 'desc' });
+    if (filters.type === 'station') q.type = 'station';
     if (filters.tab === 'done') q.status = 'completed';
     if (filters.tab === 'failed') q.status = 'failed';
   } else {
@@ -209,7 +212,7 @@ export function withoutLive(rows, live) {
  * The tab counts: {all, active, done, failed}, each undefined until its
  * parts are known. `summary` is GET /library/summary, `failedRecords` the
  * union total of the Failed record reads ({albums, playlists}), `stations`
- * the status_counts of GET /downloads?type=station, `pendingFailed` the
+ * the status_counts of GET /downloads?resource_kind=none, `pendingFailed` the
  * adds that could not be read, `feed` the feed's global status_counts.
  */
 export function tabCounts({ summary, failedRecords, stations, pendingFailed, feed }) {

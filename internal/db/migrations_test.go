@@ -536,3 +536,67 @@ func TestOpenRefusesReleaseCandidateDatabaseUnchanged(t *testing.T) {
 		})
 	}
 }
+
+// Every 1.x job the upgrade imported shows in the queues: a run of a record
+// that exists, as that record's row, or a run of no record, which the
+// queues list beside the records (JobListFilter.ResourceKind NoRecord). A
+// job the upgrade stopped names the record its paused add makes once the
+// resolver reads it (migration 8 keeps such a run's record).
+func TestEveryImportedRunShowsInTheQueues(t *testing.T) {
+	store, err := OpenWith(create1xDatabase(t), Options{DownloadsDir: "/music"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	// The fixture's run with overrides that do not decode fails any list
+	// that holds it; its own tests cover it.
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM runs WHERE id = 'j-corrupt'`); err != nil {
+		t.Fatal(err)
+	}
+	all, total, err := store.ListJobs(ctx, JobListFilter{Limit: 200})
+	if err != nil || total != len(all) || total == 0 {
+		t.Fatalf("runs: %d of %d (%v)", len(all), total, err)
+	}
+	none, _, err := store.ListJobs(ctx, JobListFilter{ResourceKind: NoRecord, Limit: 200})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphan := map[string]bool{}
+	for _, j := range none {
+		orphan[j.ID] = true
+	}
+	pending, err := store.ListPending(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	willMake := map[string]bool{}
+	for _, p := range pending {
+		willMake[string(p.Kind)+"/"+p.CatalogID] = true
+		if p.Kind == domain.PendingSong && p.AlbumHint != "" {
+			willMake["album/"+p.AlbumHint] = true
+		}
+	}
+	types := map[string]bool{}
+	for _, j := range all {
+		switch {
+		case j.ResourceID == "":
+			if !orphan[j.ID] {
+				t.Errorf("run %s (%s) of no record is not listed as one", j.ID, j.Type)
+			}
+			types[j.Type] = true
+		case willMake[string(j.ResourceKind)+"/"+j.ResourceID]:
+		case j.ResourceKind == domain.ResourceAlbum:
+			if _, err := store.GetAlbum(ctx, j.ResourceID); err != nil {
+				t.Errorf("run %s names album %s: %v", j.ID, j.ResourceID, err)
+			}
+		case j.ResourceKind == domain.ResourcePlaylist:
+			if _, err := store.GetPlaylist(ctx, j.ResourceID); err != nil {
+				t.Errorf("run %s names playlist %s: %v", j.ID, j.ResourceID, err)
+			}
+		}
+	}
+	if len(orphan) != len(none) || !types["album"] || !types["song"] {
+		t.Errorf("runs of no record: %d listed, types %v; want the imported album and song history among them", len(none), types)
+	}
+}

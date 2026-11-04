@@ -17,7 +17,7 @@ const queuePage = 100
 var failedFlags = []string{FilterFailed, FilterGivenUp, FilterMissing}
 
 // The streams the queue merges below Up next: amdl's album and playlist
-// records, and the runs of stations, which have no record.
+// records, and the runs of no record (stations, the 1.x history).
 const (
 	streamAlbums = iota
 	streamPlaylists
@@ -25,8 +25,8 @@ const (
 	streamCount
 )
 
-// QueueRow is one row of the queue below Up next: a record, or a station's
-// run.
+// QueueRow is one row of the queue below Up next: a record, or a run of no
+// record.
 type QueueRow struct {
 	Record *Record
 	Run    *Job
@@ -92,7 +92,7 @@ type tabList struct {
 }
 
 // QueueList is what the queue lists below Up next, per tab: amdl's records
-// and the stations' runs, newest activity first, read a page at a time
+// and the runs of no record, newest activity first, read a page at a time
 // and kept across reads; the counts of its tabs; the library summary the
 // disk check bar reads; and the adds the backend could not read.
 type QueueList struct {
@@ -454,7 +454,7 @@ func readStreamPages(ctx context.Context, c *client.Client, i int, t Tab, want i
 // many the stream holds.
 func readStream(ctx context.Context, c *client.Client, i int, t Tab, offset, limit int) ([]QueueRow, int, error) {
 	if i == streamStations {
-		q := client.ListQuery{Types: []string{"station"}, Sort: "updated_at", Offset: offset, Limit: limit}
+		q := client.ListQuery{NoRecord: true, Sort: "updated_at", Offset: offset, Limit: limit}
 		switch t {
 		case TabDone:
 			q.Status = []domain.JobStatus{domain.JobCompleted}
@@ -516,7 +516,7 @@ func (q *QueueList) count(s *Store) {
 		}
 		stations := map[domain.JobStatus]int{}
 		for _, st := range []domain.JobStatus{domain.JobCompleted, domain.JobFailed} {
-			l, err := c.Downloads(ctx, client.ListQuery{Types: []string{"station"}, Status: []domain.JobStatus{st}, Limit: 1})
+			l, err := c.Downloads(ctx, client.ListQuery{NoRecord: true, Status: []domain.JobStatus{st}, Limit: 1})
 			stations[st] = l.Total
 			failedErr = firstErr(failedErr, err)
 		}
@@ -623,10 +623,10 @@ func (q *QueueList) recordFeed(s *Store, r Record) {
 	}
 }
 
-// runFeed puts a station's run the feed sent into every tab's list, as
+// runFeed puts a run of no record the feed sent into every tab's list, as
 // recordFeed does a record, and drops a deleted one (gone).
 func (q *QueueList) runFeed(s *Store, j *Job, gone bool) {
-	if !q.open || j.ResourceID != "" || j.Type != "station" {
+	if !q.open || j.ResourceID != "" {
 		return
 	}
 	moved := false
@@ -664,7 +664,7 @@ func (q *QueueList) runFeed(s *Store, j *Job, gone bool) {
 	}
 }
 
-// runGone drops a deleted station run the store held only in a list.
+// runGone drops a deleted run of no record the store held only in a list.
 func (q *QueueList) runGone(s *Store, id string) {
 	for t := range q.tabs {
 		for _, r := range q.tabs[t].streams[streamStations].items {
@@ -706,7 +706,7 @@ func recordOnTab(r Record, t Tab) bool {
 // failedOf reports whether r has a failed, given-up or missing track.
 func failedOf(r Record) bool { return r.TracksFailed+r.TracksGivenUp+r.TracksMissing > 0 }
 
-// runOnTab reports whether a station's run j belongs on tab t's list.
+// runOnTab reports whether a run of no record j belongs on tab t's list.
 func runOnTab(j *Job, t Tab) bool {
 	switch t {
 	case TabDone:

@@ -33,7 +33,8 @@ test('tabs read their streams with the tab state, by activity', () => {
   assert.deepEqual(streamQuery('albums', { tab: 'all' }), { limit: 100, offset: 0, sort: 'activity' });
   assert.deepEqual(streamQuery('playlists', { tab: 'done', q: 'x' }, 100), { limit: 100, offset: 100, sort: 'activity', state: 'complete', q: 'x' });
   assert.deepEqual(streamQuery('albums', { tab: 'failed' }).flag, 'failed,given_up,missing', 'one comma-separated query');
-  assert.deepEqual(streamQuery('stations', { tab: 'failed' }), { limit: 100, offset: 0, type: 'station', sort: 'updated_at', order: 'desc', status: 'failed' });
+  assert.deepEqual(streamQuery('stations', { tab: 'failed' }), { limit: 100, offset: 0, resource_kind: 'none', sort: 'updated_at', order: 'desc', status: 'failed' });
+  assert.equal(streamQuery('stations', { tab: 'all', type: 'station' }).type, 'station', 'the Stations filter keeps the stations of the runs of no record');
   assert.equal(streamQuery('stations', { tab: 'all' }).status, undefined);
 });
 

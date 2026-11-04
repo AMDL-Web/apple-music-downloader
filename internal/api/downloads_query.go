@@ -59,10 +59,10 @@ func parseJobListFilter(r *http.Request) (db.JobListFilter, error) {
 	}
 
 	switch kind := domain.ResourceKind(q.Get("resource_kind")); kind {
-	case "", domain.ResourceAlbum, domain.ResourcePlaylist:
+	case "", domain.ResourceAlbum, domain.ResourcePlaylist, db.NoRecord:
 		filter.ResourceKind = kind
 	default:
-		return filter, fmt.Errorf("resource_kind must be album or playlist")
+		return filter, fmt.Errorf("resource_kind must be album, playlist or none")
 	}
 	filter.ResourceID = strings.TrimSpace(q.Get("resource_id"))
 	for _, t := range parseCSVQuery(q, "trigger") {

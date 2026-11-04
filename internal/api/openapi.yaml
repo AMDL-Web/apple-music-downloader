@@ -2025,10 +2025,14 @@ paths:
           explode: true
         - name: resource_kind
           in: query
-          description: Only runs of records of this kind.
+          description: >-
+            Only runs of records of this kind; none keeps the runs of no
+            record (stations, a library playlist without a catalog id, the
+            1.x history the import made no record for), as the queues list
+            them beside the records.
           schema:
             type: string
-            enum: [album, playlist]
+            enum: [album, playlist, none]
         - name: resource_id
           in: query
           description: Only runs of the record with this catalog id.

@@ -554,7 +554,8 @@ curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,ca
 ```
 
 Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `resource_kind`
-(`album`, `playlist`) and `resource_id` (one record's runs), `trigger`, `current=true`
+(`album`, `playlist`, or `none` for the runs of no record: stations, a library playlist
+without a catalog id and the 1.x history) and `resource_id` (one record's runs), `trigger`, `current=true`
 (leaves out a run once its record, or a station's link, has a newer run, and a run of a
 complete record with no failed, given-up or missing slot), `q` (substring of
 the title, artist name or input), `sort` (`created_at` | `updated_at` | `queue_order`), `order`
