@@ -255,6 +255,13 @@ func (a *App) appleControl(c *ui.Context, k *Tokens, kind string, it domain.Appl
 	case st == domain.SubmitAccepted:
 		b.Label(it.Name + " is in the queue").Tooltip("In the queue")
 		look = markLook{bg: k.Accent, fg: k.AccentInk, ic: icDown}
+		// As a search tile's mark of a download under way, it opens the page.
+		if kind == "albums" && it.CatalogID != "" {
+			b.Cursor(ui.CursorPointer)
+			if b.Clicked() {
+				a.openAppleAlbum(it)
+			}
+		}
 	case st == domain.SubmitPending:
 		b.Label("Adding " + it.Name).Tooltip("Adding")
 		look = markLook{bg: k.Raise2, fg: k.Fg, ic: icClock}

@@ -268,3 +268,31 @@ func TestALibraryOnlyPlaylistOpensItsTracksUnderItsRow(t *testing.T) {
 		t.Errorf("closed, the tracks still show")
 	}
 }
+
+// A tile whose add was taken shows "in the queue" and, as a search tile's
+// mark of a download under way does, opens the album's page when clicked.
+func TestAnAppleTileInTheQueueOpensItsAlbum(t *testing.T) {
+	a, run := demoApp(t)
+	s := a.Store
+	run(func() bool { return s.Loaded })
+	a.Go(ScreenLibrary)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.Frame()
+	run(func() bool { return s.Library.AppleStatus == store.SearchReady })
+	it := appleItem(s, "Salt & Static")
+	if s.Library.Kept[it.CatalogID] {
+		t.Fatal("Salt & Static is already kept")
+	}
+	s.Library.Added[it.URL] = domain.SubmitAccepted
+	tt.Frame()
+	r, ok := tt.Find("Salt & Static is in the queue")
+	if !ok {
+		t.Fatalf("no queued mark on the tile: %q", tt.Texts())
+	}
+	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	tt.Advance(500 * time.Millisecond)
+	if a.Screen != ScreenAlbum {
+		t.Errorf("a click on the queued mark left screen %v, want the album's page", a.Screen)
+	}
+}

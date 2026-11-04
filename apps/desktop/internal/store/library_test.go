@@ -112,3 +112,80 @@ func TestTheAppleTabReachesEveryItemOfALongLibrary(t *testing.T) {
 		t.Errorf("all songs: %d, %v", len(l.Apple.Items), err)
 	}
 }
+
+// appleKeep serves an Apple library of one album, 1490555698, and no record
+// of it, and answers an add of it as the backend answers one whose record
+// needs no run: accepted, with no job. The read of the records can be held.
+type appleKeep struct {
+	hold chan struct{}
+	mu   sync.Mutex
+	kept bool
+}
+
+const keepAlbum = "1490555698"
+
+func (f *appleKeep) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	reply := func(v any) { _ = json.NewEncoder(w).Encode(v) }
+	switch {
+	case r.URL.Path == "/api/v1/apple-library/status":
+		reply(client.AppleLibraryStatus{Accounts: []client.AppleLibraryAccountStatus{{AccountID: "jp", Default: true, Enabled: true, Available: true}}})
+	case r.URL.Path == "/api/v1/apple-library/albums":
+		reply(client.AppleLibraryPage{Kind: "albums", Total: 1, Items: []domain.AppleLibraryItem{
+			{Kind: "albums", ID: "l.1", CatalogID: keepAlbum, URL: "https://music.apple.com/jp/album/x/" + keepAlbum, Name: "nameless story"}}})
+	case r.URL.Path == "/api/v1/library/albums" || r.URL.Path == "/api/v1/library/playlists":
+		if f.hold != nil && r.URL.Path == "/api/v1/library/albums" {
+			select {
+			case <-f.hold:
+			case <-r.Context().Done():
+			}
+		}
+		reply(map[string]any{"items": []any{}, "total": 0})
+	case r.URL.Path == "/api/v1/downloads" && r.Method == http.MethodPost:
+		w.WriteHeader(http.StatusAccepted)
+		reply(domain.BatchSubmitResponse{Accepted: 1, Results: []domain.SubmitResult{{
+			URL: "https://music.apple.com/jp/album/x/" + keepAlbum, Status: domain.SubmitAccepted,
+			Resource: &domain.ResourceRef{Kind: domain.ResourceAlbum, ID: keepAlbum}}}})
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// An add the backend takes without queueing a run, for a record it already
+// keeps, marks the album kept at once: nothing else tells the Library, and
+// its button would stay at "in the queue" for good.
+func TestAnAddThatQueuesNoRunMarksTheAlbumKept(t *testing.T) {
+	s, settle := live(t, &appleKeep{})
+	l := &s.Library
+	s.OpenLibrary()
+	settle(func() bool { return l.AppleStatus == SearchReady })
+	if l.Kept[keepAlbum] {
+		t.Fatal("kept before any add")
+	}
+	url := l.Apple.Items[0].URL
+	s.AddApple(url, "nameless story")
+	settle(func() bool { return l.Added[url] != "" })
+	if !l.Kept[keepAlbum] {
+		t.Errorf("the add was %q and the album is not kept: %v", l.Added[url], l.Kept)
+	}
+}
+
+// A read of the Apple library that was out when a record appeared never
+// takes the record's keep away, or the album would show as not kept until
+// the record changed again.
+func TestAReadOutBeforeARecordAppearedKeepsItKept(t *testing.T) {
+	f := &appleKeep{hold: make(chan struct{})}
+	var once sync.Once
+	release := func() { once.Do(func() { close(f.hold) }) }
+	s, settle := live(t, f)
+	t.Cleanup(release)
+	l := &s.Library
+	s.OpenLibrary()
+	settle(func() bool { return l.Apple.Items == nil && l.AppleStatus == SearchLoading })
+	// The feed names the record while the read of the records is out.
+	s.putMark(domain.ResourceMark{Kind: domain.ResourceAlbum, ID: keepAlbum, State: domain.RecordComplete, TracksDone: 6, TracksWanted: 6})
+	release()
+	settle(func() bool { return l.AppleStatus == SearchReady })
+	if !l.Kept[keepAlbum] {
+		t.Errorf("the read took the keep away: %v", l.Kept)
+	}
+}

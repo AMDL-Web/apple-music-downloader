@@ -296,6 +296,11 @@ func (l *Library) readApple(s *Store, gen int) {
 			if l.AppleAccount != account {
 				l.AppleAccount, l.Tracks = account, map[string][]domain.AppleLibraryTrack{}
 			}
+			// A record the store learned of while the read was out may be
+			// newer than the read's lists: the read never takes its keep away.
+			for ref := range s.Records.marks {
+				kept[ref.ID] = true
+			}
 			l.Kept = kept
 			if err != nil {
 				l.AppleStatus, l.AppleErr = SearchFailed, Reason(err)

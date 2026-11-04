@@ -95,6 +95,11 @@ func (s *Store) noteSubmitted(res domain.BatchSubmitResponse) {
 		if r.Resource == nil {
 			continue
 		}
+		// A taken link names a record amdl now keeps, even when it queued no
+		// run for it: the Library marks it as kept.
+		if r.Status == domain.SubmitAccepted || r.Status == domain.SubmitAlreadyDownloaded || r.Status == domain.SubmitDuplicateActive {
+			s.Library.recordMoved(*r.Resource)
+		}
 		job := ""
 		switch {
 		case r.Status == domain.SubmitAccepted && r.Job != nil:
