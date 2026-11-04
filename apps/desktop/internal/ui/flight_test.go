@@ -96,7 +96,7 @@ func TestTheHeroCoverFliesToThePageAndBack(t *testing.T) {
 			t.Errorf("the cover shrank on its way in at frame %d: %v -> %v", i, in[i-1], in[i])
 		}
 	}
-	if tt.HasText("Recently finished") {
+	if tt.HasText("Details") {
 		t.Errorf("the queue is still built under the page that came in")
 	}
 
@@ -307,7 +307,7 @@ func TestAnotherScreenLeavesThePageAtOnce(t *testing.T) {
 	if a.fly.moving {
 		t.Errorf("the page still moves after Settings opened")
 	}
-	if _, ok := tt.Find("Artwork"); ok || tt.HasText("Recently finished") {
+	if _, ok := tt.Find("Artwork"); ok || tt.HasText("Details") {
 		t.Errorf("the page or the queue still shows over Settings")
 	}
 }

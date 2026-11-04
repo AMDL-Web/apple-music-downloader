@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/shader"
 )
 
 // An album page opened from a cover other than the queue hero's (a search
@@ -32,6 +33,17 @@ func (f *flight) growing() bool { return f.grow && f.moving && !f.still }
 func (a *App) lateShown() float32 {
 	from := a.tune.Text
 	return smoothstep(from, min(1, from+0.35), a.fly.q)
+}
+
+// groundGrown is how much of the growing page's ground shows: none at the
+// cover, all of it by the time the page's parts start to show (lateShown).
+// The box sets off larger than the cover at once, so an opaque ground
+// would show as a box over the tile beside it in the first frame.
+func (a *App) groundGrown() float32 {
+	if !a.fly.growing() {
+		return 1
+	}
+	return smoothstep(0, a.tune.Text, a.fly.q)
 }
 
 func smoothstep(a, b, x float32) float32 {
@@ -82,9 +94,11 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 	main := f.main
 	box, radius := f.growBox(main)
 	f.ridePrev, f.ride = f.ride, ui.Point{X: box.X, Y: box.Y}
+	f.surface = ui.Rect{X: main.X + box.X, Y: main.Y + box.Y, W: box.W, H: box.H}
 	t := unit(f.q)
-	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground)
-	if lift := 4 * t * (1 - t); f.growing() && lift > 0.01 {
+	ground := a.groundGrown()
+	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground.Alpha(ground))
+	if lift := 4 * t * (1 - t) * ground; f.growing() && lift > 0.01 {
 		s.Shadow(0, 10*lift, 24*lift, 0, ui.RGBA(0, 0, 0, 0.18*lift))
 	}
 	if !f.ready {
@@ -102,7 +116,13 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 				plain := paletteBackdrop(k, Palette{}, false)
 				b.From, b.Mix = &plain, t
 			}
-			b.Show(c)
+			// The light draws the ground under it too, so it comes in with
+			// the surface's.
+			light := ui.Box(c.Key("light")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough()
+			if ground < 1 {
+				light.Opacity(ground)
+			}
+			light.Children(func() { b.Show(c) })
 			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
 				a.titleBar(c, k, sidebar, true)
 				ui.Box(c).Grow(1).MinHeight(0).Children(func() {
@@ -114,22 +134,91 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 	})
 }
 
+// growBand is how far in from the growing surface's right and bottom edges
+// the page's parts fade to nothing (growEdges).
+const growBand = 2 * scrollFade
+
+// growEdge fades what an element draws to nothing towards Right and Bottom,
+// in its own DIPs, over BandX and BandY DIPs inward, 0 for an edge that
+// stays.
+var growEdge = shader.MustCompile(`package main
+
+var Right float
+var Bottom float
+var BandX float
+var BandY float
+
+func ColorEffect(pos vec2, color vec4) vec4 {
+	k := 1.0
+	if BandX > 0 {
+		k *= smoothstep(0, BandX, Right-pos.x)
+	}
+	if BandY > 0 {
+		k *= smoothstep(0, BandY, Bottom-pos.y)
+	}
+	return color * k
+}
+`)
+
+var (
+	growEdgeRight  = growEdge.Uniform("Right")
+	growEdgeBottom = growEdge.Uniform("Bottom")
+	growEdgeBandX  = growEdge.Uniform("BandX")
+	growEdgeBandY  = growEdge.Uniform("BandY")
+)
+
+// growEdges fades el, a part of the growing page that comes in late
+// (lateShown), towards the surface's right and bottom edges (growBand), so
+// the surface, smaller than the column the page is laid out for, does not
+// cut its words and rows as a hard line. The band comes in with the part,
+// and narrows to nothing as the surface reaches the column's edges, so
+// nothing changes as it lands. Each part takes it on its own: an effect on
+// a layer that holds the flying cover moves the cover off its way.
+func (a *App) growEdges(el ui.Element) {
+	f := &a.fly
+	if !f.growing() {
+		return
+	}
+	main, s := f.main, f.surface
+	band := growBand * a.lateShown()
+	bx, by := min(band, main.W-s.W), min(band, main.H-s.H)
+	if bx < 0.5 && by < 0.5 {
+		return
+	}
+	// Laid out where the surface carried the page in the frame before.
+	b := el.LayoutBounds()
+	right := s.X + s.W - (b.X - f.ridePrev.X + f.ride.X)
+	bottom := s.Y + s.H - (b.Y - f.ridePrev.Y + f.ride.Y)
+	if b.W <= 0 || right >= b.W+bx && bottom >= b.H+by {
+		return
+	}
+	v := growEdge.NewValues().Float(growEdgeRight, right).Float(growEdgeBottom, bottom).
+		Float(growEdgeBandX, max(0, bx)).Float(growEdgeBandY, max(0, by))
+	el.Effect(growEdge.Effect(shader.Options{Values: v}))
+}
+
+// underGone is how far the screen under the growing page has gone back,
+// blurred and dimmed: as far as the page has come, and only as far as its
+// ground shows (groundGrown), so that going back the screen under is clear
+// as the page goes into its cover rather than over q's last frames after.
+func (a *App) underGone() float32 { return unit(a.fly.q) * a.groundGrown() }
+
 // growUnder shows the content column under the growing page, el, blurred
-// and dimmed as far as the page has come.
+// as far as it has gone back (underGone).
 func (a *App) growUnder(el ui.Element) {
 	if !a.fly.growing() {
 		return
 	}
-	if t := unit(a.fly.q); a.tune.Blur > 0 && t > 0 {
+	if t := a.underGone(); a.tune.Blur > 0 && t > 0 {
 		el.Blur(a.tune.Blur * t)
 	}
 }
 
-// growDim dims the screen under the growing page.
+// growDim dims the screen under the growing page (underGone).
 func (a *App) growDim(c *ui.Context) {
 	if f := &a.fly; f.growing() {
 		ui.Box(c.Key("grow-dim")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().
-			Background(ui.RGBA(0, 0, 0, a.tune.Dim*unit(f.q)))
+			Background(ui.RGBA(0, 0, 0, a.tune.Dim*a.underGone()))
 	}
 }
 

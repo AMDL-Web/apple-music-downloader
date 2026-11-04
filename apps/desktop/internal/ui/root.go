@@ -195,7 +195,7 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar, page bool) {
 		}
 		ui.Spacer(c)
 		acts := ui.Row(c).Gap(8).AlignItems(ui.Center)
-		a.flyFade(acts)
+		a.flyFadeClear(acts)
 		acts.Children(func() { a.titleActions(c, k, in) })
 	})
 }

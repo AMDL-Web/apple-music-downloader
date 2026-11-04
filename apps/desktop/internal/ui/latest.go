@@ -98,18 +98,18 @@ func (a *App) recentWall(c *ui.Context, k *Tokens, finished []*store.Job, hero *
 	}
 	w, _ := c.Size()
 	n := min(len(jobs), max(1, int((w-side-56+wallGap)/(size+wallGap))))
+	shown := n
+	if hero != nil {
+		shown++
+	}
 	ui.Column(c).Padding(0, 28, 10, 28).Gap(8).Children(func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			label(c, k, "Recently finished")
-			ui.Spacer(c)
-			shown := n
-			if hero != nil {
-				shown++
-			}
-			if done := a.Store.Count(store.TabDone); done > shown {
+		// The covers need no title; the count says how many more there are.
+		if done := a.Store.Count(store.TabDone); done > shown {
+			ui.Row(c).Children(func() {
+				ui.Spacer(c)
 				mono(c, fmt.Sprintf("%d downloaded", done), 11).TextColor(k.Muted)
-			}
-		})
+			})
+		}
 		ui.Row(c).Gap(wallGap).Padding(2, 0, 4, 0).Children(func() {
 			for _, j := range jobs[:n] {
 				a.wallCover(c, k, j, size)
@@ -147,8 +147,10 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: jobPalette(j, false).Bg, Size: size, Radius: radiusControl, Color: 1, Video: video}.Show(c)
 		}
 		frame.Children(cover)
-		if f := &a.fly; f.moving && !f.grow && strings.HasPrefix(f.from, "hero:") && lift <= 0.01 {
-			// Its copy over the page stands for it (flightCopies).
+		if f := &a.fly; f.moving && f.ready && !f.grow && strings.HasPrefix(f.from, "hero:") && lift <= 0.01 {
+			// Its copy over the page stands for it (flightCopies), once
+			// the page shows: before, the page is laid out hidden, and
+			// its copy with it.
 			f.wall = append(f.wall, flightWall{box: frame.Bounds(), build: cover})
 			frame.Opacity(0)
 		}

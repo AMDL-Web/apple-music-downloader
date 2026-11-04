@@ -8,6 +8,7 @@ import "github.com/egoist/mygo/ui"
 func (a *App) flyRise(el ui.Element) {
 	if a.fly.growing() {
 		el.Opacity(a.lateShown())
+		a.growEdges(el)
 		return
 	}
 	if a.fly.moving {
@@ -46,10 +47,19 @@ func (a *App) flyEdge(el ui.Element) {
 // under the page (flyEdge), or, with none, rises with the page; its ground
 // turns opaque early, over that list, before its rows show (flyRows), and
 // turns from the screens' to its own, so that it does not show as a layer
-// of its own while it fades.
+// of its own while it fades. On a growing page it comes in with the
+// surface's ground.
 func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	f := &a.fly
-	if !f.moving || f.growing() {
+	if f.growing() {
+		// On a growing page it is a part of the surface's ground
+		// (groundGrown).
+		if g := a.groundGrown(); g < 1 {
+			el.Background(detailGround(k).Alpha(g)).BorderColor(k.Line.Alpha(g))
+		}
+		return
+	}
+	if !f.moving {
 		return
 	}
 	shown := f.groundShown()
@@ -76,6 +86,7 @@ func (f *flight) groundShown() float32 { return unit(2 * f.cross()) }
 func (a *App) flyRows(el ui.Element) {
 	if f := &a.fly; f.growing() {
 		el.Opacity(a.lateShown())
+		a.growEdges(el)
 	} else if f.moving {
 		f.fade(el, unit(2*f.cross()-1))
 	}
@@ -108,10 +119,26 @@ func (a *App) flyBand(el ui.Element) {
 func (a *App) flyFade(el ui.Element) {
 	if f := &a.fly; f.growing() {
 		el.Opacity(a.lateShown())
+		a.growEdges(el)
 	} else if f.moving {
 		from := f.partsFrom()
 		f.fade(el, unit((f.q-from)/(1-from)))
 	}
+}
+
+// flyFadeClear fades el in with the album page as flyFade does, but not
+// before the screen under the page is gone (cross): el is a control that
+// screen shows too, as the page's Pause is the queue hero's, which would
+// otherwise show twice as the two cross. Going out the page's parts are
+// gone before the screen under shows again (outParts).
+func (a *App) flyFadeClear(el ui.Element) {
+	f := &a.fly
+	if f.growing() || !f.moving || f.out {
+		a.flyFade(el)
+		return
+	}
+	from := max(f.partsFrom(), inCross)
+	f.fade(el, unit((f.q-from)/(1-from)))
 }
 
 // fade shows el, which fades in or out in a flight, at opacity op, and

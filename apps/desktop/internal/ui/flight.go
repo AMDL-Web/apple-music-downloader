@@ -189,9 +189,11 @@ type flight struct {
 	fadeFrom, fadeTo float32
 	fadeAt           time.Time
 	// src are the parts of the element the page opened from, as this frame
-	// builds them under the page; paired is how each part of the page
-	// showed in the frame before, which tells its match whether to hide.
-	src             [flightParts]flightSrc
+	// builds them under the page, and srcWas as the frame before did;
+	// paired is how each part of the page shows in this frame, and pairWas
+	// how it showed in the frame before, which tells its match whether to
+	// hide.
+	src, srcWas     [flightParts]flightSrc
 	paired, pairWas [flightParts]pairing
 	// texts are the page's texts that morph, as this frame lays them out;
 	// own tells whether each shows in the page's lines, rather than as a
@@ -232,6 +234,13 @@ type flight struct {
 	ride, ridePrev ui.Point
 	growFrom       ui.Rect
 	growRadius     float32
+	// surface is the growing page's surface in this frame, in the window
+	// (growSurface).
+	surface ui.Rect
+	// pick is the box of the cover clicked to open the page, for as long as
+	// the page is in, which of several elements of one name is the
+	// flight's source (sourceNearer).
+	pick ui.Rect
 }
 
 // flightWall is a recent cover of the queue: its box in the window and
@@ -265,6 +274,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	}
 	f.out = target == 0 && !f.still && a.PageMotion
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
+	f.srcWas = f.src
 	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	f.viewsPrev, f.views = f.views, f.viewsPrev[:0]
 	f.wall = f.wall[:0]
@@ -340,7 +350,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		a.reopen()
 	}
 	if !f.moving && f.q == 0 {
-		f.ready = false
+		f.ready, f.pick = false, ui.Rect{}
 		if f.closeDetail {
 			f.closeDetail = false
 			a.Store.CloseDetail()
