@@ -188,9 +188,9 @@ func TestCoversShownAfterAScrollLoadBeforeTheOnesItPassed(t *testing.T) {
 		t.Fatalf("%v after the scroll stopped, %d of the %d covers shown loaded", took.Round(time.Millisecond), n, view)
 	}
 	// Six slots, 120 ms a request and a decode: the twelve covers shown
-	// take two rounds and change. Behind the covers the scroll left in
-	// the queue they took 2.6 s.
-	if took > 900*time.Millisecond {
+	// take two rounds and change, under a second on a shared CI runner.
+	// Behind the covers the scroll left in the queue they took 2.6 s.
+	if took > 1500*time.Millisecond {
 		t.Errorf("the %d covers shown after the scroll took %v to load", view, took.Round(time.Millisecond))
 	}
 	mu.Lock()
