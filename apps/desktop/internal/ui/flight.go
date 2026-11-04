@@ -427,6 +427,10 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	}
 	f.paired[part] = p
 	if p == unpaired {
+		if part == partCover {
+			a.flyRiseCover(el)
+			return
+		}
 		a.flyRise(el)
 		return
 	}
@@ -516,6 +520,19 @@ func (a *App) flyRise(el ui.Element) {
 		a.flyFade(el)
 		if !a.fly.still {
 			el.Translate(0, flightRise*(1-a.fly.travel()))
+		}
+	}
+}
+
+// flyRiseCover shows the album page's cover, when nothing under the page
+// matches it, as flyRise shows a part, but not blurred: a blurred layer is
+// cut to the cover's box, which would clip its shadow to a rectangle and
+// let the whole shadow pop out as the layer goes.
+func (a *App) flyRiseCover(el ui.Element) {
+	if f := &a.fly; f.moving {
+		el.Opacity(unit((f.q - f.partsFrom()) / (1 - f.partsFrom())))
+		if !f.still {
+			el.Translate(0, flightRise*(1-f.travel()))
 		}
 	}
 }
