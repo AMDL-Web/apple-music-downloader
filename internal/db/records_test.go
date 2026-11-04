@@ -417,3 +417,25 @@ func TestRecordDisplayAndSubtaskWrites(t *testing.T) {
 	}
 	assertRollupsConsistent(t, store)
 }
+
+// A file adopted at a track's path has no codec: asking for a quality must
+// not add a second slot, which would download a byte-identical copy under a
+// quality-suffixed name next to it.
+func TestRequestSlotTreatsUnknownCodecAsPresent(t *testing.T) {
+	store := openRecordStore(t)
+	ctx := context.Background()
+	now := mustTime(t, "2026-11-04T10:00:00Z")
+	_, err := store.AddAlbum(ctx, AlbumAdd{ID: "1", SongIDs: []string{"12"}, Source: domain.SourceManual, Now: now})
+	must(t, err)
+	must(t, store.ApplyAlbumRead(ctx, albumRead("1", now, "11", "12")))
+	k12 := mainSlot(domain.ResourceAlbum, "1", "12")
+	must(t, store.MarkFileDone(ctx, k12, FileOutcome{Path: "/music/Artist/Album 1/02 Song 12.m4a", RunID: "run-1", Now: now}))
+
+	alac := domain.FileKey{OwnerKind: domain.ResourceAlbum, OwnerID: "1", SongID: "12", Slot: "alac"}
+	if err := store.RequestSlot(ctx, alac, now); !errors.Is(err, ErrQualityPresent) {
+		t.Fatalf("a quality of an adopted file: err = %v, want quality_present", err)
+	}
+	if _, err := store.GetFile(ctx, alac); !errors.Is(err, ErrFileNotFound) {
+		t.Fatalf("the asked-for slot was added: err = %v", err)
+	}
+}

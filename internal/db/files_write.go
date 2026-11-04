@@ -20,7 +20,7 @@ var ErrPathTaken = errors.New("path_taken")
 var ErrMainNotDone = errors.New("main_not_done")
 
 // ErrQualityPresent is returned by RequestSlot when the main slot already
-// holds that codec.
+// holds that codec, or holds a file whose codec is unknown.
 var ErrQualityPresent = errors.New("quality_present")
 
 // PathTakenError reports that another slot already holds the output path.
@@ -214,7 +214,8 @@ func (s *Store) setFileState(ctx context.Context, key domain.FileKey, set string
 
 // RequestSlot adds another quality of a track, pending. key.Slot is a codec
 // id. The main slot must be done (ErrMainNotDone) and hold another codec
-// (ErrQualityPresent). An existing slot is left as it is.
+// (ErrQualityPresent); a main slot whose codec is unknown counts as holding
+// it. An existing slot is left as it is.
 func (s *Store) RequestSlot(ctx context.Context, key domain.FileKey, now time.Time) error {
 	if key.Slot == "" || key.Slot == domain.SlotMain {
 		return fmt.Errorf("request slot: %q is not a codec", key.Slot)
@@ -230,7 +231,13 @@ func (s *Store) RequestSlot(ctx context.Context, key domain.FileKey, now time.Ti
 		if err != nil {
 			return struct{}{}, err
 		}
-		if codec == key.Slot {
+		// A done main slot with no codec holds a file whose quality amdl
+		// never read: one adopted at the track's path, or a 1.x item that
+		// stored none. It may be exactly the asked-for quality, and a second
+		// slot would then download a byte-identical copy under a
+		// quality-suffixed name, so it counts as the track's copy of every
+		// quality until its codec is known.
+		if codec == key.Slot || codec == "" {
 			return struct{}{}, ErrQualityPresent
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO files(owner_kind, owner_id, song_id, slot, audio_state, updated_at)

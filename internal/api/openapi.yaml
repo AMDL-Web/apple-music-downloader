@@ -1844,7 +1844,8 @@ paths:
         '409':
           description: >-
             main_not_done: no asked-for track has its first quality done;
-            quality_present: the first quality already is that codec.
+            quality_present: the first quality already is that codec, or is a
+            file of unknown quality (one adopted at the track's path).
           content:
             application/json:
               schema:
@@ -2847,7 +2848,7 @@ components:
         apple_library_sync_running, run_active (the record has a queued or
         running run; pause it first), main_not_done (another quality needs the
         track's first quality done), quality_present (the first quality is that
-        codec), check_running; 413 request_too_large; 422
+        codec or of unknown quality), check_running; 413 request_too_large; 422
         invalid_overrides, config_key_not_mutable, invalid_config, invalid_hook,
         invalid_hooks_file, no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 501 login_unsupported; 502 upstream_error; 503 queue_full,
