@@ -16,9 +16,14 @@ const (
 	// scrollGutter is the room a list keeps at its trailing edge, so that a
 	// thumb never covers its text.
 	scrollGutter = 12
-	// scrollFade is the band a list's edge fades out in while more is
-	// beyond it, instead of showing a line cut in half.
+	// scrollFade is the most a list's edge fades out over while more is
+	// beyond it, instead of showing a line cut in half. The band grows
+	// from nothing as the list scrolls (fadeEdges), so it never appears at
+	// once.
 	scrollFade = 28
+	// scrollFadeRamp is how many DIPs of band the edge gains for each DIP
+	// scrolled, until scrollFade.
+	scrollFadeRamp = 2
 	// scrollHold is how long thumbs stay after the content stops moving,
 	// and scrollFadeOut how long they take to go, as macOS's overlay
 	// scrollers.
@@ -88,16 +93,19 @@ func (a *App) scrollArea(c *ui.Context, key string, gutter float32, children fun
 }
 
 // fadeEdges fades the edges of sc, a scroll container scrolled by st, that
-// have more beyond them (edgeFade, with EdgeFades). The band starts at sc's
-// own edge, so whatever stays above it, a page's title or a list's header,
+// have more beyond them (edgeFade, with EdgeFades): from nothing at sc's
+// own edge to the whole, inwards, over a band that grows with what has scrolled under it, up
+// to scrollFade, so the first pixels scrolled away thin out only the
+// pixels that go, and nothing shows outside sc. The band starts at sc's own
+// edge, so whatever stays above it, a page's title or a list's header,
 // keeps clear of it: it fades only what scrolls under that.
 func (a *App) fadeEdges(sc ui.Element, st *ui.ScrollState) {
 	var top, bottom float32
 	if st.Y > 1 {
-		top = scrollFade
+		top = min(scrollFade, scrollFadeRamp*st.Y)
 	}
 	if st.MaxY-st.Y > 1 {
-		bottom = scrollFade
+		bottom = min(scrollFade, scrollFadeRamp*(st.MaxY-st.Y))
 	}
 	if a.EdgeFades && (top > 0 || bottom > 0) {
 		v := edgeFade.NewValues().Float(edgeFadeTop, top).Float(edgeFadeBottom, bottom)

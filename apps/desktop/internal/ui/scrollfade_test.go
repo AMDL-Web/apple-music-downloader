@@ -53,6 +53,44 @@ func TestAListFadesAtTheEdgesWithMoreBeyond(t *testing.T) {
 	}
 }
 
+// The band an edge fades over grows with what scrolled under it, from the
+// list's own edge inwards: a few pixels scrolled thin out only the few
+// pixels at the edge, rather than the whole band appearing at once.
+func TestAnEdgeFadesOnlyOverWhatHasScrolledUnderIt(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	a.EdgeFades = true
+	red, blue := ui.RGB(220, 30, 30), ui.RGB(30, 60, 220)
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Column(c).FillWidth().FillHeight().Background(blue).Children(func() {
+			a.scrollArea(c, "t", 0, func() {
+				ui.Box(c).FillWidth().Height(2000).Background(red)
+			}).Grow(1).FillWidth()
+		})
+	}, 300, 300)
+	tt.Advance(time.Second)
+	px := func(y float32) color.RGBA {
+		tt.Frame()
+		img := tt.Image()
+		s := float32(img.Bounds().Dy()) / 300
+		return img.RGBAAt(int(150*s), int(y*s))
+	}
+	tt.Wheel(150, 150, 0, 5)
+	tt.Advance(time.Second)
+	moved := a.scrolls["t"].Y
+	if moved < 2 || moved > scrollFade/2 {
+		t.Fatalf("scrolled %v, not a few pixels", moved)
+	}
+	// Past the band, whole; at the edge, none of it; and in between, thinner
+	// the nearer the edge.
+	below := scrollFadeRamp*moved + 2
+	if p := px(below); absDiff(p.R, 220) > 12 || absDiff(p.B, 30) > 12 {
+		t.Errorf("scrolled %v, %v below the edge the list shows %v, not its own red: the band is wider than what scrolled", moved, below, p)
+	}
+	if p := px(0.5); absDiff(p.B, 220) > 40 {
+		t.Errorf("scrolled %v, the list's edge shows %v, not what is behind it", moved, p)
+	}
+}
+
 // A section the navigation brings up stops below the band Settings' top
 // edge fades in, so its title shows whole rather than thinned out.
 func TestASectionBroughtUpKeepsItsTitleClearOfTheFade(t *testing.T) {
