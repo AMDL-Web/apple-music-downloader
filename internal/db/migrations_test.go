@@ -537,7 +537,8 @@ func TestOpenRefusesReleaseCandidateDatabaseUnchanged(t *testing.T) {
 	}
 }
 
-// Every 1.x job the upgrade imported shows in the queues: a run of a record
+// Every 1.x job the upgrade imported shows in the queues, j-corrupt with its
+// overrides that do not decode among them: a run of a record
 // that exists, as that record's row, or a run of no record, which the
 // queues list beside the records (JobListFilter.ResourceKind NoRecord). A
 // job the upgrade stopped names the record its paused add makes once the
@@ -549,11 +550,6 @@ func TestEveryImportedRunShowsInTheQueues(t *testing.T) {
 	}
 	defer store.Close()
 	ctx := context.Background()
-	// The fixture's run with overrides that do not decode fails any list
-	// that holds it; its own tests cover it.
-	if _, err := store.db.ExecContext(ctx, `DELETE FROM runs WHERE id = 'j-corrupt'`); err != nil {
-		t.Fatal(err)
-	}
 	all, total, err := store.ListJobs(ctx, JobListFilter{Limit: 200})
 	if err != nil || total != len(all) || total == 0 {
 		t.Fatalf("runs: %d of %d (%v)", len(all), total, err)

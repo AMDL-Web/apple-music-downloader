@@ -128,6 +128,16 @@ func writeJobLookupError(w http.ResponseWriter, jobID string, err error) {
 	writeStoreError(w, "read job "+jobID, err)
 }
 
+// forDisplay drops db.ErrCorruptOverrides from a run read only to be shown or
+// deleted: the run is shown without its overrides, while a retry or a move
+// still refuses it.
+func forDisplay(err error) error {
+	if errors.Is(err, db.ErrCorruptOverrides) {
+		return nil
+	}
+	return err
+}
+
 // isJobNotFound reports a missing job: the store answers sql.ErrNoRows, the
 // job manager db.ErrJobNotFound.
 func isJobNotFound(err error) bool {

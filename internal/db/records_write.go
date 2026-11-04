@@ -441,7 +441,8 @@ func recordRunIDs(ctx context.Context, tx *sql.Tx, kind domain.ResourceKind, id 
 	return ids, rows.Err()
 }
 
-// RecordRuns returns every run of a record.
+// RecordRuns returns every run of a record, a run whose overrides do not
+// decode among them (ErrCorruptOverrides).
 func (s *Store) RecordRuns(ctx context.Context, kind domain.ResourceKind, id string) ([]domain.Job, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM runs j WHERE j.resource_kind = ? AND j.resource_id = ?`, string(kind), id)
 	if err != nil {
@@ -451,7 +452,7 @@ func (s *Store) RecordRuns(ctx context.Context, kind domain.ResourceKind, id str
 	var out []domain.Job
 	for rows.Next() {
 		job, err := scanJob(rows)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrCorruptOverrides) {
 			return nil, err
 		}
 		out = append(out, job)

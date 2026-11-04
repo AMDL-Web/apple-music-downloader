@@ -25,17 +25,24 @@ func encodeOverrides(o *config.DownloadOverrides) (string, error) {
 	return string(raw), nil
 }
 
-// decodeOverrides reads a stored overrides column. A corrupt column fails
-// loudly: silently dropping it would run the download with the global config
-// instead of the settings it was added with. A column that held only removed
-// keys decodes empty, which is no overrides.
+// ErrCorruptOverrides reports a stored overrides column that does not decode.
+// A run read with it comes back complete except for its Overrides: the
+// listings (ListJobs, RecordRuns) keep such a run, and a caller that only
+// shows or deletes it may do the same, but one that runs or rewrites it must
+// stop, or the run would go on, or be saved, with the global config instead
+// of the settings it was added with.
+var ErrCorruptOverrides = errors.New("decode overrides")
+
+// decodeOverrides reads a stored overrides column; a corrupt one is
+// ErrCorruptOverrides. A column that held only removed keys decodes empty,
+// which is no overrides.
 func decodeOverrides(raw string) (*config.DownloadOverrides, error) {
 	if raw == "" {
 		return nil, nil
 	}
 	parsed := &config.DownloadOverrides{}
 	if err := json.Unmarshal([]byte(raw), parsed); err != nil {
-		return nil, fmt.Errorf("decode overrides: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrCorruptOverrides, err)
 	}
 	if *parsed == (config.DownloadOverrides{}) {
 		return nil, nil
@@ -295,6 +302,9 @@ func escapeLike(s string) string {
 	return replacer.Replace(s)
 }
 
+// ListJobs returns a page of the runs the filter matches and how many match in
+// all; a run whose overrides do not decode is listed without them
+// (ErrCorruptOverrides).
 func (s *Store) ListJobs(ctx context.Context, filter JobListFilter) ([]domain.Job, int, error) {
 	filter.Normalize()
 	where, args := filter.whereClause()
@@ -336,7 +346,7 @@ func (s *Store) ListJobs(ctx context.Context, filter JobListFilter) ([]domain.Jo
 	out := make([]domain.Job, 0)
 	for rows.Next() {
 		job, err := scanJob(rows)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrCorruptOverrides) {
 			return nil, 0, err
 		}
 		out = append(out, job)
@@ -445,7 +455,8 @@ type jobScanner interface {
 	Scan(dest ...any) error
 }
 
-// scanJob reads one row selected with jobColumns.
+// scanJob reads one row selected with jobColumns. With ErrCorruptOverrides
+// it still returns the rest of the row.
 func scanJob(row jobScanner) (domain.Job, error) {
 	var job domain.Job
 	var overrides, status, created, updated, resourceKind, trigger string
@@ -463,7 +474,7 @@ func scanJob(row jobScanner) (domain.Job, error) {
 	if err == nil {
 		var decodeErr error
 		if job.Overrides, decodeErr = decodeOverrides(overrides); decodeErr != nil {
-			return job, fmt.Errorf("job %s: %w", job.ID, decodeErr)
+			err = fmt.Errorf("job %s: %w", job.ID, decodeErr)
 		}
 	}
 	job.Status = domain.JobStatus(status)

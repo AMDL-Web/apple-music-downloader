@@ -156,7 +156,7 @@ func makeJobStatusCounts(counts map[domain.JobStatus]int, total int) domain.JobS
 // overview feed treats any other error as transient and retries.
 func (s *Server) jobSnapshot(ctx context.Context, id string) (*domain.Job, error) {
 	job, err := s.store.GetJob(ctx, id)
-	if err != nil {
+	if err := forDisplay(err); err != nil {
 		return nil, err
 	}
 	jobs := []domain.Job{job}
@@ -288,7 +288,7 @@ func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job, err := s.store.GetJob(r.Context(), id)
-	if err != nil {
+	if err := forDisplay(err); err != nil {
 		writeJobLookupError(w, id, err)
 		return
 	}
@@ -329,7 +329,7 @@ func (s *Server) deleteDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	if record {
 		job, err := s.store.GetJob(r.Context(), id)
-		if err != nil {
+		if err := forDisplay(err); err != nil {
 			writeJobLookupError(w, id, err)
 			return
 		}

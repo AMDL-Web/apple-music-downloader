@@ -44,6 +44,44 @@ func TestGetJobFailsOnCorruptOverrides(t *testing.T) {
 	}
 }
 
+// A run whose overrides do not decode still lists, complete but for them, so
+// the queues can show it and its record; reading it to run it still fails.
+func TestAListKeepsARunWhoseOverridesDoNotDecode(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	for i, id := range []string{"job-a", "job-bad", "job-c"} {
+		job := domain.Job{
+			ID: id, Input: "song|us|" + id, Type: "song", CanonicalKey: "song:us:" + id,
+			Status: domain.JobCompleted, CreatedAt: now.Add(time.Duration(i) * time.Second), UpdatedAt: now,
+		}
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE runs SET overrides='{broken' WHERE id='job-bad'`); err != nil {
+		t.Fatal(err)
+	}
+
+	listed, total, err := store.ListJobs(ctx, JobListFilter{Limit: 10})
+	if err != nil || total != 3 || len(listed) != 3 {
+		t.Fatalf("ListJobs = %d of %d, %v; want all three runs", len(listed), total, err)
+	}
+	for _, j := range listed {
+		if j.ID == "job-bad" && (j.Overrides != nil || j.Status != domain.JobCompleted || j.CreatedAt.IsZero()) {
+			t.Fatalf("listed run with broken overrides = %+v, want its row without overrides", j)
+		}
+	}
+	if _, err := store.GetJob(ctx, "job-bad"); err == nil || !strings.Contains(err.Error(), "decode overrides") {
+		t.Fatalf("GetJob of the broken run err = %v, want decode overrides error", err)
+	}
+}
+
 // Rows stored before the overrides shrank keep keys that are no longer
 // fields (media_user_token, hooks, downloads_dir, max_parallel_tracks, ...).
 // No migration removes them: every read decodes the row with those keys

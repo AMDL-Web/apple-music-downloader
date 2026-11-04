@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -343,6 +344,7 @@ func (c *simCatalog) ArtistAlbumsPage(context.Context, string, string, int, int)
 type rig struct {
 	t       *testing.T
 	base    string
+	dbPath  string
 	http    *http.Client
 	store   *db.Store
 	manager *jobs.Manager
@@ -356,7 +358,8 @@ type rig struct {
 
 func newRig(t *testing.T, albums, playlists map[string][]string) *rig {
 	t.Helper()
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	dbPath := filepath.Join(t.TempDir(), "amdl.db")
+	store, err := db.Open(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,9 +384,25 @@ func newRig(t *testing.T, albums, playlists map[string][]string) *rig {
 		}
 		ts.Close()
 	})
-	r := &rig{t: t, base: ts.URL + "/api/v1", http: ts.Client(), store: store, manager: manager, cfg: cfgStore, proc: proc, catalog: catalog}
+	r := &rig{t: t, base: ts.URL + "/api/v1", dbPath: dbPath, http: ts.Client(), store: store, manager: manager, cfg: cfgStore, proc: proc, catalog: catalog}
 	r.feed = r.subscribe()
 	return r
+}
+
+// corruptOverrides writes overrides that do not decode into runs, behind the
+// store's back.
+func (r *rig) corruptOverrides(ids ...string) {
+	r.t.Helper()
+	raw, err := sql.Open("sqlite", r.dbPath)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	defer raw.Close()
+	for _, id := range ids {
+		if _, err := raw.Exec(`UPDATE runs SET overrides = '{broken' WHERE id = ?`, id); err != nil {
+			r.t.Fatal(err)
+		}
+	}
 }
 
 // call sends a request and decodes a JSON answer into out (when non-nil),

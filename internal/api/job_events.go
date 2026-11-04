@@ -40,7 +40,7 @@ func (s *Server) eventsExhausted(ctx context.Context, jobID string) bool {
 		// can be no future per-job events, so an already-open stream must close.
 		return true
 	}
-	if err != nil || !job.Status.IsTerminal() {
+	if forDisplay(err) != nil || !job.Status.IsTerminal() {
 		return false
 	}
 	return !s.manager.FinalizeInFlight(jobID) && !s.manager.HooksPending(jobID)
@@ -57,7 +57,7 @@ func (s *Server) jobEvents(w http.ResponseWriter, r *http.Request) {
 		writeCursorError(w, err)
 		return
 	}
-	if _, err := s.store.GetJob(r.Context(), id); err != nil {
+	if _, err := s.store.GetJob(r.Context(), id); forDisplay(err) != nil {
 		writeJobLookupError(w, id, err)
 		return
 	}

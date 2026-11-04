@@ -615,6 +615,26 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 	if _, ok := s.albums["200"]; ok {
 		t.Fatal("album 200 is still listed after its run was deleted with record=true")
 	}
+
+	r.call(http.MethodGet, "/downloads?resource_kind=playlist&resource_id=pl.1", "", http.StatusOK, &runs)
+	if len(runs.Downloads) == 0 || len(s.orphans) != 1 {
+		t.Fatalf("runs of playlist pl.1 = %d, of no record = %d", len(runs.Downloads), len(s.orphans))
+	}
+	playlistRun, stationRun := runs.Downloads[0].ID, s.orphans[0].ID
+	r.corruptOverrides(playlistRun, stationRun)
+	s = r.check("runs whose overrides do not decode")
+	if len(s.orphans) != 1 || s.playlists["pl.1"].ID == "" {
+		t.Fatalf("after their overrides broke: runs of no record %+v, playlist %+v", s.orphans, s.playlists["pl.1"])
+	}
+	r.call(http.MethodDelete, "/downloads/"+playlistRun+"?record=true", "", http.StatusOK, &gone)
+	if gone.Deleted != "record" || gone.Resource == nil || gone.Resource.ID != "pl.1" {
+		t.Fatalf("deleting a run whose overrides do not decode with record=true = %+v, want playlist pl.1", gone)
+	}
+	r.call(http.MethodDelete, "/downloads/"+stationRun+"?record=true", "", http.StatusOK, &gone)
+	s = r.check("they are deleted")
+	if _, ok := s.playlists["pl.1"]; ok || len(s.orphans) != 0 {
+		t.Fatalf("after the deletes: playlist pl.1 listed %v, runs of no record %+v", ok, s.orphans)
+	}
 }
 
 // needsAttention reports whether a failed run of album id is among the runs
