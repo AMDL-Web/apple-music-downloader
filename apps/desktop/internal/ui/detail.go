@@ -179,9 +179,8 @@ func stageCell(c *ui.Context, k *Tokens, it *domain.JobItem, accent ui.Color, ba
 
 func trackSub(it *domain.JobItem) string {
 	q := strings.ToLower(format.Quality(it.Codec, it.BitDepth, it.SampleRate, it.Bitrate))
+	// A queued track's wait is said by its state column (stateLabel).
 	switch {
-	case it.Status == domain.ItemQueued:
-		return "waiting for a download slot"
 	case it.Attempt > 1 && it.MaxAttempts > 0 && it.Status != domain.ItemCompleted:
 		if q == "" {
 			return fmt.Sprintf("retry %d of %d", it.Attempt, it.MaxAttempts)

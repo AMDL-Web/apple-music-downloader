@@ -389,7 +389,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 			ui.Row(c).Children(func() {
 				mono(c, a.jobCount(j), 11).TextColor(k.Muted)
 				ui.Spacer(c)
-				note, col := rowNote(j, k, a.jobQualityText(j))
+				note, col := rowNote(j, k, a.jobQualityText(j), compact)
 				mono(c, note, 11).TextColor(col).Ellipsis("…")
 			})
 		})
@@ -432,9 +432,15 @@ func rowCount(j *store.Job) string {
 	return s
 }
 
-func rowNote(j *store.Job, k *Tokens, quality string) (string, ui.Color) {
+// rowNote is what the row says of j under its bar: why it failed, or its
+// quality. A queued job's wait is said by its pill, or here in a compact
+// row, which has none.
+func rowNote(j *store.Job, k *Tokens, quality string, compact bool) (string, ui.Color) {
 	switch j.Status {
 	case domain.JobQueued:
+		if !compact {
+			return "", k.Muted
+		}
 		return "waiting for a worker", k.Muted
 	case domain.JobFailed:
 		e := j.Error
