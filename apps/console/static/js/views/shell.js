@@ -23,7 +23,7 @@ export const NAV = [
 /** The primary action: its own button above the nav, `n` or `g n`. */
 export const NEW_DOWNLOAD = { page: 'new', label: 'New download', icon: 'plus', key: 'n' };
 
-export function Sidebar({ route, counts }) {
+export function Sidebar({ route, counts, library }) {
   const active = counts ? counts.queued + counts.running : 0;
   const navLink = (n) => html`<li key=${n.page}>
     <a class="nav-item" href=${n.page === 'queue' ? queueHash() : buildHash(n.page)} aria-current=${route.page === n.page ? 'page' : undefined} title=${n.label}>
@@ -51,7 +51,7 @@ export function Sidebar({ route, counts }) {
       <span class="sidebar-new-label">${NEW_DOWNLOAD.label}</span>
     </a>
     <ul class="nav">
-      ${NAV.filter((n) => !n.secondary).map(navLink)}
+      ${NAV.filter((n) => !n.secondary && (n.page !== 'library' || library)).map(navLink)}
     </ul>
     <ul class="nav-secondary">
       ${NAV.filter((n) => n.secondary).map(navLink)}
@@ -62,12 +62,12 @@ export function Sidebar({ route, counts }) {
 const navItem = (page) => NAV.find((n) => n.page === page);
 
 /**
- * The phone tab bar: five equal tabs, Overview, Activity, New download
- * (primary), Library and Settings, so New download is the middle one. Logs
- * is reached from the Settings list. Each tab is current only on its own
- * page.
+ * The phone tab bar: equal tabs, Overview, Activity, New download
+ * (primary), Library while `library` (an account's Apple library is on)
+ * and Settings. Logs is reached from the Settings list. Each tab is current
+ * only on its own page.
  */
-export function TabBar({ route }) {
+export function TabBar({ route, library }) {
   const current = (page) => (route.page === page ? 'page' : undefined);
   const tab = (n) => html`<a key=${n.page} class="tab" data-page=${n.page} href=${n.page === 'queue' ? queueHash() : buildHash(n.page)} aria-current=${current(n.page)}>
     <${Icon} name=${n.icon} size="nav" />
@@ -79,7 +79,7 @@ export function TabBar({ route }) {
     <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${current('new')} aria-label=${NEW_DOWNLOAD.label} title=${NEW_DOWNLOAD.label}>
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
     </a>
-    ${tab(navItem('library'))}
+    ${library ? tab(navItem('library')) : null}
     ${tab(navItem('settings'))}
   </nav>`;
 }

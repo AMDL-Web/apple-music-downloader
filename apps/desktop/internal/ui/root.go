@@ -107,7 +107,11 @@ func (a *App) shortcuts(c *ui.Context) {
 		k.toggle, k.field = a.ToggleSidebar, a.FocusField
 		k.home = func() { a.Go(ScreenHome) }
 		k.queue = func() { a.Go(ScreenQueue) }
-		k.library = func() { a.Go(ScreenLibrary) }
+		k.library = func() {
+			if a.Store.AppleLibraryOn() {
+				a.Go(ScreenLibrary)
+			}
+		}
 		k.settings = func() { a.Go(ScreenSettings) }
 	}
 	if runtime.GOOS != "darwin" {

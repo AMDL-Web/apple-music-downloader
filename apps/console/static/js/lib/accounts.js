@@ -15,6 +15,11 @@ export function accountList(body) {
   return body && Array.isArray(body.accounts) ? body.accounts : [];
 }
 
+/** Whether an account of GET /accounts has amdl copy its Apple Music library, what the Library page shows. */
+export function appleLibraryOn(body) {
+  return accountList(body).some((a) => a.apple_library === true);
+}
+
 /**
  * The regions the logged-in accounts serve: {regions, fallback}. `regions`
  * are the distinct regions of the accounts not missing, lowercase;

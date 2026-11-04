@@ -7,6 +7,8 @@ import { Icon, Button } from '../ui/components.js';
 import { Dialog, useDialog } from '../ui/dialogs.js';
 import { focusField } from '../ui/field-focus.js';
 import { useDebounced, useMedia } from '../ui/hooks.js';
+import { useStatus } from '../ui/system-status.js';
+import { appleLibraryOn } from '../lib/accounts.js';
 
 /** Whether this is an Apple platform, where the command key is ⌘. */
 export const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
@@ -46,7 +48,9 @@ export function CommandPalette({ onClose, navigate, setTheme }) {
     };
   }, [debounced]);
 
-  const items = paletteItems(query, jobs.items).filter((it) => !(touch && !query.trim() && it.group === 'Navigate'));
+  const { accounts } = useStatus(['accounts']);
+  const library = Boolean(accounts && accounts.data) && appleLibraryOn(accounts.data);
+  const items = paletteItems(query, jobs.items).filter((it) => !(touch && !query.trim() && it.group === 'Navigate') && (it.id !== 'nav-library' || library));
   // Announced once the job search for what was typed has answered.
   const settled = query.trim() !== '' && query.trim() === jobs.q && !jobs.loading;
   const current = Math.min(active, Math.max(0, items.length - 1));

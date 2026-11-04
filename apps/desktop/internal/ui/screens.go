@@ -72,6 +72,12 @@ func (a *App) screen(c *ui.Context, k *Tokens, s Screen, page float32) {
 	case ScreenQueue:
 		a.queueScreen(c, k, a.compact)
 	case ScreenLibrary:
+		// The last account's Apple library was switched off while it showed.
+		if a.Store.Server.Accounts != nil && !a.Store.AppleLibraryOn() {
+			a.Go(ScreenHome)
+			a.home(c, k, page)
+			return
+		}
 		a.libraryScreen(c, k, a.compact)
 	default:
 		a.home(c, k, page)

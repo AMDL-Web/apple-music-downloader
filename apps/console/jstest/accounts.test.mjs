@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accountLabel, accountList, defaultAppleAccount, accountRegions, regionTag, flattenLibrarySync, librarySyncLines } from '../static/js/lib/accounts.js';
+import { accountLabel, accountList, appleLibraryOn, defaultAppleAccount, accountRegions, regionTag, flattenLibrarySync, librarySyncLines } from '../static/js/lib/accounts.js';
 import { wrapperErrorText } from '../static/js/lib/settings-account.js';
 
 test('accountLabel: name and region, the region alone, or the name alone', () => {
@@ -66,4 +66,10 @@ test('a region tag shows only while the accounts serve two regions or more', () 
   assert.equal(regionTag('jp', two), 'JP');
   assert.equal(regionTag('', two), 'US', 'an empty storefront is the region of the default account');
   assert.equal(regionTag('jp', accountRegions(undefined)), '', 'no accounts read yet: no tag');
+});
+
+test('appleLibraryOn is true only while an account copies its Apple library', () => {
+  assert.equal(appleLibraryOn({ accounts: [{ id: 'a', apple_library: false }, { id: 'b' }] }), false);
+  assert.equal(appleLibraryOn({ accounts: [{ id: 'a' }, { id: 'b', apple_library: true }] }), true);
+  assert.equal(appleLibraryOn(undefined), false);
 });

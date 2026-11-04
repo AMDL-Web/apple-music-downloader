@@ -62,6 +62,17 @@ type Server struct {
 // keeping the last read on screen until the new one lands.
 func (s *Store) refreshServer() { s.Server.stale = true }
 
+// AppleLibraryOn reports whether an account has amdl copy its Apple Music
+// library, the one thing the Library screen shows.
+func (s *Store) AppleLibraryOn() bool {
+	for _, a := range s.Server.Accounts {
+		if a.AppleLibrary {
+			return true
+		}
+	}
+	return false
+}
+
 // WatchServer reads the server's state when the last read is older than
 // ServerEvery. Views that show it call it every frame and redraw after
 // ServerEvery, so it reads only while one of them is on screen.

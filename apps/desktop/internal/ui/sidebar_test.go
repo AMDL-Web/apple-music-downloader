@@ -71,3 +71,37 @@ func TestTheQueueItemCountsOnlyWhatIsUnderWay(t *testing.T) {
 		t.Errorf("the Queue item does not read 3 with three runs under way: %q", tt.Texts())
 	}
 }
+
+// The Library shows the Apple Music library amdl copies, so its item is there
+// only while an account has that copy on, and the screen gives way to Home
+// when the last one is switched off.
+func TestTheLibraryItemFollowsTheAppleLibrarySwitch(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	tt := ui.NewTester(a.View, 1280, 800)
+	library := func() bool {
+		for _, s := range tt.Texts() {
+			if s == "Library" {
+				return true
+			}
+		}
+		return false
+	}
+	a.Store.Server.Accounts = []client.Account{{ID: "a1", Region: "cn", Default: true}, {ID: "a2", Region: "jp"}}
+	tt.Frame()
+	if library() {
+		t.Error("a Library item with no account's Apple library on")
+	}
+	a.Store.Server.Accounts[1].AppleLibrary = true
+	tt.Frame()
+	if !library() {
+		t.Fatal("no Library item with an account's Apple library on")
+	}
+	a.Go(ScreenLibrary)
+	tt.Frame()
+	a.Store.Server.Accounts[1].AppleLibrary = false
+	tt.Frame()
+	tt.Frame()
+	if a.Screen != ScreenHome || library() {
+		t.Errorf("screen %v, Library item %v after the last Apple library went off", a.Screen, library())
+	}
+}

@@ -29,6 +29,7 @@ import { SettingsPage } from './views/settings.js';
 import { KeysToggle } from './views/settings-keys.js';
 import { JobDrawer } from './views/drawer.js';
 import { CommandPalette, ShortcutSheet, isMac } from './views/palette.js';
+import { appleLibraryOn } from './lib/accounts.js';
 import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, ConnectionIndicator, SimulateTag, ThemeControl, Banners } from './views/shell.js';
 
 const TITLES = {
@@ -142,6 +143,15 @@ export function App() {
 
   // Simulate mode comes from /system; a backend without it still reports it in /config.
   const { system } = useStatus(['system']);
+  // The Library is the Apple Music library amdl copies: no account with that copy on, no Library.
+  const { accounts } = useStatus(['accounts']);
+  const accountsKnown = Boolean(accounts && accounts.data);
+  const libraryOn = accountsKnown && appleLibraryOn(accounts.data);
+  const libraryOnRef = useRef(libraryOn);
+  libraryOnRef.current = libraryOn;
+  useEffect(() => {
+    if (route.page === 'library' && accountsKnown && !libraryOn) navigate(buildHash('overview'), { replace: true });
+  }, [route.page, accountsKnown, libraryOn, navigate]);
   const sys = system && system.data;
   const noSystem = Boolean(system && system.error && system.error.status === 404 && !sys);
   const { config } = useStatus(noSystem ? ['config'] : []);
@@ -223,7 +233,7 @@ export function App() {
       if (gPending.current && Date.now() - gPending.current < 1200) {
         gPending.current = 0;
         const target = CHORDS.find((n) => n.key === e.key || n.alias === e.key);
-        if (target) {
+        if (target && (target.page !== 'library' || libraryOnRef.current)) {
           e.preventDefault();
           navigate(target.page === 'queue' ? queueHash() : buildHash(target.page));
         }
@@ -338,7 +348,7 @@ export function App() {
   return html`<${AppContext.Provider} value=${ctx}>
     <div class="shell">
       <button type="button" class="skip-link" onClick=${() => mainRef.current && mainRef.current.focus()}>Skip to content</button>
-      <${Sidebar} route=${route} counts=${counts} />
+      <${Sidebar} route=${route} counts=${counts} library=${libraryOn} />
       <div class="main-col">
         <header class="topbar">
           <div class="topbar-right">
@@ -363,7 +373,7 @@ export function App() {
           ${page}
         </main>
       </div>
-      <${TabBar} route=${route} />
+      <${TabBar} route=${route} library=${libraryOn} />
     </div>
     ${route.jobId ? html`<${JobDrawer} jobId=${route.jobId} onClose=${closeDrawer} />` : null}
     ${route.record ? html`<${RecordDrawer} record=${route.record} onClose=${closeDrawer} />` : null}
