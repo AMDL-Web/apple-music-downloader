@@ -595,3 +595,29 @@ func TestStorefrontParamIsDescribedAndPassedOn(t *testing.T) {
 		}
 	}
 }
+
+// list_jobs rows name the record a run downloads for.
+func TestListJobsRowsNameTheirRecord(t *testing.T) {
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"downloads":[{"id":"job_r","type":"album","status":"completed","resource":{"kind":"album","id":"100"}}],"total":1,"offset":0}`)
+	}))
+	out, isErr := s.call(t, "list_jobs", map[string]any{})
+	rows, _ := out["jobs"].([]any)
+	if isErr || len(rows) != 1 || fmt.Sprint(rows[0].(map[string]any)["resource"]) != "map[id:100 kind:album]" {
+		t.Errorf("list_jobs = %v, want the row's resource", out)
+	}
+}
+
+// delete_job deletes as the apps do: it asks for a record's run to take its
+// record.
+func TestDeleteJobAsksForTheRecord(t *testing.T) {
+	var query atomic.Value
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query.Store(r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery)
+		fmt.Fprint(w, `{"status":"deleted","deleted":"record","resource":{"kind":"album","id":"100"}}`)
+	}))
+	out, isErr := s.call(t, "delete_job", map[string]any{"job_id": "job_r"})
+	if isErr || out["deleted"] != "record" || query.Load() != "DELETE /api/v1/downloads/job_r?record=true" {
+		t.Errorf("delete_job = %v (error %v), request %v", out, isErr, query.Load())
+	}
+}

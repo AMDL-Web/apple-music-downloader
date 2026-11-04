@@ -366,6 +366,9 @@ var customSchemas = map[string]map[string]any{
 		"max_sample_rate": map[string]any{"type": "integer", "description": "Highest ALAC sample rate in Hz."},
 		"max_bit_depth":   map[string]any{"type": "integer", "description": "Highest ALAC bit depth."},
 	}, "urls"),
+	"delete_job": obj(map[string]any{
+		"job_id": withDescription(str, "The finished job to delete; a record's run deletes its record."),
+	}, "job_id"),
 	"list_jobs": obj(map[string]any{
 		"status": withDescription(strs, "Job statuses to keep: queued, running, completed, failed, cancelled."),
 		"type":   withDescription(strs, "Job types to keep: song, album, playlist, artist, station."),
@@ -404,6 +407,7 @@ func (h handlers) custom() map[string]runner {
 	return map[string]runner{
 		"start_download": h.startDownload,
 		"list_jobs":      h.listJobs,
+		"delete_job":     h.deleteJob,
 		"get_job":        h.getJob,
 		"wait_for_job":   h.waitForJob,
 		"get_status":     h.getStatus,
@@ -611,6 +615,20 @@ func (h handlers) listJobs(ctx context.Context, _ *mcp.CallToolRequest, args map
 		rows = append(rows, jobview.Row(j))
 	}
 	return map[string]any{"jobs": rows, "total": list.Total, "offset": list.Offset, "status_counts": list.StatusCounts}, nil
+}
+
+// deleteJob deletes a job as the apps do: with record=true, a record's run
+// deletes its record.
+func (h handlers) deleteJob(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
+	id, err := stringArg(args, "job_id")
+	if err != nil {
+		return nil, err
+	}
+	req, err := capability.Lookup("deleteDownload").Build(map[string]any{"job_id": id, "record": true})
+	if err != nil {
+		return nil, argError{err.Error()}
+	}
+	return h.c.Call(ctx, req.Method, req.Path, req.Query, nil)
 }
 
 func (h handlers) getJob(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {

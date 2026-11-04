@@ -318,6 +318,31 @@ func (s *Server) deleteDownload(w http.ResponseWriter, r *http.Request) {
 	// finalize sequence (terminal event + hook dispatch) is still in flight
 	// is refused even though its status row already reads terminal.
 	id := r.PathValue("id")
+	var record bool
+	switch r.URL.Query().Get("record") {
+	case "", "false":
+	case "true":
+		record = true
+	default:
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "record must be true or false")
+		return
+	}
+	if record {
+		job, err := s.store.GetJob(r.Context(), id)
+		if err != nil {
+			writeJobLookupError(w, id, err)
+			return
+		}
+		if job.ResourceID != "" {
+			if err := s.manager.DeleteRecord(r.Context(), job.ResourceKind, job.ResourceID); err != nil {
+				writeRecordError(w, job.ResourceKind, job.ResourceID, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "deleted": "record",
+				"resource": domain.ResourceRef{Kind: job.ResourceKind, ID: job.ResourceID}})
+			return
+		}
+	}
 	if err := s.manager.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, db.ErrJobNotTerminal) {
 			writeError(w, http.StatusConflict, CodeJobActive, fmt.Sprintf("job %s is still running, finalizing or running a hook", id))
@@ -326,5 +351,5 @@ func (s *Server) deleteDownload(w http.ResponseWriter, r *http.Request) {
 		writeJobLookupError(w, id, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "deleted": "job"})
 }

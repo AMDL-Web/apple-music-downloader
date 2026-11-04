@@ -172,7 +172,7 @@ func TestDestructiveNeedsYesAndDryRunSendsNothing(t *testing.T) {
 		t.Errorf("without --yes: %+v", r)
 	}
 	r = run(t, srv, "", "jobs", "delete", "job_x", "--dry-run")
-	if r.code != 0 || !strings.Contains(r.stdout, `"method":"DELETE"`) || !strings.Contains(r.stdout, "/api/v1/downloads/job_x") {
+	if r.code != 0 || !strings.Contains(r.stdout, `"method":"DELETE"`) || !strings.Contains(r.stdout, "/api/v1/downloads/job_x?record=true") {
 		t.Errorf("--dry-run: %+v", r)
 	}
 	if calls.Load() != 0 {

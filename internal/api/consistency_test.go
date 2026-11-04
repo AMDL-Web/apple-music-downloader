@@ -573,6 +573,20 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 		r.call(http.MethodDelete, "/library/albums/400", "", http.StatusNoContent, nil)
 	}
 	r.check("record deleted")
+
+	r.call(http.MethodGet, "/downloads?resource_kind=album&resource_id=200", "", http.StatusOK, &runs)
+	var gone struct {
+		Deleted  string              `json:"deleted"`
+		Resource *domain.ResourceRef `json:"resource"`
+	}
+	r.call(http.MethodDelete, "/downloads/"+runs.Downloads[0].ID+"?record=true", "", http.StatusOK, &gone)
+	if gone.Deleted != "record" || gone.Resource == nil || gone.Resource.ID != "200" {
+		t.Fatalf("deleting a run with record=true = %+v, want its record 200", gone)
+	}
+	s = r.check("a run deleted with its record")
+	if _, ok := s.albums["200"]; ok {
+		t.Fatal("album 200 is still listed after its run was deleted with record=true")
+	}
 }
 
 // needsAttention reports whether a failed run of album id is among the runs

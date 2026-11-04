@@ -113,8 +113,9 @@ func dropPalette(v any) any {
 	return v
 }
 
-// rowKeys are the Job fields a list row keeps.
-var rowKeys = []string{"id", "type", "status", "title", "artist_name", "curator_name", "input",
+// rowKeys are the Job fields a list row keeps; resource names the record a
+// run downloads for.
+var rowKeys = []string{"id", "type", "status", "title", "artist_name", "curator_name", "input", "resource",
 	"total_items", "completed_items", "skipped_items", "failed_items", "cancelled_items",
 	"progress", "error", "created_at", "finished_at"}
 

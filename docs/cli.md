@@ -42,7 +42,7 @@ by meaning.
 | `jobs watch [<job_id>] [--types] [--progress-interval] [--timeout]` | the job's event stream, or the overview feed | read |
 | `jobs wait <job_id> [--timeout]` | the job's event stream | read |
 | `jobs cancel <job_id>`, `jobs retry <job_id>`, `jobs move <job_id>` | `POST …/cancel`, `…/retry`, `…/move` | write |
-| `jobs delete <job_id>` | `DELETE /downloads/{job_id}` | destructive |
+| `jobs delete <job_id>` | `DELETE /downloads/{job_id}?record=true` (a record's run deletes its record, as in the apps) | destructive |
 | `library list [--state] [--flag] [--source] [--q] [--sort] [--limit] [--offset]`, `library playlists [same]` | `GET /library/albums`, `GET /library/playlists` | read |
 | `library get <id>`, `library playlist <id>`, `library summary` | `GET /library/albums/{id}`, `GET /library/playlists/{id}`, `GET /library/summary` | read |
 | `library add --urls [--codecs] [--now] [--include all\|albums]` | `POST /library/add` | write |
@@ -296,7 +296,7 @@ which are all queued or running already are not an error. `set_config`, like
   album's percent, when the call carried a progress token. On `done: false`, or when the
   client lost the request, calling it again is safe.
 - **`list_jobs`** returns compact rows (`apps/amdl/internal/jobview#Row`), 50 by default as
-  in the CLI, and
+  in the CLI, each with the `resource` its run downloads for, and
   **`get_status`** gathers the system, health, wrapper, accounts and library-sync answers.
 - **Accounts**: `list_accounts` lists them, `update_account` switches an account's library
   sync or Apple library or moves it (`position` 0 makes it the default) and `delete_account`

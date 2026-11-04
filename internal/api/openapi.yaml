@@ -1950,7 +1950,8 @@ paths:
       summary: Remove a record from amdl
       description: |
         Deletes the record with its tracks, slots, resume checkpoints and runs;
-        each run's deletion reaches the feeds as job_deleted. The files on disk
+        each run's deletion reaches the feeds as job_deleted, and the record's
+        as resource_deleted. The files on disk
         stay. The library monitor does not
         add it back; adding it by hand does, and its first run takes a file
         still at a track's path as that track's download instead of
@@ -2248,26 +2249,56 @@ paths:
     delete:
       tags: [Downloads]
       summary: Delete a download job
-      description: Deletes a job in a terminal state (completed/failed/cancelled) together with its items and event records. A queued or running job must be cancelled first.
+      description: >-
+        Deletes a job in a terminal state (completed/failed/cancelled) together
+        with its items and event records. A queued or running job must be
+        cancelled first. With record=true a record's run deletes its record
+        instead, as DELETE /library/{kind}/{id} does (the record's other runs
+        go too, its files stay): what the desktop app, the console, the CLI
+        and the MCP server do when a run is deleted.
       operationId: deleteDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
+        - name: record
+          in: query
+          description: >-
+            true deletes the record a record's run downloads for, with all its
+            runs; a station's run is deleted alone either way.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
-          description: The job has been deleted.
+          description: The job, or with record=true its record, has been deleted.
           content:
             application/json:
               schema:
                 type: object
-                required: [status]
+                required: [status, deleted]
                 properties:
                   status:
                     type: string
                     const: deleted
+                  deleted:
+                    type: string
+                    enum: [job, record]
+                    description: What was deleted.
+                  resource:
+                    $ref: '#/components/schemas/ResourceRef'
+                    description: The record deleted, when deleted is record.
+        '400':
+          description: invalid_request; record is not true or false.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/JobNotFound'
         '409':
-          description: job_active; the job is still queued or running (cancel it first), finalizing, or running a hook.
+          description: >-
+            job_active; the job is still queued or running (cancel it first),
+            finalizing, or running a hook. With record=true, run_active: the
+            record has a queued or running run (pause it first).
           content:
             application/json:
               schema:

@@ -41,6 +41,19 @@ func jobsGetCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	}
 }
 
+// jobsDelete deletes a job as the desktop app and the console do: with
+// record=true, a record's run deletes its record.
+func jobsDelete(e *env, args []string) error {
+	if len(args) != 1 {
+		return usageErr("usage: amdl jobs delete <job_id>")
+	}
+	req, err := capability.Lookup("deleteDownload").Build(map[string]any{"job_id": args[0], "record": true})
+	if err != nil {
+		return err
+	}
+	return e.send(req, nil)
+}
+
 func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	codecs := fs.String("codec", "", "codec order for this download, such as alac,aac (download.quality_priority)")
 	var fallback *bool

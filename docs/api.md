@@ -623,8 +623,13 @@ were running go ahead of the queued ones, which keep their order.
 curl -X DELETE http://localhost:18080/api/v1/downloads/{job_id}
 ```
 
-Deletes a terminal job's history. Its record and files stay. A job that is queued,
-running, finalizing or running a hook is `409 job_active`.
+Deletes a terminal job's history and answers `200 {status: "deleted", deleted: "job"}`.
+Its record and files stay. A job that is queued, running, finalizing or running a hook is
+`409 job_active`. With `?record=true` a record's run deletes its record instead, with the
+record's other runs, as `DELETE /library/{kind}/{id}` does (files stay; `409 run_active`
+while a run of it is queued or running), and answers `{status: "deleted", deleted:
+"record", resource}`; a station's run is deleted alone. The desktop app, the console, the
+CLI and the MCP server delete a run that way.
 
 ## Events
 

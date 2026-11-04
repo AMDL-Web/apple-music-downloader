@@ -18,6 +18,7 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 		"download":          downloadCmd,
 		"library check":     libraryCheckCmd,
 		"jobs get":          jobsGetCmd,
+		"jobs delete":       noFlags(jobsDelete),
 		"jobs watch":        jobsWatchCmd,
 		"jobs wait":         jobsWaitCmd,
 		"logs tail":         logsTailCmd,
