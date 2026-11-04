@@ -34,3 +34,37 @@ func TestAShortWindowCompactsTheQueueHero(t *testing.T) {
 		t.Errorf("in an 820×560 window the hero's cover is %v, not the compact %d", r, heroCoverCompact)
 	}
 }
+
+// In the light theme the hero's light ends inside the queue's bar, by an
+// inward ramp, not at a hard line along its top edge: down a column clear
+// of the bar's words, no row differs from the one above by more than a
+// few levels.
+func TestTheQueueBarLetsTheLightFadeIn(t *testing.T) {
+	a, run := demoApp(t)
+	a.Theme = "light"
+	run(func() bool { return a.Store.Loaded && a.Store.Now() != nil })
+	a.Go(ScreenQueue)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	for range 20 {
+		run(func() bool { return true })
+		tt.Advance(100 * time.Millisecond)
+	}
+	all, ok := tt.Find("All")
+	if !ok {
+		t.Fatalf("no filters: %q", tt.Texts())
+	}
+	img := tt.Image()
+	lum := func(x, y int) float32 {
+		o := img.PixOffset(x, y)
+		return 0.2126*float32(img.Pix[o]) + 0.7152*float32(img.Pix[o+1]) + 0.0722*float32(img.Pix[o+2])
+	}
+	for _, x := range []int{1000, 1150, 1260} {
+		for y := int(all.Y) - 40; y < int(all.Y+all.H)+20; y++ {
+			if d := lum(x, y+1) - lum(x, y); d > 4 || d < -4 {
+				t.Errorf("at x %d, row %d differs from row %d by %.0f levels: a hard edge", x, y+1, y, d)
+				break
+			}
+		}
+	}
+}

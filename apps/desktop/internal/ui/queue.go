@@ -32,13 +32,13 @@ func (a *App) heroJob() *store.Job {
 // comes in or goes out, the light turns with it, from the screen under it
 // to the page's, over the whole column at once.
 func (a *App) backdrop(c *ui.Context, k *Tokens) {
-	b := paletteBackdrop(k, a.screenPalette(c, a.Screen), a.Screen == ScreenHome)
+	b := a.screenBackdrop(c, k, a.Screen)
 	if f := &a.fly; f.moving {
 		under := a.Screen
 		if under == ScreenAlbum {
 			under = f.under
 		}
-		from := paletteBackdrop(k, a.screenPalette(c, under), under == ScreenHome)
+		from := a.screenBackdrop(c, k, under)
 		b = paletteBackdrop(k, a.screenPalette(c, ScreenAlbum), false)
 		b.From, b.Mix = &from, f.light()
 		if f.grow {
@@ -49,6 +49,18 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 		}
 	}
 	b.Show(c)
+}
+
+// screenBackdrop is the light of what s shows. The queue's reaches past
+// the discs' blur, as home's does: its bar lets the light fade into the
+// list's ground (groundRise), which a band ending at the album page's
+// height would cut across.
+func (a *App) screenBackdrop(c *ui.Context, k *Tokens, s Screen) widgets.Backdrop {
+	b := paletteBackdrop(k, a.screenPalette(c, s), s == ScreenHome)
+	if s == ScreenQueue {
+		b.Height = backdropReach
+	}
+	return b
 }
 
 // screenPalette is the palette of what s shows, if any.
@@ -67,17 +79,20 @@ func (a *App) screenPalette(c *ui.Context, s Screen) Palette {
 	return Palette{}
 }
 
+// backdropReach is the height past which the discs' blur has faded out.
+const backdropReach = 560
+
 // paletteBackdrop lights the top of the main column with pal, or eases the
 // light out without one. Home's band reaches past the discs' blur, so the
 // light fades out above the results instead of ending in a line; the
-// queue's and the album page's end under their opaque lists.
+// album page's ends under its opaque list.
 func paletteBackdrop(k *Tokens, pal Palette, home bool) widgets.Backdrop {
 	strength, height := float32(0.55), float32(420)
 	switch {
 	case home && k.Dark:
-		strength, height = 0.45, 560
+		strength, height = 0.45, backdropReach
 	case home:
-		strength, height = 0.22, 560
+		strength, height = 0.22, backdropReach
 	case !k.Dark:
 		strength = 0.28
 	}
@@ -216,7 +231,10 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		adds = s.Queue.Adds
 	}
 	upNext := len(running)+len(queued) > 0
-	top := ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground)
+	// The bar's ground rises from clear at its top to the list's at its
+	// bottom, so the light over the hero ends in the bar rather than at
+	// its edge.
+	top := ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).LinearGradient(groundRise(k))
 	// The list's top, which the album page's lower panel flies from.
 	a.flyEdge(top)
 	top.Children(func() {
@@ -343,6 +361,18 @@ func (a *App) queueList(c *ui.Context, k *Tokens, tab store.Tab, rows []store.Qu
 		}
 	})
 	a.settleQueueDrag(c, list)
+}
+
+// groundRise is the ground going from clear at the top to opaque at the
+// bottom, an inward ramp where a lit band meets an opaque list.
+func groundRise(k *Tokens) ui.LinearGradient {
+	stops := make([]ui.GradientStop, 0, 9)
+	for i := range 9 {
+		t := float32(i) / 8
+		// Smoothstep, so that neither end shows a crease.
+		stops = append(stops, ui.GradientStop{Color: k.Ground.Alpha(t * t * (3 - 2*t)), At: t})
+	}
+	return ui.LinearGradient{Angle: 180, Stops: stops}
 }
 
 // jobRow is one job of the queue: cover, names, stage bar with counts,
