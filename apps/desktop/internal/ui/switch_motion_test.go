@@ -4,6 +4,7 @@ package ui
 
 import (
 	"image"
+	"slices"
 	"testing"
 	"time"
 
@@ -17,25 +18,104 @@ import (
 // text and covers on the dark theme's ground (ink), after the frame before
 // the click.
 func switchFilm(t *testing.T, tt *ui.Tester, click string, area image.Rectangle, frames int) (before int, film []int) {
-	before, film, _ = switchFilmWatch(t, tt, click, area, image.Rectangle{}, frames)
-	return before, film
+	f := switchFilmWatch(t, tt, click, area, image.Rectangle{}, frames)
+	return f.before, f.ink
 }
 
-// switchFilmWatch is switchFilm that also films how much of watch shows.
-func switchFilmWatch(t *testing.T, tt *ui.Tester, click string, area, watch image.Rectangle, frames int) (before int, film, watched []int) {
+// switchShot is a filmed switch: the ink of its area before the click and
+// in each frame, the ink of a part of it watched, and how opaque the old
+// content and the new show in each frame (layers).
+type switchShot struct {
+	before        int
+	ink, watched  []int
+	old, incoming []float32
+}
+
+// switchFilmWatch is switchFilm that also films how much of watch shows,
+// and how opaque the old content and the new show.
+func switchFilmWatch(t *testing.T, tt *ui.Tester, click string, area, watch image.Rectangle, frames int) switchShot {
 	t.Helper()
 	tt.Frame()
-	before = ink(tt.Image(), area)
+	var f switchShot
+	f.before = ink(tt.Image(), area)
+	before := areaLuma(tt.Image(), area)
 	if err := tt.Click(click); err != nil {
 		t.Fatal(err)
 	}
+	var shown [][]float32
 	for range frames {
 		tt.Advance(filmFrame)
 		tt.Frame()
-		film = append(film, ink(tt.Image(), area))
-		watched = append(watched, ink(tt.Image(), watch))
+		f.ink = append(f.ink, ink(tt.Image(), area))
+		f.watched = append(f.watched, ink(tt.Image(), watch))
+		shown = append(shown, areaLuma(tt.Image(), area))
 	}
-	return before, film, watched
+	after := shown[len(shown)-1]
+	for _, v := range shown {
+		o, n := layers(before, after, v)
+		f.old, f.incoming = append(f.old, o), append(f.incoming, n)
+	}
+	return f
+}
+
+// areaLuma is the luminance of each pixel of r.
+func areaLuma(img *image.RGBA, r image.Rectangle) []float32 {
+	r = r.Intersect(img.Bounds())
+	l := make([]float32, 0, r.Dx()*r.Dy())
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			o := img.PixOffset(x, y)
+			l = append(l, 0.2126*float32(img.Pix[o])+0.7152*float32(img.Pix[o+1])+0.0722*float32(img.Pix[o+2]))
+		}
+	}
+	return l
+}
+
+// layers is how opaque the content before a switch (before) and after it
+// (after) show in a frame of it, v: over the pixels where only one of the
+// two has content on the dark ground and the other the ground, the median
+// of how far v is from the ground there towards that content. -1 where
+// too few pixels tell.
+func layers(before, after, v []float32) (old, incoming float32) {
+	const ground, content = 45, 60
+	var o, n []float32
+	for i := range v {
+		switch {
+		case after[i] < ground && before[i]-after[i] > content:
+			o = append(o, (v[i]-after[i])/(before[i]-after[i]))
+		case before[i] < ground && after[i]-before[i] > content:
+			n = append(n, (v[i]-before[i])/(after[i]-before[i]))
+		}
+	}
+	median := func(xs []float32) float32 {
+		if len(xs) < 50 {
+			return -1
+		}
+		slices.Sort(xs)
+		return xs[len(xs)/2]
+	}
+	return median(o), median(n)
+}
+
+// handOff checks a filmed switch's hand-off from the old content to the
+// new: no frame shows both above a tenth, which would show them through
+// each other, and no more than two frames show neither.
+func handOff(t *testing.T, name string, f switchShot) {
+	t.Helper()
+	neither := 0
+	for i := range f.old {
+		o, n := f.old[i], f.incoming[i]
+		if o > 0.1 && n > 0.1 {
+			t.Errorf("%s: frame %d shows the old content at %.2f and the new at %.2f through each other (old %.2f, new %.2f)", name, i, o, n, f.old, f.incoming)
+			return
+		}
+		if o >= 0 && n >= 0 && o <= 0.1 && n <= 0.1 {
+			neither++
+		}
+	}
+	if neither > 2 {
+		t.Errorf("%s: %d frames show neither the old content nor the new (old %.2f, new %.2f)", name, neither, f.old, f.incoming)
+	}
 }
 
 // ink counts the bright pixels of r, text and covers over a dark ground.
@@ -51,23 +131,6 @@ func ink(img *image.RGBA, r image.Rectangle) int {
 		}
 	}
 	return n
-}
-
-// blankRun is the longest run of frames of film that show less than a
-// tenth of the less of before and the last frame: the time a switch shows
-// nothing.
-func blankRun(before int, film []int) int {
-	floor := min(before, film[len(film)-1]) / 10
-	longest, run := 0, 0
-	for _, n := range film {
-		if n < floor {
-			run++
-			longest = max(longest, run)
-		} else {
-			run = 0
-		}
-	}
-	return longest
 }
 
 // settledBy is the first frame of film from which it no longer changes by
@@ -89,10 +152,9 @@ func settledBy(film []int) int {
 }
 
 // A change of the search's tab goes in one move, in the time the capsule's
-// fill slides: the tab left fades out and the one chosen fades in at once
-// after it, never a stretch of frames with neither past the two fades'
-// crossing, three frames, whether the tab left had hits or only its "No
-// playlists".
+// fill slides: the tab left fades out and the one chosen fades in as soon
+// as it has gone, never through it nor after a stretch of frames with
+// neither, whether the tab left had hits or only its "No playlists".
 func TestASearchTabSwitchShowsNoGap(t *testing.T) {
 	a, run := demoApp(t)
 	a.Screen, a.PageMotion, a.Theme = ScreenHome, true, "dark"
@@ -119,16 +181,18 @@ func TestASearchTabSwitchShowsNoGap(t *testing.T) {
 		if r, ok := tt.Find("No playlists for “glass weather”"); ok {
 			said = image.Rect(int(r.X), int(r.Y), int(r.X+r.W), int(r.Y+r.H))
 		}
-		before, film, saying := switchFilmWatch(t, tt, tab, area, said, 40)
-		if !said.Empty() && saying[3] > 0 {
-			t.Errorf("to %s: “No playlists” still shows as the next tab comes in (%v)", tab, saying)
+		f := switchFilmWatch(t, tt, tab, area, said, 40)
+		if !said.Empty() && f.watched[3] > 0 {
+			t.Errorf("to %s: “No playlists” still shows as the next tab comes in (%v)", tab, f.watched)
 		}
-		if n := blankRun(before, film); n > 3 {
-			t.Errorf("to %s: %d frames show neither tab (%v, before %d)", tab, n, film, before)
+		// Into a tab from the overview, the group both show glides, which
+		// layers cannot tell from a hand-off.
+		if tab != "Albums" {
+			handOff(t, "to "+tab, f)
 		}
 		// The fill's spring, 300 ms, and a few frames for the fade's tail.
-		if at := settledBy(film); at > 24 {
-			t.Errorf("to %s: the switch settles at frame %d, past 400 ms (%v)", tab, at, film)
+		if at := settledBy(f.ink); at > 21 {
+			t.Errorf("to %s: the switch settles at frame %d, past 350 ms (%v)", tab, at, f.ink)
 		}
 		tt.Advance(time.Second)
 	}
@@ -173,20 +237,20 @@ func startsWith(t *testing.T, tt *ui.Tester, prefix string) string {
 
 // Changing what a screen shows with its segmented control moves alike on
 // every screen: the search's tabs, the Library's kinds and the queue's
-// filters fade the old content out and the new in on the same frames, with
-// no stretch showing neither, and settle with the capsule's fill.
+// filters fade the old content out and the new in on the same frames,
+// never through each other nor with a stretch showing neither, and settle
+// with the capsule's fill.
 func TestEverySwitchMovesAlike(t *testing.T) {
 	type shot struct {
 		name        string
-		before      int
-		film        []int
+		f           switchShot
 		outAt, inAt int
 	}
 	var shots []shot
 	film := func(name string, tt *ui.Tester, click string, area image.Rectangle) {
-		before, f := switchFilm(t, tt, click, area, 40)
-		out, in := switchShape(before, f)
-		shots = append(shots, shot{name, before, f, out, in})
+		f := switchFilmWatch(t, tt, click, area, image.Rectangle{}, 40)
+		out, in := switchShape(f.before, f.ink)
+		shots = append(shots, shot{name, f, out, in})
 	}
 
 	// The search, from Albums to Songs.
@@ -276,16 +340,14 @@ func TestEverySwitchMovesAlike(t *testing.T) {
 	}
 
 	for _, sh := range shots {
-		t.Logf("%s: out by frame %d, in by %d: %v", sh.name, sh.outAt, sh.inAt, sh.film)
-		if n := blankRun(sh.before, sh.film); n > 3 {
-			t.Errorf("%s: %d frames show neither (%v, before %d)", sh.name, n, sh.film, sh.before)
-		}
-		if at := settledBy(sh.film); at > 24 {
-			t.Errorf("%s: settles at frame %d, past 400 ms (%v)", sh.name, at, sh.film)
+		t.Logf("%s: out by frame %d, in by %d: %v; old %.2f, new %.2f", sh.name, sh.outAt, sh.inAt, sh.f.ink, sh.f.old, sh.f.incoming)
+		handOff(t, sh.name, sh.f)
+		if at := settledBy(sh.f.ink); at > 21 {
+			t.Errorf("%s: settles at frame %d, past 350 ms (%v)", sh.name, at, sh.f.ink)
 		}
 		if d := sh.outAt - shots[0].outAt; d < -1 || d > 1 || sh.inAt-shots[0].inAt < -1 || sh.inAt-shots[0].inAt > 1 {
 			t.Errorf("%s: the old content fades by frame %d and the new by %d; the search's by %d and %d (%v, before %d)",
-				sh.name, sh.outAt, sh.inAt, shots[0].outAt, shots[0].inAt, sh.film, sh.before)
+				sh.name, sh.outAt, sh.inAt, shots[0].outAt, shots[0].inAt, sh.f.ink, sh.f.before)
 		}
 	}
 }

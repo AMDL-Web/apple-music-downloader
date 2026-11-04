@@ -10,13 +10,14 @@ import (
 // tabs, the Library's kinds, the queue's filters), changes it one way on
 // every screen, in the time the capsule's fill slides (segmentSlide): what
 // goes fades out at once (switchOut); what comes fades in where it lands
-// as that is all but gone (switchIn), so the two never show through each
-// other; what both show glides to its new place with the fill
-// (switchGlide). The fades ease out, as a spring from rest would start too
-// slowly and leave frames that show neither.
+// once that is gone (switchIn), so the two never show through each other;
+// what both show glides to its new place with the fill (switchGlide). The
+// fades ease out, as a spring from rest would start too slowly and leave
+// frames that show neither. switchIn waits until switchOut's cubic has
+// left under a twentieth: (1-55/90)³ ≈ 0.06.
 var (
 	switchOut   = ui.Animation{Duration: 90 * time.Millisecond, Ease: ui.EaseOut}
-	switchIn    = ui.Animation{Duration: 200 * time.Millisecond, Ease: ui.EaseOut, Delay: 40 * time.Millisecond}
+	switchIn    = ui.Animation{Duration: 200 * time.Millisecond, Ease: ui.EaseOut, Delay: 55 * time.Millisecond}
 	switchGlide = segmentSlide
 	// switchSettle is how long after a switch what comes in is still
 	// given switchIn: past it, the screen's parts go out with switchOut
