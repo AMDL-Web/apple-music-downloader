@@ -83,7 +83,7 @@ axis. The artifact `console-ui-audit-<commit>` (kept 14 days) holds `index.html`
 findings. Nothing here fails a build: past the threshold the job only annotates a warning.
 A scenario that throws, or a browser that dies mid-run, is recorded as a failed step (the summary lists it) and
 the results gathered so far are still written.
-Screenshots from the runner use Linux fonts, so pixels differ from a Mac run and a
+Screenshots from the runner use Linux fonts (Noto CJK is installed for Japanese and Chinese titles), so pixels differ from a Mac run and a
 before → after `diff` is only meaningful between two CI runs.
 
 ## What it checks

@@ -315,6 +315,14 @@ jobs:
         if: steps.pw.outputs.cache-hit != 'true'
         run: timeout 180 npm install --prefix ~/.cache/ui-audit-pw playwright-core@1.64.1
 
+      # The runner has no CJK font, so Japanese and Chinese titles in the screenshots
+      # would be boxes and their widths would not match a real browser.
+      - name: Install CJK fonts
+        run: |
+          timeout 150 sudo apt-get update -qq
+          timeout 150 sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
+          fc-list :lang=ja | head -1
+
       # Cover images come from Apple's CDN on first use and from this cache after.
       - name: Restore cover images
         uses: actions/cache@v5
