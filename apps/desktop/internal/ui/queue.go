@@ -457,6 +457,18 @@ func (a *App) revealDir(j *store.Job) string {
 // askDelete opens the dialog that deletes j.
 func (a *App) askDelete(j *store.Job) { a.deleting, a.deleteOpen = j, true }
 
+// askDeleteRun deletes what a run's page shows: a run of a record is that
+// record's row in the queue, so it removes the record with its runs, as the
+// row's Remove from amdl does; a run of no record goes alone.
+func (a *App) askDeleteRun(j *store.Job) {
+	if j.ResourceID == "" {
+		a.askDelete(j)
+		return
+	}
+	a.removing = &store.Record{Ref: domain.ResourceRef{Kind: j.ResourceKind, ID: j.ResourceID}, Name: j.Name()}
+	a.removeOpen = true
+}
+
 // deleteDialog confirms a job's delete, which keeps its files.
 func (a *App) deleteDialog(c *ui.Context, k *Tokens) {
 	j := a.deleting

@@ -7,7 +7,7 @@
 // drawer-info.js (failure notice, files, Details).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { cancelDownload, retryDownload, deleteDownload } from '../api.js';
+import { cancelDownload, retryDownload, deleteDownload, deleteRecord } from '../api.js';
 import {
   jobTitle,
   jobSubtitle,
@@ -81,10 +81,13 @@ export function JobDrawer({ jobId, onClose }) {
   useEffect(() => setDeleting(null), [jobId]);
   const confirmDelete = async () => {
     const id = jobId;
-    const title = jobTitle(detailRef.current && detailRef.current.job);
+    const job = detailRef.current && detailRef.current.job;
+    const title = jobTitle(job);
     setDeleting('busy');
     try {
-      await deleteDownload(id);
+      // A record's run is that record's row: the record goes with its runs.
+      if (job && job.resource) await deleteRecord(job.resource.kind, job.resource.id);
+      else await deleteDownload(id);
       app.toast({ message: `Removed ${title}`, role: 'success' });
     } catch (e) {
       if (!actionDone('delete', e)) {
@@ -151,16 +154,18 @@ export function JobDrawer({ jobId, onClose }) {
     </aside>
     ${deleting && job && !gone
       ? html`<${ConfirmDialog}
-          title="Remove this job?"
-          confirmLabel="Remove job"
+          title=${job.resource ? 'Remove from amdl?' : 'Remove this job?'}
+          confirmLabel=${job.resource ? 'Remove' : 'Remove job'}
           busyLabel="Removing…"
           danger
           busy=${deleting === 'busy'}
           onConfirm=${confirmDelete}
           onCancel=${() => setDeleting(null)}
         >
-          <strong dir="auto">${jobTitle(job)}</strong> leaves Activity with its ${count(detail.items.length)}
-          ${detail.items.length === 1 ? ' track' : ' tracks'} and event history. ${job.resource ? 'Its library record and files stay.' : 'Downloaded files stay on disk.'}
+          ${job.resource
+            ? html`<strong dir="auto">${jobTitle(job)}</strong> leaves amdl with its history. The files stay.`
+            : html`<strong dir="auto">${jobTitle(job)}</strong> leaves Activity with its ${count(detail.items.length)}
+          ${detail.items.length === 1 ? ' track' : ' tracks'} and event history. Downloaded files stay on disk.`}
         </${ConfirmDialog}>`
       : null}
   </div>`;

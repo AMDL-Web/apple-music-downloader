@@ -400,7 +400,7 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 		}
 	}
 	if j.Status.IsTerminal() && clicked(button(c, k, buttonOnArt, "Delete", nil).Label("Delete this download")) {
-		a.askDelete(j)
+		a.askDeleteRun(j)
 	}
 }
 

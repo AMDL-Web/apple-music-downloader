@@ -201,3 +201,30 @@ func TestScrollingHoldsTheStripes(t *testing.T) {
 		t.Error("the stripes did not move again after scrolling")
 	}
 }
+
+// A run's page shows its record's row of the queue, so its Delete removes
+// the record, as the row's Remove from amdl does; a station run's goes alone.
+func TestARunPagesDeleteRemovesItsRecord(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		job  domain.Job
+		want string
+	}{
+		{domain.Job{ID: "r", Type: "album", Status: domain.JobCompleted, Title: "Glass Weather", ResourceKind: domain.ResourceAlbum, ResourceID: "7", CreatedAt: now, FinishedAt: &now},
+			"Remove “Glass Weather” from amdl?"},
+		{domain.Job{ID: "s", Type: "station", Status: domain.JobCompleted, Title: "Chill Radio", CreatedAt: now, FinishedAt: &now},
+			"Delete “Chill Radio”?"},
+	} {
+		a, _ := newTestApp(remoteSettings())
+		openFixture(a, &store.Job{Job: tc.job})
+		tt := ui.NewTester(a.View, 1280, 800)
+		tt.Frame()
+		if err := tt.Click("Delete this download"); err != nil {
+			t.Fatalf("%s: no Delete: %v in %q", tc.job.Type, err, tt.Texts())
+		}
+		tt.Frame()
+		if !tt.HasText(tc.want) {
+			t.Errorf("%s: no %q in %q", tc.job.Type, tc.want, tt.Texts())
+		}
+	}
+}

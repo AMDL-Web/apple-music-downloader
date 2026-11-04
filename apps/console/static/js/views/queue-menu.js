@@ -6,7 +6,7 @@
 // it. A record's row has its own menu (views/queue-record-menu.js).
 
 import { html, useState } from '../ui/preact.js';
-import { cancelDownload, retryDownload, deleteDownload, createDownload, resetRecord } from '../api.js';
+import { cancelDownload, retryDownload, deleteDownload, createDownload, resetRecord, deleteRecord } from '../api.js';
 import { recordHash } from '../lib/route.js';
 import { jobTitle, isUnresolved, inputLabel } from '../lib/format.js';
 import { rowMenu, actionError, bulkSummary, retryNote } from '../lib/jobactions.js';
@@ -30,7 +30,9 @@ export const jobName = (job) => (isUnresolved(job) ? inputLabel(job.input) : job
 export async function runOne(app, action, job) {
   let res;
   try {
-    res = await CALLS[action](job.id);
+    // A record's run is that record's row: deleting it removes the record
+    // and its runs, as Remove from amdl does.
+    res = action === 'delete' && job.resource ? await deleteRecord(job.resource.kind, job.resource.id) : await CALLS[action](job.id);
   } catch (error) {
     app.toast({ message: actionError(action === 'pause' ? 'cancel' : action, error), role: 'danger' });
     return false;
@@ -110,7 +112,7 @@ export function JobMenu({ job, href, onLeaving, place, onMove }) {
           busy=${busy}
           onConfirm=${remove}
           onCancel=${() => setAsking(false)}
-        >Its history leaves Activity. ${job.resource ? 'Its library record and files stay.' : 'Files already saved stay on disk.'}</${ConfirmDialog}>`
+        >${job.resource ? 'It leaves amdl with its history. The files stay.' : 'Its history leaves Activity. Files already saved stay on disk.'}</${ConfirmDialog}>`
       : null,
     again
       ? html`<${ConfirmDialog}
