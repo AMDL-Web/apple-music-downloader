@@ -157,10 +157,15 @@ func jobQuality(j *store.Job) string {
 // 24/48 included.
 func isHiRes(q string) bool { return strings.HasPrefix(q, "ALAC 24/") }
 
-// heroShort is the window height, in DIPs, below which the queue's hero
-// takes its compact form, as in a narrow window, so the list under it
-// keeps the most of the window.
-const heroShort = 700
+// The window heights, in DIPs, below which the queue's top gives up room
+// so the list under it keeps three rows of jobs (65 DIPs each): under
+// heroShort the full hero, whose list starts 476 DIPs down, takes its
+// compact form, as in a narrow window; under wallShort the recent covers,
+// with which the compact hero's list starts 417 down, go too.
+const (
+	heroShort = 476 + 3*65
+	wallShort = 417 + 3*65
+)
 
 // heroCompact reports whether the queue's hero takes its compact form: in
 // a narrow window or a short one.
@@ -202,7 +207,9 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		latest = finished[0]
 		a.latestHero(c, k, latest, a.heroCompact(c))
 	}
-	a.recentWall(c, k, finished, latest, compact)
+	if _, h := c.Size(); h >= wallShort {
+		a.recentWall(c, k, finished, latest, compact)
+	}
 	tabs := []string{"All", fmt.Sprintf("Active · %d", s.QueueCount(store.TabActive)), fmt.Sprintf("Done · %d", s.QueueCount(store.TabDone)),
 		fmt.Sprintf("Failed · %d", s.QueueCount(store.TabFailed))}
 	// Each count keeps the room of two digits, so a count going from 9 to 10

@@ -7,31 +7,53 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// In a short window the queue's hero takes its compact form, as in a narrow
-// one, so the list under it keeps the room: the 820×560 window, whose
-// sidebar closes and leaves the page wide, as much as a narrow one.
-func TestAShortWindowCompactsTheQueueHero(t *testing.T) {
+// A short window keeps three rows of the queue's list in view: the hero
+// takes its compact form, and the recent covers go, only as far as that
+// needs. The compact cover lines up with the words beside it at the top
+// and the bottom, and a page wide enough keeps the percent with Pause and
+// Details.
+func TestAShortWindowKeepsThreeRowsOfTheQueue(t *testing.T) {
 	a, run := demoApp(t)
 	run(func() bool { return a.Store.Loaded && a.Store.Now() != nil })
 	a.Go(ScreenQueue)
 	tt := ui.NewTester(a.View, 1280, 800)
-	cover := func() ui.Rect {
+	find := func(s string) ui.Rect {
+		t.Helper()
+		r, ok := tt.Find(s)
+		if !ok {
+			t.Fatalf("no %q: %q", s, tt.Texts())
+		}
+		return r
+	}
+	for _, sz := range [][2]int{{1280, 800}, {1280, 690}, {820, 560}} {
+		tt.SetSize(sz[0], sz[1])
 		for range 10 {
 			run(func() bool { return true })
 			tt.Advance(50 * time.Millisecond)
 		}
-		r, ok := tt.Find("Open " + a.Store.Now().Name())
-		if !ok {
-			t.Fatalf("no hero cover: %q", tt.Texts())
+		// The third job of Up next.
+		if r := find("夏夜信号"); r.Y+r.H > float32(sz[1]) {
+			t.Errorf("%v: the third row ends at %.0f, past the window", sz, r.Y+r.H)
 		}
-		return r
-	}
-	if r := cover(); r.H != heroCover {
-		t.Fatalf("in a 1280×800 window the hero's cover is %v, not %d high", r, heroCover)
-	}
-	tt.SetSize(820, 560)
-	if r := cover(); r.H != heroCoverCompact {
-		t.Errorf("in an 820×560 window the hero's cover is %v, not the compact %d", r, heroCoverCompact)
+		find("Pause")
+		find("Details")
+		cover := find("Open " + a.Store.Now().Name())
+		if cover.X > 300 {
+			t.Errorf("%v: the hero's cover is not at its left: %v", sz, cover)
+		}
+		if sz[1] >= 690 {
+			if cover.H != heroCover {
+				t.Errorf("%v: the hero's cover is %v, not the full %d", sz, cover, heroCover)
+			}
+			continue
+		}
+		top, bottom := find("DOWNLOADING NOW"), find(a.heroProgressText(a.Store.Now()))
+		if d := top.Y - cover.Y; d < -1 || d > 1 {
+			t.Errorf("%v: the compact cover's top is at %.0f, the words' at %.0f", sz, cover.Y, top.Y)
+		}
+		if d := bottom.Y + bottom.H - cover.Y - cover.H; d < -1 || d > 1 {
+			t.Errorf("%v: the compact cover's bottom is at %.0f, the words' at %.0f", sz, cover.Y+cover.H, bottom.Y+bottom.H)
+		}
 	}
 }
 

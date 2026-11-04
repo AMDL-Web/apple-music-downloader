@@ -17,7 +17,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	size := float32(heroCover)
 	var video *ui.VideoPlayer
 	if compact {
-		size = heroCoverCompact
+		size = heroCoverBarred
 	} else {
 		video = a.motionPlayer(c, j.MotionArtworkURL)
 	}
@@ -27,7 +27,13 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		a.heroCover(c, j, func() ui.Element {
 			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: 1, Video: video}.Show(c)
 		})
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
+		// A compact cover lines up with the words beside it at the top and
+		// the bottom: they spread over its height.
+		names := ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10)
+		if compact {
+			names.Height(size).Justify(ui.SpaceBetween)
+		}
+		names.Children(func() {
 			a.heroNames(c, k, j, "Downloading now", hc, compact)
 			ui.Column(c).MaxWidth(600).Gap(6).Margin(6, 0, 0, 0).Children(func() {
 				widgets.StageBar{Stages: j.Stages, Color: hc.accent, Track: k.Track, Height: 10, Gap: 3, Running: true, Still: a.scrolling(c)}.Show(c, "hero-bar")
@@ -38,7 +44,9 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 				})
 			})
 		})
-		if compact {
+		// A narrow page has no room for the percent and the buttons: the
+		// cover opens the page, and the row's menu pauses.
+		if a.compact {
 			return
 		}
 		ui.Column(c).AlignItems(ui.End).Gap(10).Children(func() {
@@ -74,8 +82,12 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 }
 
 // The queue hero's cover and title, each at its size in a narrow window.
+// heroCoverBarred is the compact cover of the hero with a stage bar under
+// its names, as tall as they are on the systems' fonts with room to spare:
+// they spread over its height.
 const (
 	heroCover, heroCoverCompact = 196, 88
+	heroCoverBarred             = 132
 	heroTitle, heroTitleCompact = 42, 24
 	heroBy                      = 15
 )
