@@ -70,14 +70,17 @@ type Cache struct {
 	now func() time.Time
 }
 
-// coverKey names a cover by its URL template and size: Get, which runs for
-// each cover every frame, fills the URL only to fetch it.
+// coverKey names a cover by its URL template's key (keyOf) and size: Get,
+// which runs for each cover every frame, fills the URL only to fetch it.
 type coverKey struct {
 	template string
 	px       int
 }
 
 type entry struct {
+	// src is the URL template last asked for under the entry's key, which
+	// a fetch reads (keyOf).
+	src string
 	img ui.ImageSource
 	// bytes is what img takes decoded.
 	bytes   int
@@ -125,7 +128,7 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 	if template == "" {
 		return nil
 	}
-	key := coverKey{template, 0}
+	key := coverKey{keyOf(template), 0}
 	// A URL without a size, as a private playlist's, is the one picture
 	// whatever size it shows at.
 	if strings.Contains(template, "{w}") {
@@ -137,10 +140,10 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 		e = &entry{}
 		c.entries[key] = e
 	}
-	e.used = now
+	e.used, e.src = now, template
 	if e.img == nil && !e.loading && (e.failures == 0 || now.Sub(e.failedAt) >= retryWait(e.failures)) {
 		e.loading = true
-		go c.fetch(key, e)
+		go c.fetch(key, e.src)
 	}
 	if now.Sub(c.swept) > sweepEvery {
 		c.sweep(now)
@@ -162,12 +165,16 @@ func bucket(px int) int {
 	return 1200
 }
 
-func (c *Cache) fetch(key coverKey, e *entry) {
+func (c *Cache) fetch(key coverKey, template string) {
 	c.slots <- struct{}{}
 	defer func() { <-c.slots }()
-	url := URL(key.template, key.px)
-	img, status, err := c.loadSized(key)
+	url := URL(template, key.px)
+	img, status, err := c.loadSized(template, key.px)
 	c.post(func() {
+		e := c.entries[key]
+		if e == nil {
+			return
+		}
 		e.loading = false
 		if err != nil {
 			e.failures++
@@ -191,25 +198,35 @@ func (c *Cache) fetch(key coverKey, e *entry) {
 
 // loadSized loads the cover at its size, or, when the CDN refuses that size,
 // at the next smaller one that it serves.
-func (c *Cache) loadSized(key coverKey) (ui.ImageSource, int, error) {
-	img, status, err := c.load(URL(key.template, key.px))
-	if err == nil || !refused(status) || !strings.Contains(key.template, "{w}") {
+func (c *Cache) loadSized(template string, want int) (ui.ImageSource, int, error) {
+	img, status, err := c.load(URL(template, want))
+	if err == nil || !refused(status) || !strings.Contains(template, "{w}") {
 		return img, status, err
 	}
 	for _, px := range fallbackPx {
-		if px >= key.px {
+		if px >= want {
 			continue
 		}
-		if smaller, _, ferr := c.load(URL(key.template, px)); ferr == nil {
+		if smaller, _, ferr := c.load(URL(template, px)); ferr == nil {
 			// The disk keeps it under the refused size's URL too, so a later
 			// load of that size finds it without asking the CDN again.
-			if data, ok := c.disk.get(URL(key.template, px)); ok {
-				c.disk.put(URL(key.template, key.px), data)
+			if data, ok := c.disk.get(keyOf(URL(template, px))); ok {
+				c.disk.put(keyOf(URL(template, want)), data)
 			}
 			return smaller, http.StatusOK, nil
 		}
 	}
 	return img, status, err
+}
+
+// keyOf is what names the picture at url in the caches: url itself, but
+// for a presigned link, as a private playlist's cover is, whose signature
+// changes with every read of the playlist; its path is the picture.
+func keyOf(url string) string {
+	if i := strings.IndexByte(url, '?'); i >= 0 && strings.Contains(url[i:], "X-Amz-Signature=") {
+		return url[:i]
+	}
+	return url
 }
 
 // refused reports a status that another size of the same cover may not get.
@@ -218,7 +235,7 @@ func refused(status int) bool { return status == http.StatusForbidden || status 
 // load reads and decodes the cover at url, from the disk cache when it holds
 // it, with the HTTP status it came with: 200 from the disk, 0 when none came.
 func (c *Cache) load(url string) (ui.ImageSource, int, error) {
-	if data, ok := c.disk.get(url); ok {
+	if data, ok := c.disk.get(keyOf(url)); ok {
 		if img, err := ui.DecodeImage(data); err == nil {
 			return img, http.StatusOK, nil
 		}
@@ -231,7 +248,7 @@ func (c *Cache) load(url string) (ui.ImageSource, int, error) {
 	if err != nil {
 		return nil, status, err
 	}
-	c.disk.put(url, data)
+	c.disk.put(keyOf(url), data)
 	return img, status, nil
 }
 

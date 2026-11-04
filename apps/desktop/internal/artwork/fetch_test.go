@@ -212,3 +212,38 @@ func TestARefusedSizeIsReadFromDiskNextTime(t *testing.T) {
 		t.Errorf("two launches asked the CDN %q, want the refused size and the smaller one once", asked)
 	}
 }
+
+// A private playlist's cover is a presigned link whose signature changes
+// with every read: the library's tile and the playlist's page name it with
+// two signatures, and it is fetched and decoded once, the next launch
+// reading it from the disk.
+func TestAPresignedCoverIsOnePictureWhateverItsSignature(t *testing.T) {
+	img := pngBytes(t)
+	var mu sync.Mutex
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits++
+		mu.Unlock()
+		w.Write(img)
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	signed := func(sig string) string {
+		return srv.URL + "/sq-mq-us-037/99/76/image?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=" + sig
+	}
+	posted := make(chan func(), 4)
+	c := NewWith(func(fn func()) { posted <- fn }, http.DefaultTransport).WithDisk(dir)
+	getOnce(t, c, posted, signed("aaaa"), 200)
+	if c.Get(signed("bbbb"), 512) == nil {
+		t.Error("the page's link to the tile's cover, signed again, loads it again")
+	}
+	next := NewWith(func(fn func()) { posted <- fn }, http.DefaultTransport).WithDisk(dir)
+	getOnce(t, next, posted, signed("cccc"), 512)
+	if next.Get(signed("cccc"), 512) == nil {
+		t.Fatal("the cover does not show after a restart")
+	}
+	if hits != 1 {
+		t.Errorf("the cover was fetched %d times, want once", hits)
+	}
+}
