@@ -5,6 +5,7 @@ package ui
 import (
 	"fmt"
 	"image"
+	"image/draw"
 	"math"
 	"testing"
 	"time"
@@ -44,7 +45,7 @@ func coverFilm(t *testing.T, theme string, out bool) (frames []*image.RGBA, cove
 	}
 	for range 60 {
 		tt.Advance(filmFrame)
-		frames = append(frames, clone(tt.Image()))
+		frames = append(frames, cloneImage(tt.Image()))
 		r, _ := tt.Find("Artwork")
 		covers = append(covers, r)
 		if !a.fly.moving {
@@ -54,9 +55,15 @@ func coverFilm(t *testing.T, theme string, out bool) (frames []*image.RGBA, cove
 	for range 30 {
 		tt.Advance(filmFrame)
 	}
-	settled = clone(tt.Image())
+	settled = cloneImage(tt.Image())
 	home, _ = tt.Find("Artwork")
 	return frames, covers, settled, home
+}
+
+func cloneImage(src *image.RGBA) *image.RGBA {
+	d := image.NewRGBA(src.Bounds())
+	draw.Draw(d, d.Bounds(), src, src.Bounds().Min, draw.Src)
+	return d
 }
 
 func luma(img *image.RGBA, x, y int) float64 {
