@@ -125,6 +125,7 @@ func (a *App) ready() {
 	a.view = &appui.App{Store: a.store, Art: art, Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme, Demo: a.demo != nil, PageMotion: a.opts.Shots == "", EdgeFades: true}
 	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
 	a.view.ScrollbarsAlways = scrollbarsAlways()
+	a.view.Capture = func() ([]byte, error) { return a.win.CapturePage() }
 	deps := setup.SystemDeps(dirs.Resources, wrapperhost.Home{Dir: a.wrapperDir()},
 		wrapperhost.Releases{Client: &http.Client{}}, func(ctx context.Context) (wrapperhost.Pin, error) {
 			pin, _, err := wrapperhost.CurrentPin(ctx, &http.Client{})

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -25,6 +26,16 @@ type motionTune struct {
 	scrubbing, open, loaded, dirty   bool
 	// replay is set while the page goes out to come in again (tuneReplay).
 	replay bool
+	// film is the film running (tuneFilm), if any.
+	film *tuneFilmRun
+}
+
+// tuneFilmRun is a film: the folder it writes to, the Slow it puts back,
+// and whether it is written.
+type tuneFilmRun struct {
+	dir  string
+	slow float32
+	done atomic.Bool
 }
 
 // tuneDefaults are the values the maintainer chose in the app.
@@ -90,6 +101,46 @@ func (t *motionTune) slowed(a ui.Animation) ui.Animation {
 	return a
 }
 
+// tuneFilm replays the page at a tenth of its speed and writes the window
+// as it shows, frame after frame, as PNGs in a folder of its own beside
+// motion-tune.json, for a look at what the screen showed rather than at a
+// headless render.
+func (a *App) tuneFilm() {
+	t := &a.tune
+	p := tunePath()
+	if a.Capture == nil || a.Screen != ScreenAlbum || t.film != nil || p == "" {
+		return
+	}
+	dir := filepath.Join(filepath.Dir(p), "film", time.Now().Format("150405"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	run := &tuneFilmRun{dir: dir, slow: t.Slow}
+	t.film, t.Slow = run, 0.1
+	capture := a.Capture
+	a.tuneReplay()
+	go func() {
+		// Out and in again at a tenth of the speed, with room on both sides.
+		end := time.Now().Add(9 * time.Second)
+		for i := 0; time.Now().Before(end); i++ {
+			png, err := capture()
+			if err != nil {
+				break
+			}
+			// A frame not written leaves a gap in the film, nothing more.
+			_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%04d.png", i)), png, 0o644)
+		}
+		run.done.Store(true)
+	}()
+}
+
+// tuneFilmed puts Slow back once a film is written.
+func (t *motionTune) tuneFilmed() {
+	if t.film != nil && t.film.done.Load() {
+		t.Slow, t.film = t.film.slow, nil
+	}
+}
+
 // tuneReplay sends the page out, and in again once it is out.
 func (a *App) tuneReplay() {
 	if a.Screen == ScreenAlbum {
@@ -142,10 +193,19 @@ func (a *App) tunePanel(c *ui.Context, k *Tokens) {
 					t.scrubbing = false
 					a.tuneReplay()
 				}
+				if a.Capture != nil {
+					word := "Film"
+					if t.film != nil {
+						word = "Filming…"
+					}
+					if button(c.Key("film"), k, buttonGhost, word, nil).Height(24).PaddingX(8).Clicked() {
+						a.tuneFilm()
+					}
+				}
 				if button(c.Key("reset"), k, buttonGhost, "Defaults", nil).Height(24).PaddingX(8).Clicked() {
-					slow := t.Slow
+					slow, film := t.Slow, t.film
 					*t = tuneDefaults
-					t.Slow, t.loaded, t.open, t.dirty = slow, true, true, true
+					t.Slow, t.loaded, t.open, t.dirty, t.film = slow, true, true, true, film
 				}
 			})
 			if t.scrubbing {

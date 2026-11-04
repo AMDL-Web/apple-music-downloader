@@ -104,6 +104,9 @@ type App struct {
 	// (groupMotion); without it the screens change at once, as tests need,
 	// whose clock stands still between Advances.
 	PageMotion bool
+	// Capture renders the window as it shows, as PNG, for the tuning
+	// panel's film (tuneFilm); nil where there is no window.
+	Capture func() ([]byte, error)
 	// EdgeFades fades the scroll containers' edges (scrollArea) through a
 	// shader, which a GPU draws in no time and a headless Tester runs on
 	// the CPU many times slower than the rest of a frame: tests that look

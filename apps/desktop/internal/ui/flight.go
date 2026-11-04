@@ -239,6 +239,10 @@ func (a *App) openingFrom(from string) { a.fly.next = from }
 // towards the screen under it, and notes where it is.
 func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	a.tune.load()
+	if a.tune.tuneFilmed(); a.tune.film != nil {
+		// The film's frames come from a goroutine: keep the window drawing.
+		c.AnimationFrame()
+	}
 	f := &a.fly
 	f.still = c.Preferences().ReduceMotion
 	inPage := a.Screen == ScreenAlbum
