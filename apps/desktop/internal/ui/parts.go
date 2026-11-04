@@ -226,7 +226,7 @@ var segmentSlide = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Mi
 // segment not laid out yet fills itself.
 func segmentedTips(c *ui.Context, k *Tokens, key string, selected *int, labels, room []string, colors map[int]ui.Color, tips []string) {
 	s := ui.SegmentedBase(c.Key(key), selected, len(labels))
-	track := s.Track.Height(groupRow).Padding(3).Radius(radiusFull).Background(k.Wash).AlignItems(ui.Center)
+	track := s.Track.Height(groupRow).Padding(3).Gap(4).Radius(radiusFull).Background(k.Wash).AlignItems(ui.Center)
 	var chosen ui.Rect
 	track.Children(func() {
 		for i, l := range labels {

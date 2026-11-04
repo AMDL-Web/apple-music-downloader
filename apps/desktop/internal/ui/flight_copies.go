@@ -7,6 +7,22 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// wallDrop is how far below their place the recent covers are as they go
+// out and come back (wallShown).
+const wallDrop = 14
+
+// wallShown is how much the queue's recent covers show under a hero's
+// page: coming in, they sink and fade over the first part of the way, as
+// the page's parts start to show (inParts) and a little after; going out,
+// they rise back into their row over the whole way the page's parts have
+// left them, from outParts down, landing as the flight ends.
+func (f *flight) wallShown() float32 {
+	if f.out {
+		return 1 - smoothstep(0, outParts, f.q)
+	}
+	return 1 - smoothstep(0, inParts+0.15, f.q)
+}
+
 // flightCopies builds over the album page the copy of each text of it
 // that morphs and shows in its match's lines (flyText): its match built
 // again where it is, as wide, then moved and scaled towards the page's
@@ -40,29 +56,23 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 			box.Absolute().Left(lerp(src.box.X, dst.box.X, t) - o.X).Top(lerp(src.box.Y, dst.box.Y, t) - o.Y).
 				Width(lerp(src.box.W, dst.box.W, t)).Clip()
 			box.Children(func() {
-				for i, s := range []string{src.text, dst.text} {
-					op := 1 - unit((t-0.2)/0.4)
-					if i == 1 {
-						op = unit((t - 0.4) / 0.4)
-					}
-					// As wide as the wider tag, so that the box cuts the
-					// text rather than the text ending in an ellipsis.
-					ui.Row(c.Key(i)).Absolute().Left(6).Top(0).Bottom(0).Width(max(src.box.W, dst.box.W)).AlignItems(ui.Center).Opacity(op).
-						Children(func() { tagText(c, s, ink).SingleLine() })
-				}
+				// Word by word (tagMorph), as wide as the wider tag, so that
+				// the box cuts the text rather than the text ending in an
+				// ellipsis.
+				ui.Box(c.Key("words")).Absolute().Left(6).Top(0).Bottom(0).Width(max(src.box.W, dst.box.W)).AlignItems(ui.Center).
+					Children(func() { tagMorph(c, src.text, dst.text, t, ink) })
 			})
 		}
 		a.flyBadges(c, o, f.lead())
 		// The recent covers under a hero's page: at rest they are drawn
 		// over the hero cover's shadow, so the page's cover, flying to or
-		// from the hero, casts none on them either. It is above them by the
-		// time they show (underShown).
+		// from the hero, casts none on them either. They go and come back
+		// on their own, slower than the screen under the page (wallShown).
+		shown := f.wallShown()
 		for i, w := range f.wall {
-			el := ui.Box(c.Key(fmt.Sprint("wall", i))).Absolute().Left(w.box.X-o.X).Top(w.box.Y-o.Y).Size(w.box.W, w.box.H)
-			if op := f.underShown(); f.out || f.still {
-				el.Opacity(op)
-			} else {
-				f.fade(el, op)
+			el := ui.Box(c.Key(fmt.Sprint("wall", i))).Absolute().Left(w.box.X-o.X).Top(w.box.Y-o.Y).Size(w.box.W, w.box.H).Opacity(shown)
+			if !f.still {
+				el.Translate(0, wallDrop*(1-shown))
 			}
 			el.Children(w.build)
 		}

@@ -118,7 +118,7 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 				})
 			})
 			if h.band != nil {
-				a.flyRise(ui.Column(c).Gap(12).Children(h.band))
+				a.flyBand(ui.Column(c).Gap(12).Children(h.band))
 			}
 		})
 	})

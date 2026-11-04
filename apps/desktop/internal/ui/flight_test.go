@@ -506,8 +506,9 @@ func TestTheFlightAtRestAsksForNoFrames(t *testing.T) {
 
 // The queue's recent covers keep their colors while the hero's page goes
 // back: at rest they are drawn over the hero cover's shadow, and the page's
-// cover, flying back over them, casts none on them either, so their white
-// edges do not show grey all the way and turn white as it lands.
+// cover, flying back over them, casts none on them either, so they never
+// show darker than at rest; they come back fading in over the light ground
+// as they rise (wallShown), lighter until they land.
 func TestTheRecentCoversKeepTheirColorsUnderTheHerosWayBack(t *testing.T) {
 	a, tt, j := flightApp(t)
 	a.Theme = "light"
@@ -540,16 +541,16 @@ func TestTheRecentCoversKeepTheirColorsUnderTheHerosWayBack(t *testing.T) {
 		if !a.fly.moving {
 			break
 		}
-		if a.fly.underShown() < 1 {
+		if a.fly.wallShown() < 0.2 {
 			continue
 		}
 		seen++
 		p := tt.Image().RGBAAt(x, y)
-		if d := max(absDiff(p.R, rest.R), absDiff(p.G, rest.G), absDiff(p.B, rest.B)); d > 2 {
-			t.Fatalf("at q %.2f the recent cover shows %v, at rest %v", a.fly.q, p, rest)
+		if p.R+2 < rest.R || p.G+2 < rest.G || p.B+2 < rest.B {
+			t.Fatalf("at q %.2f the recent cover shows %v, darker than at rest, %v", a.fly.q, p, rest)
 		}
 	}
 	if seen < 4 {
-		t.Fatalf("the queue showed whole in %d frames of the way back: the film measures nothing", seen)
+		t.Fatalf("the recent covers showed in %d frames of the way back: the film measures nothing", seen)
 	}
 }

@@ -148,7 +148,9 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 		}
 		frame.Children(cover)
 		if f := &a.fly; f.moving && !f.grow && strings.HasPrefix(f.from, "hero:") && lift <= 0.01 {
+			// Its copy over the page stands for it (flightCopies).
 			f.wall = append(f.wall, flightWall{box: frame.Bounds(), build: cover})
+			frame.Opacity(0)
 		}
 	})
 }

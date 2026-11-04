@@ -81,6 +81,28 @@ func (a *App) flyRows(el ui.Element) {
 	}
 }
 
+// bandRise is how far the hero's figures and bar rise as they come in and
+// sink as they go: further than flightRise, as they come in all at once.
+const bandRise = 30
+
+// flyBand shows el, the head's figures and bar, as this frame of a flight
+// has it: fading in with the page's parts (flyFade) as it rises bandRise
+// into place, and the same way back, sinking as far as it has faded, so
+// it moves for as long as it shows.
+func (a *App) flyBand(el ui.Element) {
+	f := &a.fly
+	if f.growing() || !f.moving {
+		a.flyRise(el)
+		return
+	}
+	from := f.partsFrom()
+	op := unit((f.q - from) / (1 - from))
+	f.fade(el, op)
+	if !f.still {
+		el.Translate(0, bandRise*(1-op))
+	}
+}
+
 // flyFade fades el in with the album page, in place, once the screen under
 // it is gone.
 func (a *App) flyFade(el ui.Element) {
