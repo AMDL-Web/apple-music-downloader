@@ -94,6 +94,7 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 	main := f.main
 	box, radius := f.growBox(main)
 	f.ridePrev, f.ride = f.ride, ui.Point{X: box.X, Y: box.Y}
+	f.surface = ui.Rect{X: main.X + box.X, Y: main.Y + box.Y, W: box.W, H: box.H}
 	t := unit(f.q)
 	ground := a.groundGrown()
 	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground.Alpha(ground))
@@ -122,9 +123,7 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 				light.Opacity(ground)
 			}
 			light.Children(func() { b.Show(c) })
-			content := ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0)
-			a.growEdges(content, box, main)
-			content.Children(func() {
+			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
 				a.titleBar(c, k, sidebar, true)
 				ui.Box(c).Grow(1).MinHeight(0).Children(func() {
 					ui.Column(c.Key(screenLayer(ScreenAlbum))).Absolute().Top(0).Left(0).Right(0).Bottom(0).
@@ -136,11 +135,12 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 }
 
 // growBand is how far in from the growing surface's right and bottom edges
-// the page's content fades to nothing (growEdges).
+// the page's parts fade to nothing (growEdges).
 const growBand = 2 * scrollFade
 
 // growEdge fades what an element draws to nothing towards Right and Bottom,
-// over BandX and BandY DIPs inward, 0 for an edge that stays.
+// in its own DIPs, over BandX and BandY DIPs inward, 0 for an edge that
+// stays.
 var growEdge = shader.MustCompile(`package main
 
 var Right float
@@ -167,23 +167,32 @@ var (
 	growEdgeBandY  = growEdge.Uniform("BandY")
 )
 
-// growEdges fades el, the growing page's content, laid out at the main
-// column's full size from the surface's corner, towards the surface's right
-// and bottom edges (growBand), so the surface's edge does not cut its words
-// and rows as a hard line while it is smaller than the column. The band
-// comes in with the page's parts (lateShown), which leaves the cover alone
-// as it sets off, and narrows to nothing as the surface reaches the
-// column's edges, so nothing changes as it lands.
-func (a *App) growEdges(el ui.Element, box, main ui.Rect) {
-	if !a.fly.growing() {
+// growEdges fades el, a part of the growing page that comes in late
+// (lateShown), towards the surface's right and bottom edges (growBand), so
+// the surface, smaller than the column the page is laid out for, does not
+// cut its words and rows as a hard line. The band comes in with the part,
+// and narrows to nothing as the surface reaches the column's edges, so
+// nothing changes as it lands. Each part takes it on its own: an effect on
+// a layer that holds the flying cover moves the cover off its way.
+func (a *App) growEdges(el ui.Element) {
+	f := &a.fly
+	if !f.growing() {
 		return
 	}
+	main, s := f.main, f.surface
 	band := growBand * a.lateShown()
-	bx, by := min(band, main.W-box.W), min(band, main.H-box.H)
+	bx, by := min(band, main.W-s.W), min(band, main.H-s.H)
 	if bx < 0.5 && by < 0.5 {
 		return
 	}
-	v := growEdge.NewValues().Float(growEdgeRight, box.W).Float(growEdgeBottom, box.H).
+	// Laid out where the surface carried the page in the frame before.
+	b := el.LayoutBounds()
+	right := s.X + s.W - (b.X - f.ridePrev.X + f.ride.X)
+	bottom := s.Y + s.H - (b.Y - f.ridePrev.Y + f.ride.Y)
+	if b.W <= 0 || right >= b.W+bx && bottom >= b.H+by {
+		return
+	}
+	v := growEdge.NewValues().Float(growEdgeRight, right).Float(growEdgeBottom, bottom).
 		Float(growEdgeBandX, max(0, bx)).Float(growEdgeBandY, max(0, by))
 	el.Effect(growEdge.Effect(shader.Options{Values: v}))
 }

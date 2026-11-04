@@ -253,3 +253,54 @@ func TestAGrowingPageIsNotCutByAHardEdge(t *testing.T) {
 		}
 	}
 }
+
+// While the page's parts fade in at the surface's edges, the cover flies
+// on its own way: in each frame of the way in, the cover, dark on the light
+// page, is drawn on the line from its tile to its place on the page, as far
+// along as the page has come (q), not off it.
+func TestAGrowingPagesCoverKeepsItsWay(t *testing.T) {
+	a, albums := searchApp(t)
+	a.PageMotion, a.Theme = true, "light"
+	albums[0].ArtworkBgColor = "203040"
+	a.Store.Search.Result.Albums.Items[0] = albums[0]
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	for range 10 {
+		tt.Advance(filmFrame)
+	}
+	if err := tt.Click(albums[0].Name); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	type shot struct {
+		img *image.RGBA
+		q   float32
+	}
+	var shots []shot
+	var from ui.Rect
+	for range 90 {
+		tt.Advance(filmFrame)
+		if src := a.fly.src[partCover]; src.ok && from.W == 0 {
+			from = src.box
+		}
+		if !a.fly.moving {
+			break
+		}
+		if a.lateShown() > 0 {
+			shots = append(shots, shot{cloneImage(tt.Image()), a.fly.q})
+		}
+	}
+	to, ok := tt.Find("Artwork")
+	if !ok || from.W == 0 || len(shots) == 0 {
+		t.Fatalf("no flight to watch: from %v, to %v, %d frames", from, to, len(shots))
+	}
+	for i, s := range shots {
+		r := ui.Rect{X: lerp(from.X, to.X, s.q), Y: lerp(from.Y, to.Y, s.q), W: lerp(from.W, to.W, s.q), H: lerp(from.H, to.H, s.q)}
+		for _, p := range [][2]float32{{r.X + 8, r.Y + r.H/2}, {r.X + r.W/2, r.Y + 8}, {r.X + r.W - 8, r.Y + r.H/2}} {
+			if l := luma(s.img, int(p[0]), int(p[1])); l > 90 {
+				t.Errorf("frame %d (q %.3f): the cover should be at %v, but %v is %.0f bright: it is off its way", i, s.q, r, p, l)
+				break
+			}
+		}
+	}
+}

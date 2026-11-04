@@ -234,6 +234,9 @@ type flight struct {
 	ride, ridePrev ui.Point
 	growFrom       ui.Rect
 	growRadius     float32
+	// surface is the growing page's surface in this frame, in the window
+	// (growSurface).
+	surface ui.Rect
 	// pick is the box of the cover clicked to open the page, for as long as
 	// the page is in, which of several elements of one name is the
 	// flight's source (sourceNearer).
