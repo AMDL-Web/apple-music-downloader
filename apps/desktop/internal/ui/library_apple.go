@@ -190,8 +190,7 @@ func (a *App) appleTile(c *ui.Context, k *Tokens, kind string, it domain.AppleLi
 
 // appleOpen is what a click on an Apple tile's cover does: an album's opens
 // its page, a library-only playlist's shows or hides its tracks, a catalog
-// playlist with a download opens that download's page; nil for a cover
-// that opens nothing.
+// playlist's opens its page; nil for a cover that opens nothing.
 func (a *App) appleOpen(kind string, it domain.AppleLibraryItem) func() {
 	switch {
 	case kind == "albums" && it.CatalogID != "":
@@ -199,12 +198,8 @@ func (a *App) appleOpen(kind string, it domain.AppleLibraryItem) func() {
 	case appleLibraryOnly(kind, it):
 		return func() { a.toggleAppleTracks(it.ID) }
 	case kind == "playlists":
-		h, ok := a.appleHit(kind, it)
-		if !ok {
-			return nil
-		}
-		if _, job := a.Store.HitMark(h); a.Store.Job(job) != nil {
-			return func() { a.OpenJob(job) }
+		if h, ok := a.appleHit(kind, it); ok {
+			return func() { a.OpenAlbum(h) }
 		}
 	}
 	return nil

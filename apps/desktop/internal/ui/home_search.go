@@ -509,8 +509,8 @@ func (a *App) searchKeys(c *ui.Context) {
 	})
 }
 
-// actOnHit is Return: the first press picks the first hit, then an album
-// or an artist opens, as a click does, and a song downloads.
+// actOnHit is Return: the first press picks the first hit, then an album,
+// a playlist or an artist opens, as a click does, and a song downloads.
 func (a *App) actOnHit() {
 	s := a.Store
 	hits := s.Search.ShownHits()
@@ -525,7 +525,7 @@ func (a *App) actOnHit() {
 	case "artist":
 		a.openArtist(*h)
 		return
-	case "album":
+	case "album", "playlist":
 		a.openingFrom("hit:" + store.HitKey(*h))
 		a.OpenAlbum(*h)
 		return

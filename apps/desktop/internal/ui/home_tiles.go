@@ -98,7 +98,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 				switch h.Type {
 				case "artist":
 					a.openArtist(h)
-				case "album":
+				case "album", "playlist":
 					a.openingFrom("hit:" + hk)
 					a.OpenAlbum(h)
 				default:
@@ -232,7 +232,7 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	}
 	if b.Clicked() && !starting {
 		switch {
-		case mark == store.MarkActive && h.Type == "album":
+		case mark == store.MarkActive && (h.Type == "album" || h.Type == "playlist"):
 			a.openingFrom("hit:" + hk)
 			a.OpenAlbum(h)
 		case mark == store.MarkActive:

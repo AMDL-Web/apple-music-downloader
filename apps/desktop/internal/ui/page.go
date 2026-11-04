@@ -15,12 +15,13 @@ import (
 	"amdl/internal/format"
 )
 
-// OpenAlbum shows an album hit's page, which reads its songs, with its
+// OpenAlbum shows an album or playlist hit's page, which reads its songs, with its
 // download while the feed holds one; Back returns to the screen it was
 // opened from.
 func (a *App) OpenAlbum(h client.SearchHit) {
 	s := a.Store
-	job := s.AlbumJob(h.ID)
+	ref := domain.ResourceRef{Kind: store.PageKind(h), ID: h.ID}
+	job := s.AlbumJob(ref.Kind, ref.ID)
 	// A run is the page only of an album whose record wants it whole: of one
 	// downloaded in part, the run holds just the songs added by hand, queued
 	// or finished (1 of 1), so the page shows the album and its record's
@@ -30,7 +31,7 @@ func (a *App) OpenAlbum(h client.SearchHit) {
 			job = ""
 		}
 	}
-	a.openPage(h.ID, job)
+	a.openPage(ref, job)
 	s.OpenAlbum(h)
 	if job != "" {
 		s.OpenDetail(job)
@@ -40,12 +41,12 @@ func (a *App) OpenAlbum(h client.SearchHit) {
 	a.push(ScreenAlbum)
 }
 
-// OpenJob shows a download's page: an album's is its album's page, with
-// the album's songs. Back returns to the screen it was opened from.
+// OpenJob shows a download's page: an album's or a playlist's is its
+// album's or playlist's page, with its songs. Back returns to the screen it was opened from.
 func (a *App) OpenJob(id string) {
 	s := a.Store
 	h, album := s.JobAlbum(s.Job(id))
-	a.openPage(h.ID, id)
+	a.openPage(domain.ResourceRef{Kind: store.PageKind(h), ID: h.ID}, id)
 	if album {
 		s.OpenAlbum(h)
 	} else {
@@ -58,7 +59,7 @@ func (a *App) OpenJob(id string) {
 // openPage notes the album and the download the page opens on: another
 // pair opens at the top of its songs, and a download of the album that
 // starts later takes the page (followAlbumJob).
-func (a *App) openPage(album, job string) {
+func (a *App) openPage(album domain.ResourceRef, job string) {
 	f := &a.fly
 	f.from, f.next, f.closeDetail = f.next, "", false
 	if a.Screen != ScreenAlbum {
@@ -67,15 +68,15 @@ func (a *App) openPage(album, job string) {
 		f.grow = growsFrom(f.from) && a.PageMotion && !f.still && !f.instant
 		f.growFrom, f.growRadius = ui.Rect{}, 0
 	}
-	if key := album + "\x00" + job; key != a.pageKey {
+	if key := album.ID + "\x00" + job; key != a.pageKey {
 		a.pageKey = key
 		if st := a.scrolls["album"]; st != nil {
 			st.Y, a.scrollSeen["album"] = 0, 0
 		}
 	}
 	a.albumSeen = ""
-	if album != "" {
-		a.albumSeen = a.Store.AlbumJob(album)
+	if album.ID != "" {
+		a.albumSeen = a.Store.AlbumJob(album.Kind, album.ID)
 	}
 }
 
@@ -89,7 +90,7 @@ func (a *App) followAlbumJob() {
 	if p.ID == "" {
 		return
 	}
-	if id := s.AlbumJob(p.ID); id != a.albumSeen {
+	if id := s.AlbumJob(p.Kind(), p.ID); id != a.albumSeen {
 		a.albumSeen = id
 		if id != "" {
 			s.OpenDetail(id)
@@ -231,10 +232,13 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	h := heroSpec{colors: hc}
 	var kind string
 	tracks := f.tracks
-	if album {
+	switch {
+	case album && p.Kind() == domain.ResourcePlaylist:
+		kind, h.title, h.artist = "Playlist", f.title, f.artist
+	case album:
 		kind, h.title = store.AlbumKind(f.title)
 		h.artist = f.artist
-	} else {
+	default:
 		kind, h.title, h.artist = j.Kind(), j.Name(), j.By()
 	}
 	if j != nil && (!album || tracks == 0) {
@@ -295,7 +299,7 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 			if j != nil {
 				jobFigures(c, k, l, j, hc)
 			} else {
-				albumFigures(c, k, l, f, hc)
+				albumFigures(c, k, l, f, hc, p.Kind() == domain.ResourcePlaylist)
 			}
 		})
 		if j != nil {
@@ -352,11 +356,20 @@ func jobFigures(c *ui.Context, k *Tokens, l heroLayout, j *store.Job, hc heroCol
 }
 
 // albumFigures are what an album is under its title, until a download
-// holds it: when it came out, its genre and length.
-func albumFigures(c *ui.Context, k *Tokens, l heroLayout, f albumFacts, hc heroColors) {
-	heroStat(c, k, hc, l, "Released", firstNonEmptyStr(f.year, "—"), "")
-	// A genre's name runs longer than a year or a length.
-	heroStat(c, k, hc, l, "Genre", firstNonEmptyStr(f.genre, "—"), "").Grow(2)
+// holds it: when it came out, its genre and length; a playlist, which has
+// neither date nor genre, shows how many artists it gathers.
+func albumFigures(c *ui.Context, k *Tokens, l heroLayout, f albumFacts, hc heroColors, playlist bool) {
+	if playlist {
+		artists := "—"
+		if f.artists > 0 {
+			artists = fmt.Sprint(f.artists)
+		}
+		heroStat(c, k, hc, l, "Artists", artists, "")
+	} else {
+		heroStat(c, k, hc, l, "Released", firstNonEmptyStr(f.year, "—"), "")
+		// A genre's name runs longer than a year or a length.
+		heroStat(c, k, hc, l, "Genre", firstNonEmptyStr(f.genre, "—"), "").Grow(2)
+	}
 	if m := int(f.length.Round(time.Minute) / time.Minute); m > 0 {
 		heroStat(c, k, hc, l, "Length", fmt.Sprint(m), " min")
 	} else {

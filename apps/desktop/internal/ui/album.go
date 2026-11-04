@@ -151,7 +151,9 @@ type albumFacts struct {
 	explicit                            bool
 	tracks                              int
 	length                              time.Duration
-	pal                                 Palette
+	// artists counts a playlist's artists once it is read, 0 for an album.
+	artists int
+	pal     Palette
 	// motion is the album's motion cover once it is read, and motionPal
 	// that cover's own palette (jobPalette says why).
 	motion    string
@@ -175,8 +177,13 @@ func albumOf(p *store.AlbumPage) albumFacts {
 		}
 		f.explicit = f.explicit || al.ContentRating == "explicit"
 		f.tracks = len(al.Tracks)
+		by := map[string]bool{}
 		for _, t := range al.Tracks {
 			f.length += time.Duration(t.DurationMS) * time.Millisecond
+			by[t.ArtistName] = true
+		}
+		if p.Kind() == domain.ResourcePlaylist {
+			f.artists = len(by)
 		}
 		if pal := ParsePalette(al.ArtworkBgColor, al.ArtworkTextColor1, al.ArtworkTextColor2, al.ArtworkTextColor3, al.ArtworkTextColor4); pal.OK {
 			f.pal = pal

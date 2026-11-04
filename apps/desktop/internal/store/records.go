@@ -66,8 +66,8 @@ func (s *Store) putMark(mark domain.ResourceMark) {
 	if had && old == mark {
 		return
 	}
-	if ref.Kind == domain.ResourceAlbum {
-		s.albumMoved(ref.ID)
+	if ref.Kind == domain.ResourceAlbum || ref.Kind == domain.ResourcePlaylist {
+		s.albumMoved(ref)
 	}
 	s.songsMoved(ref)
 	s.Library.recordMoved(ref)
@@ -82,8 +82,8 @@ func (s *Store) forgetRecord(ref domain.ResourceRef) {
 	delete(s.Library.Kept, ref.ID)
 	delete(s.Library.Marks, ref)
 	s.Queue.dropRecord(ref)
-	if ref.Kind == domain.ResourceAlbum {
-		s.albumMoved(ref.ID)
+	if ref.Kind == domain.ResourceAlbum || ref.Kind == domain.ResourcePlaylist {
+		s.albumMoved(ref)
 	}
 	s.songsMoved(ref)
 	if s.Queue.open {

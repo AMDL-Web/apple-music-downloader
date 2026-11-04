@@ -252,16 +252,19 @@ func (a *App) recordPill(c *ui.Context, k *Tokens, r store.Record) {
 // recordHit is an album record as the hit its page opens from.
 func recordHit(r store.Record) client.SearchHit {
 	c := r.Artwork.Colors
-	return client.SearchHit{Type: "album", ID: r.Ref.ID, Name: r.Name, ArtistName: r.By, ArtworkURL: r.Artwork.URL,
+	typ := "album"
+	if r.Ref.Kind == domain.ResourcePlaylist {
+		typ = "playlist"
+	}
+	return client.SearchHit{Type: typ, ID: r.Ref.ID, Name: r.Name, ArtistName: r.By, ArtworkURL: r.Artwork.URL,
 		ArtworkBgColor: c.Bg, ArtworkTextColor1: c.Text1, ArtworkTextColor2: c.Text2, ArtworkTextColor3: c.Text3, ArtworkTextColor4: c.Text4,
 		TrackCount: r.TrackCount(), Resource: r.Mark()}
 }
 
-// showDetails opens what shows a row: an album record's page, else the
-// run of a playlist record (its live one, else its last), or a station's
-// run. from names the cover the page flies from.
+// showDetails opens what shows a row: an album or playlist record's page,
+// else a station's run. from names the cover the page flies from.
 func (a *App) showDetails(r *store.Record, j *store.Job, from string) {
-	if r != nil && r.Ref.Kind == domain.ResourceAlbum {
+	if r != nil && (r.Ref.Kind == domain.ResourceAlbum || r.Ref.Kind == domain.ResourcePlaylist) {
 		a.openingFrom(from)
 		a.OpenAlbum(recordHit(*r))
 		return
@@ -310,7 +313,7 @@ func (a *App) rowMenu(m *ui.Menu, r *store.Record, j *store.Job) {
 	} else if j != nil {
 		from = "row:" + j.ID
 	}
-	if (r != nil && r.Ref.Kind == domain.ResourceAlbum) || j != nil || (r != nil && s.LastRun(r.Ref) != nil) {
+	if (r != nil && (r.Ref.Kind == domain.ResourceAlbum || r.Ref.Kind == domain.ResourcePlaylist)) || j != nil || (r != nil && s.LastRun(r.Ref) != nil) {
 		if m.Item("Show details").Chosen() {
 			a.showDetails(r, j, from)
 		}

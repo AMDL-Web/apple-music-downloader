@@ -91,6 +91,7 @@ func (b *Backend) handler() http.Handler {
 	m.HandleFunc("GET /api/v1/search", b.search)
 	m.HandleFunc("GET /api/v1/artists/{id}/albums", b.artistAlbums)
 	m.HandleFunc("GET /api/v1/albums/{id}", b.album)
+	m.HandleFunc("GET /api/v1/playlists/{id}", b.playlist)
 	m.HandleFunc("GET /art/{id}/{size}", b.cover)
 	b.libraryRoutes(m)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

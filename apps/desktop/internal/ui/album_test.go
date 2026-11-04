@@ -245,3 +245,40 @@ func TestTheTitleBarsButtonsKeepClearOfTheWindowButtons(t *testing.T) {
 		}
 	}
 }
+
+// A playlist found by search opens its page, as an album does, with its
+// songs in its own order, each by its artist, under the playlist's name.
+func TestAPlaylistOpensItsPageWithItsSongs(t *testing.T) {
+	a, run := demoApp(t)
+	a.Screen, a.PageMotion = ScreenHome, false
+	tt := ui.NewTester(a.View, 1280, 800)
+	s := a.Store
+	s.SetOmniText("Glass and Neon")
+	tt.Frame()
+	run(func() bool { tt.Frame(); return s.Search.Status == store.SearchReady })
+	s.FocusGroup("playlists")
+	tt.Frame()
+	if err := tt.Click("Glass and Neon"); err != nil {
+		t.Fatalf("no playlist tile: %v, %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if a.Screen != ScreenAlbum {
+		t.Fatalf("clicking the playlist left the screen at %v", a.Screen)
+	}
+	p := &s.Search.Album
+	run(func() bool { tt.Frame(); return p.Status == store.SearchReady })
+	tt.Frame()
+	if p.Kind() != domain.ResourcePlaylist || p.ID != "pl.demo0001" {
+		t.Fatalf("the page shows %s %q", p.Kind(), p.ID)
+	}
+	// The demo's playlist takes two songs from each of its eight albums,
+	// its cover's (Glass Weather) first.
+	if !tt.HasText("PLAYLIST · 16 TRACKS") || !tt.HasText("ARTISTS") {
+		t.Errorf("no playlist kicker or artists: %q", tt.Texts())
+	}
+	for _, name := range []string{"Glass Weather", "Paper Satellites", "Tidal Rooms"} {
+		if !tt.HasText(name) {
+			t.Errorf("song %q is not listed: %q", name, tt.Texts())
+		}
+	}
+}

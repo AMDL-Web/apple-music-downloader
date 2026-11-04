@@ -172,6 +172,16 @@ func (b *Backend) album(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (b *Backend) playlist(w http.ResponseWriter, r *http.Request) {
+	for _, p := range playlists {
+		if p.id == r.PathValue("id") {
+			writeJSON(w, http.StatusOK, p.detail())
+			return
+		}
+	}
+	writeError(w, http.StatusNotFound, "catalog_not_found", "no such playlist")
+}
+
 // cover serves an album's cover at the size of its template, {w}x{h}bb.{f}.
 func (b *Backend) cover(w http.ResponseWriter, r *http.Request) {
 	a := findAlbum(r.PathValue("id"))

@@ -1,12 +1,14 @@
 package store
 
 import (
+	"context"
+
 	"amdl/internal/client"
 	"amdl/internal/domain"
 )
 
-// AlbumPage is the album the album screen shows: the hit it was opened
-// from, which draws the header at once, then the album and its songs.
+// AlbumPage is the album or playlist the album screen shows: the hit it
+// was opened from, which draws the header at once, then its songs.
 type AlbumPage struct {
 	ID string
 	// Hit is the search hit the page opened from: its mark and its download
@@ -29,8 +31,8 @@ func newAlbumPage() AlbumPage {
 	return AlbumPage{cache: newLRU[client.Album](searchCacheMax), items: map[string][]domain.JobItem{}, read: map[string]bool{}}
 }
 
-// OpenAlbum shows h, an album hit, on the album screen and reads its songs,
-// from the cache when they were read before.
+// OpenAlbum shows h, an album or playlist hit, on the album screen and
+// reads its songs, from the cache when they were read before.
 func (s *Store) OpenAlbum(h client.SearchHit) {
 	p := &s.Search.Album
 	if h.ID == p.ID && p.Status != SearchIdle && p.Status != SearchFailed {
@@ -54,12 +56,23 @@ func (s *Store) CloseAlbum() {
 	p.ID, p.Hit, p.Storefront, p.Status, p.Album, p.Err = "", client.SearchHit{}, "", SearchIdle, client.Album{}, ""
 }
 
-// AlbumJob is the run of album id's record the album screen shows: a
-// queued or running one, else the latest that completed; "" for none.
-func (s *Store) AlbumJob(id string) string {
+// PageKind is the kind of record a hit the album screen opens stands for.
+func PageKind(h client.SearchHit) domain.ResourceKind {
+	if h.Type == "playlist" {
+		return domain.ResourcePlaylist
+	}
+	return domain.ResourceAlbum
+}
+
+// Kind is the kind of record the page shows.
+func (p *AlbumPage) Kind() domain.ResourceKind { return PageKind(p.Hit) }
+
+// AlbumJob is the run of record (kind, id) the album screen shows: a queued
+// or running one, else the latest that completed; "" for none.
+func (s *Store) AlbumJob(kind domain.ResourceKind, id string) string {
 	done := ""
 	for _, j := range s.Jobs {
-		if j.ResourceKind != domain.ResourceAlbum || j.ResourceID != id {
+		if j.ResourceKind != kind || j.ResourceID != id {
 			continue
 		}
 		switch j.Status {
@@ -71,26 +84,32 @@ func (s *Store) AlbumJob(id string) string {
 			}
 		}
 	}
-	if m := s.RecordMark(domain.ResourceAlbum, id); m != nil && m.ActiveJobID != "" {
+	if m := s.RecordMark(kind, id); m != nil && m.ActiveJobID != "" {
 		return m.ActiveJobID
 	}
 	return done
 }
 
-// JobAlbum is the album a run is of, as a hit the album screen opens: what
-// the job holds stands for the album until it is read, and the album's
-// record marks it. false for a run of anything else.
+// JobAlbum is the album or playlist a run is of, as a hit the album screen
+// opens: what the job holds stands for it until it is read, and its record
+// marks it. false for a run of anything else.
 func (s *Store) JobAlbum(j *Job) (client.SearchHit, bool) {
-	if j == nil || j.ResourceKind != domain.ResourceAlbum || j.ResourceID == "" {
+	typ := "album"
+	switch {
+	case j == nil || j.ResourceID == "":
+		return client.SearchHit{}, false
+	case j.ResourceKind == domain.ResourcePlaylist:
+		typ = "playlist"
+	case j.ResourceKind != domain.ResourceAlbum:
 		return client.SearchHit{}, false
 	}
-	id := j.ResourceID
-	h := client.SearchHit{Type: "album", ID: id, Name: j.Title, URL: j.Input, ArtistName: j.ArtistName, ArtworkURL: j.ArtworkURL,
+	id, kind := j.ResourceID, j.ResourceKind
+	h := client.SearchHit{Type: typ, ID: id, Name: j.Title, URL: j.Input, ArtistName: j.ArtistName, ArtworkURL: j.ArtworkURL,
 		ArtworkBgColor: j.ArtworkBgColor, ArtworkTextColor1: j.ArtworkTextColor1, ArtworkTextColor2: j.ArtworkTextColor2,
 		ArtworkTextColor3: j.ArtworkTextColor3, ArtworkTextColor4: j.ArtworkTextColor4, TrackCount: j.TotalItems}
-	h.Resource = s.RecordMark(domain.ResourceAlbum, id)
+	h.Resource = s.RecordMark(kind, id)
 	if h.Resource == nil {
-		h.Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: id}
+		h.Resource = &domain.ResourceMark{Kind: kind, ID: id}
 		if j.Status == domain.JobQueued || j.Status == domain.JobRunning {
 			h.Resource.ActiveJobID = j.ID
 		}
@@ -98,17 +117,19 @@ func (s *Store) JobAlbum(j *Job) (client.SearchHit, bool) {
 	return h, true
 }
 
-// albumMoved reads album id again where its record changed: the open page
-// at once, so its songs' states follow, a cached one when it opens next.
-func (s *Store) albumMoved(id string) {
+// albumMoved reads record ref's album or playlist again where the record
+// changed: the open page at once, so its songs' states follow, a cached one
+// when it opens next.
+func (s *Store) albumMoved(ref domain.ResourceRef) {
 	p := &s.Search.Album
+	id := ref.ID
 	p.cache.dropIf(func(k string) bool { return albumKeyOf(k) == id })
-	if p.ID != id || p.Status != SearchReady || s.client == nil {
+	if p.ID != id || p.Kind() != ref.Kind || p.Status != SearchReady || s.client == nil {
 		return
 	}
-	c, ctx, gen, storefront := s.client, s.ctx, p.gen, p.Storefront
+	read, ctx, gen, storefront := s.pageRead(), s.ctx, p.gen, p.Storefront
 	go func() {
-		a, err := c.Album(ctx, id, storefront)
+		a, err := read(ctx, id, storefront)
 		s.postIf(ctx, func() {
 			// A failed read keeps the songs the page shows.
 			if err == nil {
@@ -129,15 +150,23 @@ func (s *Store) RetryAlbum() {
 func (s *Store) readAlbum() {
 	p := &s.Search.Album
 	p.Status, p.Err = SearchLoading, ""
-	c, ctx, gen, id, storefront := s.client, s.ctx, p.gen, p.ID, p.Storefront
-	if c == nil {
+	if s.client == nil {
 		p.Status, p.Err = SearchFailed, "Not connected to a server"
 		return
 	}
+	read, ctx, gen, id, storefront := s.pageRead(), s.ctx, p.gen, p.ID, p.Storefront
 	go func() {
-		a, err := c.Album(ctx, id, storefront)
+		a, err := read(ctx, id, storefront)
 		s.postIf(ctx, func() { s.applyAlbum(gen, id, a, err) })
 	}()
+}
+
+// pageRead is the read of the page's songs: the album's, or the playlist's.
+func (s *Store) pageRead() func(ctx context.Context, id, storefront string) (client.Album, error) {
+	if s.Search.Album.Kind() == domain.ResourcePlaylist {
+		return s.client.Playlist
+	}
+	return s.client.Album
 }
 
 // applyAlbum takes the album read at gen, unless another one opened since.

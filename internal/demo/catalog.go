@@ -93,6 +93,35 @@ func (p *playlist) hit() client.SearchHit {
 	}
 }
 
+// detail is the playlist as the playlist read answers: two songs of each
+// album from its cover's on, in that order, as the server lists them.
+func (p *playlist) detail() client.Album {
+	h := p.hit()
+	out := client.Album{
+		Storefront: "us", ID: p.id, URL: h.URL, Title: p.name, ArtistName: p.curator,
+		ArtworkURL: h.ArtworkURL, ArtworkBgColor: h.ArtworkBgColor, ArtworkTextColor1: h.ArtworkTextColor1,
+		ArtworkTextColor2: h.ArtworkTextColor2, AudioTraits: h.AudioTraits, DiscCount: 1,
+	}
+	start := 0
+	for i, a := range albums {
+		if a.id == p.cover {
+			start = i
+		}
+	}
+	for n := range len(albums) {
+		a := albums[(start+n)%len(albums)]
+		for i := range min(2, len(a.tracks)) {
+			id := songID(a, i)
+			out.Tracks = append(out.Tracks, client.AlbumTrack{
+				ID: id, URL: song{id: id, album: a, index: i}.url(), DiscNumber: 1, TrackNumber: len(out.Tracks) + 1,
+				Name: a.tracks[i], ArtistName: a.artist.name, DurationMS: durationMS(id), AudioTraits: a.traits(),
+			})
+		}
+	}
+	out.TrackCount = len(out.Tracks)
+	return out
+}
+
 // traits are the album's audio traits: three albums come in Dolby Atmos
 // too, so a download of them asks which to take.
 func (a *album) traits() []string {
