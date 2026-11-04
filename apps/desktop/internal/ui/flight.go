@@ -224,7 +224,8 @@ type flight struct {
 	// (flight_grow.go); main is the main column's box in the window as the
 	// frame before laid it out; ride is how far the surface carries the page
 	// from its place in this frame, ridePrev in the frame before; growFrom
-	// and growRadius the cover's box and corners it grows from, as last seen.
+	// and growRadius the cover's box and corners it grows from, as last
+	// seen, growTo and growToRadius the page's, as last laid out.
 	grow bool
 	main ui.Rect
 	// wall are the queue's recent covers as this frame builds them under
@@ -234,6 +235,8 @@ type flight struct {
 	ride, ridePrev ui.Point
 	growFrom       ui.Rect
 	growRadius     float32
+	growTo         ui.Rect
+	growToRadius   float32
 	// surface is the growing page's surface in this frame, in the window
 	// (growSurface).
 	surface ui.Rect
