@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { recordView, recordHasWork, slotStates, hasExtraSlots, extraCodecs, runSlot, trackState, trackCountText, checkText, checkRunning, applyCheckFeed, songsIn, slotQuality, pendingTitle, recordTitle, commonQuality, checkScope, checkBody, resetNote } from '../static/js/lib/records.js';
+import { recordView, recordHasWork, slotStates, hasExtraSlots, extraCodecs, runSlot, trackState, trackCountText, songsIn, slotQuality, pendingTitle, recordTitle, commonQuality, resetNote } from '../static/js/lib/records.js';
 
 const rec = (fields = {}) => ({ id: '1', name: 'A', state: 'none', tracks_done: 0, tracks_wanted: 9, withheld_count: 0, paused: false, resolved_at: '2026-11-02T00:00:00Z', catalog_state: 'ok', ...fields });
 
@@ -63,16 +63,8 @@ test('a record has something to pause only while a run could still do something'
   assert.equal(recordHasWork(rec({ resolved_at: undefined, tracks: [] })), true);
 });
 
-test('counts, checks and queries read as the page shows them', () => {
+test('counts and queries read as the page shows them', () => {
   assert.equal(trackCountText(rec({ withheld_count: 1 })), '9 tracks · 1 not in your region');
-  assert.equal(checkText({ checked: 3, missing: 0 }), 'Checking… 3 files');
-  assert.equal(checkRunning({ checked: 3 }), true);
-  assert.equal(checkText({ checked: 1204, missing: 2, finished_at: 'x' }), 'Checked 1,204 files · 2 missing');
-  assert.match(checkText({ checked: 10, missing: 9, finished_at: 'x', aborted_reason: 'too_many_missing' }), /nothing was marked/);
-  assert.equal(checkText(null), '');
-  const c = { id: 2, checked: 5, missing: 0 };
-  assert.equal(applyCheckFeed(null, [{ type: 'check_updated', check: c }]), c);
-  assert.equal(applyCheckFeed(c, [{ type: 'download_upserted', job: {} }]), c);
   assert.equal(pendingTitle({ kind: 'song', catalog_id: '1' }), 'Song 1');
 });
 
@@ -80,15 +72,6 @@ test('the usual quality is the one most tracks name', () => {
   const t = (q) => ({ files: [{ slot: 'main', audio_state: 'done', codec: 'alac', quality_label: q }] });
   assert.equal(commonQuality({ tracks: [t('16-bit/44.1 kHz'), t('16-bit/44.1 kHz'), t('24-bit/96 kHz')] }), 'ALAC 16-bit/44.1 kHz');
   assert.equal(commonQuality({ tracks: [] }), '');
-});
-
-test('a check is asked again for the scope it named', () => {
-  assert.equal(checkScope('albums', '7'), 'album:7');
-  assert.equal(checkScope('playlists', 'pl.1'), 'playlist:pl.1');
-  assert.deepEqual(checkBody('album:7', true), { kind: 'albums', id: '7', force: true });
-  assert.deepEqual(checkBody('playlist:pl.1'), { kind: 'playlists', id: 'pl.1' });
-  assert.deepEqual(checkBody('all', true), { force: true });
-  assert.deepEqual(checkBody(undefined), {});
 });
 
 test('a reset says why nothing downloads yet', () => {

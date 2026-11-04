@@ -1,6 +1,6 @@
 /* Library (views/library.js, views/library-apple.js), the record drawer
    (views/record-drawer.js), record rows (views/record-row.js), and
-   Activity's disk check (views/queue-check.js) and Couldn't add
+   Activity's Download missing (views/queue-missing.js) and Couldn't add
    (views/queue-failed-adds.js). Rows reuse the job row frame (.job-row);
    these rules add what records have of their own. */
 

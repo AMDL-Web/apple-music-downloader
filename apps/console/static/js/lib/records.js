@@ -176,45 +176,6 @@ export const kindWord = (kind, n = 1) => {
   return n === 1 ? one : `${one}s`;
 };
 
-const CHECK_ABORT = { too_many_missing: 'more than half the files were missing, so nothing was marked', interrupted: 'the server stopped', failed: 'it failed' };
-
-/**
- * A disk check as one line: "Checking… 120 files", "Checked 1,204 files ·
- * 2 missing", or why it marked nothing. `check` is a CheckRun or null.
- */
-export function checkText(check) {
-  if (!check) return '';
-  const n = check.checked || 0;
-  if (!check.finished_at) return `Checking… ${count(n)} ${n === 1 ? 'file' : 'files'}`;
-  if (check.aborted_reason) return `Check stopped: ${CHECK_ABORT[check.aborted_reason] || check.aborted_reason}`;
-  const parts = [`Checked ${count(n)} ${n === 1 ? 'file' : 'files'}`];
-  if (check.missing) parts.push(`${count(check.missing)} missing`);
-  return parts.join(' · ');
-}
-
-/** Whether a disk check is under way. */
-export const checkRunning = (check) => Boolean(check && !check.finished_at);
-
-/** Applies feed messages to the last disk check: check_updated replaces it. */
-export function applyCheckFeed(check, batch) {
-  let next = check;
-  for (const msg of batch || []) if (msg && msg.type === 'check_updated' && msg.check) next = msg.check;
-  return next;
-}
-
-/** The scope a disk check names for a record: "album:<id>" or "playlist:<id>". */
-export const checkScope = (kind, id) => `${kind === 'playlists' ? 'playlist' : 'album'}:${id}`;
-
-/**
- * The POST /library/check body that checks again what `scope` named ("all"
- * or a record's checkScope), with force set when asked.
- */
-export function checkBody(scope, force = false) {
-  const m = /^(album|playlist):(.+)$/.exec(scope || '');
-  const body = m ? { kind: `${m[1]}s`, id: m[2] } : {};
-  return force ? { ...body, force: true } : body;
-}
-
 /**
  * The toast after a reset of `record` answered `out` ({slots, job}):
  * `queued` when it queued a run, else why nothing downloads yet. A reset

@@ -103,17 +103,17 @@ test('tab counts wait for their parts; Failed is the union total plus failed sta
 const menu = (r, run, place) => recordMenu(r, run, place).map((it) => (it.separator ? '-' : it.id));
 
 test('a record menu offers what its state allows', () => {
-  assert.deepEqual(menu(rec('a', 1)), ['details', 'again', 'check', '-', 'copy', '-', 'remove']);
-  assert.deepEqual(menu(rec('a', 1, { state: 'partial', tracks_failed: 2 })), ['details', 'pause', 'retry', 'again', 'check', '-', 'copy', '-', 'remove']);
-  assert.deepEqual(menu(rec('a', 1, { state: 'partial', paused: true })), ['details', 'resume', 'again', 'check', '-', 'copy', '-', 'remove']);
+  assert.deepEqual(menu(rec('a', 1)), ['details', 'again', '-', 'copy', '-', 'remove']);
+  assert.deepEqual(menu(rec('a', 1, { state: 'partial', tracks_failed: 2 })), ['details', 'pause', 'retry', 'again', '-', 'copy', '-', 'remove']);
+  assert.deepEqual(menu(rec('a', 1, { state: 'partial', paused: true })), ['details', 'resume', 'again', '-', 'copy', '-', 'remove']);
   const run = { id: 'j', status: 'queued' };
-  assert.deepEqual(menu(rec('a', 1, { active_job_id: 'j' }), run, { first: true }), ['details', 'bottom', 'pause', 'check', '-', 'copy'], 'no reset or removal while a run is under way');
-  assert.deepEqual(menu({ ...rec('a', 1), url: undefined }), ['details', 'again', 'check', '-', 'remove'], 'no link, no Copy link');
+  assert.deepEqual(menu(rec('a', 1, { active_job_id: 'j' }), run, { first: true }), ['details', 'bottom', 'pause', '-', 'copy'], 'no reset or removal while a run is under way');
+  assert.deepEqual(menu({ ...rec('a', 1), url: undefined }), ['details', 'again', '-', 'remove'], 'no link, no Copy link');
   assert.equal(recordLink('albums', { id: '1', pinned_storefront: 'jp' }), 'https://music.apple.com/jp/album/1');
   assert.equal(recordLink('playlists', { id: 'pl.x', storefront_read: 'us' }), 'https://music.apple.com/us/playlist/pl.x');
   assert.equal(recordLink('albums', { id: '1' }), '');
   const labels = recordMenu(rec('a', 1, { tracks_missing: 1 })).filter((it) => !it.separator).map((it) => it.label);
-  assert.deepEqual(labels, ['Show details', 'Retry', 'Download again…', 'Check files', 'Copy link', 'Remove from amdl…']);
+  assert.deepEqual(labels, ['Show details', 'Retry', 'Download again…', 'Copy link', 'Remove from amdl…']);
 });
 
 test('a selection plans each action for the rows it applies to', () => {

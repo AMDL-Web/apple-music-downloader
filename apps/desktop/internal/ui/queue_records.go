@@ -359,10 +359,6 @@ func (a *App) rowMenu(m *ui.Menu, r *store.Record, j *store.Job) {
 	if r != nil && !live && r.TracksDone > 0 && m.Item("Download again").Chosen() {
 		s.Reset(r.Ref, nil, nil, name)
 	}
-	if r != nil && r.TracksDone > 0 && m.Item("Check files").Chosen() {
-		ref := r.Ref
-		s.CheckDisk(&ref, false)
-	}
 	run := j
 	if run == nil && r != nil {
 		run = s.LastRun(r.Ref)
@@ -423,40 +419,15 @@ func (a *App) removeDialog(c *ui.Context, k *Tokens) {
 	}
 }
 
-// checkBar is the disk check, at the top of Done: how the last went, and a
-// button to check again, or to download the files it found missing.
-func (a *App) checkBar(c *ui.Context, k *Tokens, compact bool) {
+// missingBar heads Done while records have files a disk check found
+// missing: a button to download them again.
+func (a *App) missingBar(c *ui.Context, k *Tokens) {
 	s := a.Store
-	check := s.Records.Check
-	running := check != nil && check.FinishedAt == nil
-	if text := checkText(check); text != "" && !compact {
-		ui.Text(c, text).FontSize(12).TextColor(k.Muted).SingleLine().Ellipsis("…").Shrink(1)
-	}
 	if sum := s.Queue.Summary; sum != nil && sum.Albums.Flags[store.FilterMissing]+sum.Playlists.Flags[store.FilterMissing] > 0 {
 		if button(c, k, buttonPlain, "Download missing", icDown).Clicked() {
 			s.ResetFlagged(store.FilterMissing)
 		}
 	}
-	if buttonOff(c, k, buttonPlain, "Check files", icDisk, running).Label("Check the files on disk").Clicked() && !running {
-		s.CheckDisk(nil, false)
-	}
-}
-
-// checkText is a disk check in a few words; "" before the first.
-func checkText(check *domain.CheckRun) string {
-	switch {
-	case check == nil:
-		return ""
-	case check.FinishedAt == nil:
-		return fmt.Sprintf("Checking %d files…", check.Checked)
-	case check.AbortedReason == domain.CheckAbortedTooManyMissing:
-		return "Check stopped: more than half the files were missing"
-	case check.AbortedReason != "":
-		return "Check stopped"
-	case check.Missing > 0:
-		return fmt.Sprintf("%d missing of %d", check.Missing, check.Checked)
-	}
-	return fmt.Sprintf("%d files checked %s", check.Checked, ago(*check.FinishedAt))
 }
 
 // ago is how long ago t was, in the largest unit.

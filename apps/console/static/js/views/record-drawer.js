@@ -4,20 +4,20 @@
 // state, with its active run's status, and Paused), the actions (Reset and
 // Add quality, which keep their cells, then Resume, or Pause while it has
 // something to download, and Download missing last, so it appears without
-// moving the others, then Check this album and Remove from amdl), how its
-// last disk check ended, each track with its state (each quality's own
-// state once it has more than one), and its last runs, newest first, a run
-// of another quality naming it. Kept fresh by the feed's resource_updated and
-// check_updated; what it changes it tells the app (recordsChanged), since
-// a pause, resume or removal with no run sends no resource_updated.
+// moving the others, then Remove from amdl), each track with its state (each
+// quality's own state once it has more than one), and its last runs, newest
+// first, a run of another quality naming it. Kept fresh by the feed's
+// resource_updated and check_updated; what it changes it tells the app
+// (recordsChanged), since a pause, resume or removal with no run sends no
+// resource_updated.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { getRecord, pauseRecord, resumeRecord, resetRecord, deleteRecord, downloadRecord, startCheck, listDownloads } from '../api.js';
+import { getRecord, pauseRecord, resumeRecord, resetRecord, deleteRecord, downloadRecord, listDownloads } from '../api.js';
 import { artPalette, paletteStyle, artWidths, trackLength, count } from '../lib/format.js';
-import { recordTitle, recordSub, recordArt, recordPalette, recordView, trackState, slotQuality, audioView, slotStates, hasExtraSlots, extraCodecs, runSlot, recordHasWork, trackCountText, kindWord, commonQuality, checkScope, checkText, checkBody, resetNote } from '../lib/records.js';
+import { recordTitle, recordSub, recordArt, recordPalette, recordView, trackState, slotQuality, audioView, slotStates, hasExtraSlots, extraCodecs, runSlot, recordHasWork, trackCountText, kindWord, commonQuality, resetNote } from '../lib/records.js';
 import { slotChoices, CHOICE_LABEL } from '../lib/download-ask.js';
 import { buildHash } from '../lib/route.js';
-import { useApp, Artwork, Badge, Button, Empty, ErrorNote, SkeletonRows, StatusText, Chip, RelTime, Notice, Icon } from '../ui/components.js';
+import { useApp, Artwork, Badge, Button, Empty, ErrorNote, SkeletonRows, StatusText, Chip, Icon } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { MenuButton } from '../ui/menu.js';
 import { JobRow } from './queue-row.js';
@@ -173,37 +173,6 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
   const resetWhat = (what, songs) => act(`reset-${what}`, () => resetRecord(kind, record.id, songs ? { what, songs } : { what }), (out) => resetNote(out, record, `Downloading “${name}” again`));
   const onReset = (what) => (what === 'audio' || what === 'all' ? setAsk({ what }) : resetWhat(what));
   const addQuality = (codec) => act(`add-${codec}`, () => downloadRecord(kind, record.id, { codec }), `Adding ${CHOICE_LABEL[codec] || codec} to “${name}”`);
-  // The last disk check of this record, from the feed: an aborted one
-  // stays as a note with its way on, a finished one is said once.
-  const [checked, setChecked] = useState(null);
-  const said = useRef(0);
-  useEffect(
-    () =>
-      app.subscribeFeed((batch) => {
-        const scope = checkScope(kind, record.id);
-        const mine = batch.filter((m) => m.type === 'check_updated' && m.check && m.check.scope === scope && m.check.finished_at).pop();
-        if (!mine) return;
-        setChecked(mine.check);
-        // A stopped check says so in the drawer; its "Checking" toast goes.
-        if (mine.check.aborted_reason) {
-          said.current = mine.check.id;
-          app.toast({ key: `check:${scope}`, dismiss: true });
-        } else if (said.current !== mine.check.id) {
-          said.current = mine.check.id;
-          app.toast({ key: `check:${scope}`, message: checkText(mine.check), role: 'success' });
-        }
-      }),
-    [kind, record.id],
-  );
-  // One toast per check: "Checking its files", then its result in its place.
-  const check = (force = false) =>
-    act('check', async () => {
-      setChecked(null);
-      const scope = checkScope(kind, record.id);
-      const out = await startCheck(checkBody(scope, force));
-      if (!(out && out.check && (said.current === out.check.id || out.check.finished_at))) app.toast({ key: `check:${scope}`, message: 'Checking its files', role: 'success' });
-      return out;
-    });
   const remove = async () => {
     setBusy('delete');
     try {
@@ -226,7 +195,6 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
         ${sub ? html`<p class="drawer-artist" dir="auto">${sub}</p>` : null}
         ${meta ? html`<p class="drawer-meta">${meta}</p>` : null}
         ${qualities ? html`<p class="drawer-meta drawer-summary">${qualities}</p>` : null}
-        ${record.last_checked_at ? html`<p class="drawer-meta">Checked <${RelTime} value=${record.last_checked_at} /></p>` : null}
         <div class="drawer-badges">
           <${RegionTag} region=${region} />
           <${Badge} view=${view} />
@@ -259,18 +227,8 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
           : null}
       </div>
       <div class="drawer-actions-row">
-        <${Button} variant="ghost" icon="hard-drive" disabled=${Boolean(busy)} onClick=${() => check()}>Check ${kindWord(kind) === 'album' ? 'this album' : 'this playlist'}</${Button}>
         <${Button} variant="ghost" icon="trash" className="drawer-delete" disabled=${Boolean(busy) || active} title=${active ? 'Pause it first' : undefined} onClick=${() => setAsk({ what: 'delete' })}>Remove from amdl</${Button}>
       </div>
-      ${checked && checked.aborted_reason
-        ? html`<${Notice}
-            role="warning"
-            icon="triangle-alert"
-            action=${checked.aborted_reason === 'too_many_missing'
-              ? html`<${Button} size="sm" variant="ghost" disabled=${Boolean(busy)} onClick=${() => check(true)}>Mark them anyway</${Button}>`
-              : null}
-          >${checkText(checked)}</${Notice}>`
-        : null}
     </div>
 
     <section class="drawer-section" aria-labelledby="tracks-title">

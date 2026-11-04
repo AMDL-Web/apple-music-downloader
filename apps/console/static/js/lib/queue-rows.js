@@ -233,7 +233,6 @@ const MENU = {
   resume: 'Resume',
   retry: 'Retry',
   again: 'Download again…',
-  check: 'Check files',
   copy: 'Copy link',
   remove: 'Remove from amdl…',
 };
@@ -244,7 +243,7 @@ const MENU = {
  * move it); Pause while it runs or has something to download, else Resume
  * when paused; Retry while tracks failed, were given up or are missing, and
  * Download again… once tracks are downloaded (neither while a run is under
- * way); Check files; Copy link; and Remove from amdl… (not while a run is
+ * way); Copy link; and Remove from amdl… (not while a run is
  * under way) after a separator. `run` is its live run, if any; `link` its
  * Apple Music link where the record has no `url`.
  */
@@ -259,7 +258,6 @@ export function recordMenu(r, run = null, place = {}, link = '') {
   else if (active || (r && r.state !== 'complete')) ids.push('pause');
   if (!active && r && (r.tracks_failed || r.tracks_given_up || r.tracks_missing)) ids.push('retry');
   if (!active && r && r.tracks_done) ids.push('again');
-  ids.push('check');
   if (link || (r && r.url)) ids.push('-', 'copy');
   if (!active) ids.push('-', 'remove');
   return ids.map((id) => (id === '-' ? { separator: true } : { id, label: MENU[id] }));

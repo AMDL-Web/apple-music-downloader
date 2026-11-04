@@ -95,10 +95,13 @@ func TestTheRowMenuOpensOnAClickAndDeletesOnlyAFinishedJob(t *testing.T) {
 	if err := tt.Click("More actions"); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Show details", "Download again", "Check files", "Copy link"} {
+	for _, want := range []string{"Show details", "Download again", "Copy link"} {
 		if !tt.HasText(want) {
 			t.Errorf("a downloaded record's menu has no %q: %q", want, tt.Texts())
 		}
+	}
+	if tt.HasText("Check files") {
+		t.Errorf("a downloaded record's menu offers a disk check: %q", tt.Texts())
 	}
 	if err := tt.Click("Remove from amdl…"); err != nil {
 		t.Fatalf("a downloaded record's menu: %v in %q", err, tt.Texts())

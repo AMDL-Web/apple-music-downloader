@@ -184,25 +184,6 @@ func (c *Client) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id 
 	return c.do(ctx, http.MethodDelete, recordPath(kind, id), nil, nil, nil, http.StatusNoContent)
 }
 
-// StartCheck checks the stored files of the whole library (ref nil) or of
-// one record on disk, in the background. force marks them even when more
-// than half are missing.
-func (c *Client) StartCheck(ctx context.Context, ref *domain.ResourceRef, force bool) (*domain.CheckRun, error) {
-	body := struct {
-		Kind  string `json:"kind,omitempty"`
-		ID    string `json:"id,omitempty"`
-		Force bool   `json:"force,omitempty"`
-	}{Force: force}
-	if ref != nil {
-		body.Kind, body.ID = string(ref.Kind)+"s", ref.ID
-	}
-	var out struct {
-		Check *domain.CheckRun `json:"check"`
-	}
-	err := c.do(ctx, http.MethodPost, "/api/v1/library/check", nil, body, &out, http.StatusAccepted)
-	return out.Check, err
-}
-
 // PendingAdds lists the adds waiting for a catalog read, and those the
 // resolver gave up on.
 func (c *Client) PendingAdds(ctx context.Context) ([]domain.PendingAdd, error) {

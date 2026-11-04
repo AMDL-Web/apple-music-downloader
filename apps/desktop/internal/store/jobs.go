@@ -334,10 +334,6 @@ func (s *Store) applyMessage(m domain.DownloadFeedMessage) {
 		s.remove(m.JobID)
 	case "resource_updated":
 		s.applyResource(m)
-	case "check_updated":
-		if m.Check != nil {
-			s.Records.Check = m.Check
-		}
 	}
 }
 

@@ -1,13 +1,13 @@
 // A record row's "…" menu on the Queue (items from lib/queue-rows.js
 // recordMenu): Show details opens the record's drawer, Run next and Run
-// last move its queued run, Pause, Resume, Retry and Check files act at
-// once, Copy link copies its link, and Download again… and Remove from
+// last move its queued run, Pause, Resume and Retry act at once, Copy link
+// copies its link, and Download again… and Remove from
 // amdl… ask first. What it changes it tells the app (recordsChanged), since
 // a pause, resume or removal with no run sends no resource_updated.
 
-import { html, useState, useEffect } from '../ui/preact.js';
-import { pauseRecord, resumeRecord, resetRecord, deleteRecord, startCheck, cancelDownload } from '../api.js';
-import { recordTitle, checkScope, checkBody, checkText, resetNote } from '../lib/records.js';
+import { html, useState } from '../ui/preact.js';
+import { pauseRecord, resumeRecord, resetRecord, deleteRecord, cancelDownload } from '../api.js';
+import { recordTitle, resetNote } from '../lib/records.js';
 import { recordMenu, recordLink } from '../lib/queue-rows.js';
 import { actionError } from '../lib/jobactions.js';
 import { useApp, copyText } from '../ui/components.js';
@@ -16,24 +16,6 @@ import { MenuButton } from '../ui/menu.js';
 
 const TITLE_MAX = 48;
 const RETRY_STATES = ['failed', 'given_up', 'missing'];
-
-// The checks a menu started, by scope: their result is said once in a toast.
-const started = new Set();
-
-/** Says the result of each check a record menu started (mounted once by the Queue). */
-export function useCheckToasts(app) {
-  useEffect(
-    () =>
-      app.subscribeFeed((batch) => {
-        for (const m of batch) {
-          if (m.type !== 'check_updated' || !m.check || !m.check.finished_at || !started.has(m.check.scope)) continue;
-          started.delete(m.check.scope);
-          app.toast({ key: `check:${m.check.scope}`, message: checkText(m.check), role: m.check.aborted_reason ? 'danger' : 'success' });
-        }
-      }),
-    [],
-  );
-}
 
 /**
  * Props: row (a record row: kind, record, live), href (its drawer),
@@ -60,24 +42,10 @@ export function RecordMenu({ row, href, onLeaving, place, onMove }) {
       return false;
     }
   };
-  const check = async () => {
-    const scope = checkScope(kind, r.id);
-    try {
-      const out = await startCheck(checkBody(scope));
-      if (out && out.check && out.check.finished_at) app.toast({ key: `check:${scope}`, message: checkText(out.check), role: 'success' });
-      else {
-        started.add(scope);
-        app.toast({ key: `check:${scope}`, message: `Checking “${short}”`, role: 'success' });
-      }
-    } catch (e) {
-      fail(e);
-    }
-  };
   const choose = (id) => {
     if (id === 'details') app.navigate(href);
     else if (id === 'top' || id === 'bottom') onMove(id);
     else if (id === 'copy') copyText(app, link);
-    else if (id === 'check') check();
     else if (id === 'again' || id === 'remove') setAsk(id);
     else if (id === 'pause') {
       onLeaving(row.id);

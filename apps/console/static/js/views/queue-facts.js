@@ -1,14 +1,12 @@
 // What the Queue's tabs count and its Done and Failed tabs head with: the
-// library summary (records per state, the last disk check), the Failed
-// records (one read of flag=failed,given_up,missing for its union total),
-// the station runs per status, and the adds that could not be read. Read
-// again on the feed's record news, an ended station run, a finished disk
-// check, an action (app.recordsStamp) and the page epoch; the check line
-// follows the feed's check_updated at once.
+// library summary (records per state and flag), the Failed records (one
+// read of flag=failed,given_up,missing for its union total), the station
+// runs per status, and the adds that could not be read. Read again on the
+// feed's record news, an ended station run, a finished disk check, an
+// action (app.recordsStamp) and the page epoch.
 
 import { useState, useEffect, useRef } from '../ui/preact.js';
 import { getLibrarySummary, listAlbumRecords, listPlaylistRecords, listDownloads, listPendingAdds } from '../api.js';
-import { applyCheckFeed } from '../lib/records.js';
 import { tabCounts, FAILED_FLAGS } from '../lib/queue-rows.js';
 
 const REFRESH_MS = 1500;
@@ -50,11 +48,6 @@ export function useQueueFacts(app) {
   const timer = useRef(null);
   useEffect(() => {
     const off = app.subscribeFeed((batch) => {
-      setFacts((x) => {
-        if (!x.summary) return x;
-        const check = applyCheckFeed(x.summary.check, batch);
-        return check === x.summary.check ? x : { ...x, summary: { ...x.summary, check } };
-      });
       const news = batch.some(
         (m) =>
           m.type === 'resource_updated' ||

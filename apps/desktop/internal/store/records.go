@@ -10,13 +10,10 @@ import (
 
 // Records is what the store knows of amdl's records beyond what an answer
 // carried: each record's newest mark, from the feed's resource_updated and
-// from submits, and the disk check the feed's check_updated moves on. The
-// records decide what is downloaded; nothing here reads the disk.
+// from submits. The records decide what is downloaded; nothing here reads
+// the disk.
 type Records struct {
 	marks map[domain.ResourceRef]domain.ResourceMark
-	// Check is the running or last disk check; nil until one is read or
-	// sent.
-	Check *domain.CheckRun
 }
 
 func (r *Records) reset() { *r = Records{marks: map[domain.ResourceRef]domain.ResourceMark{}} }

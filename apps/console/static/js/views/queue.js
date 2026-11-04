@@ -25,9 +25,8 @@ import { QueueEmpty } from './queue-empty.js';
 import { useQueueStreams } from './queue-streams.js';
 import { useQueueFacts } from './queue-facts.js';
 import { QueueRows, retryRow } from './queue-body.js';
-import { CheckBar } from './queue-check.js';
+import { MissingBar } from './queue-missing.js';
 import { FailedAdds } from './queue-failed-adds.js';
-import { useCheckToasts } from './queue-record-menu.js';
 import { useMoreNearEnd } from './queue-more.js';
 
 export { JobRow, applyFeedToList };
@@ -57,7 +56,6 @@ export function QueuePage({ route }) {
   const upnext = useUpNext(app, true, true, `queue|${app.epoch}`, () => slide.current && slide.current());
   const streams = useQueueStreams(app, filters, listKey, key);
   const facts = useQueueFacts(app);
-  useCheckToasts(app);
   const listRef = useRef(null);
 
   const setParams = (patch) => {
@@ -311,7 +309,7 @@ export function QueuePage({ route }) {
         >${selecting ? 'Done' : 'Select'}</${Button}>
       </div>
     </div>
-    ${filters.tab === 'done' ? html`<${CheckBar} summary=${facts.summary} onChanged=${facts.reload} />` : null}
+    ${filters.tab === 'done' ? html`<${MissingBar} summary=${facts.summary} onChanged=${facts.reload} />` : null}
     ${filters.tab === 'failed' && ready ? html`<${FailedAdds} items=${facts.failedAdds} onChanged=${facts.reload} />` : null}
     ${streams.error && rows.length > 0 ? html`<${ErrorNote} title="Couldn't refresh the list" error=${streams.error} onRetry=${streams.reload} />` : null}
     ${selecting || bulk.run

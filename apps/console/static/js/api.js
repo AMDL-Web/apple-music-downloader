@@ -206,10 +206,6 @@ export const resetRecords = (body) => request('POST', '/api/v1/library/reset', u
 export const listPendingAdds = (query) => request('GET', '/api/v1/library/pending', query);
 export const retryPendingAdd = (id) => request('POST', `/api/v1/library/pending/${encodeURIComponent(id)}/retry`);
 export const deletePendingAdd = (id) => request('DELETE', `/api/v1/library/pending/${encodeURIComponent(id)}`);
-/** Starts a disk check of the library, or of one record ({kind, id}); body.force marks even when most files are missing. 202 {check}. */
-export const startCheck = (body = {}) => request('POST', '/api/v1/library/check', undefined, { body });
-/** The running or last disk check: {check} (null before the first). */
-export const getCheck = () => request('GET', '/api/v1/library/check');
 
 // The Apple Music account library cache.
 /** {sync_interval_minutes, full_sync_hours, accounts: [{account_id, name, region, default, enabled, available, reason?, state, current?, last_sync?, counts, ...}]}. */

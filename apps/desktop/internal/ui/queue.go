@@ -205,12 +205,12 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		display(c, "Queue", 22).SingleLine()
 		segmentedRoom(c, k, "tabs", &a.Tab, tabs, room, map[int]ui.Color{int(store.TabFailed): k.Bad})
 		ui.Spacer(c)
-		// As tall as a button whatever it holds, so Done's disk check moves
-		// nothing.
+		// As tall as a button whatever it holds, so Done's Download missing
+		// moves nothing.
 		ui.Row(c).Height(30).Gap(12).AlignItems(ui.Center).MinWidth(0).Shrink(1).Children(func() {
 			switch {
 			case tab == store.TabDone:
-				a.checkBar(c, k, compact)
+				a.missingBar(c, k)
 			case !compact && !upNext && len(rows) > 0:
 				ui.Text(c, "Newest first").FontSize(12).TextColor(k.Muted)
 			}

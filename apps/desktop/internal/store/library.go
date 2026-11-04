@@ -396,25 +396,6 @@ func (s *Store) RemoveRecord(ref domain.ResourceRef, name string) {
 	}, "Removed "+name)
 }
 
-// CheckDisk checks the stored files of the library (ref nil) or of one
-// record; force marks them even when more than half are missing.
-func (s *Store) CheckDisk(ref *domain.ResourceRef, force bool) {
-	c, ctx := s.client, s.ctx
-	if c == nil {
-		return
-	}
-	go func() {
-		run, err := c.StartCheck(ctx, ref, force)
-		s.postIf(ctx, func() {
-			if err != nil {
-				s.setNotice(err.Error(), true)
-				return
-			}
-			s.Records.Check = run
-		})
-	}()
-}
-
 // ResetFlagged downloads again every slot in the state flag names (failed,
 // given_up or missing) across the library.
 func (s *Store) ResetFlagged(flag string) {

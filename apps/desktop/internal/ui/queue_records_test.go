@@ -123,8 +123,8 @@ func TestQueueTabsHoldStillOverRecords(t *testing.T) {
 	a, tt := seededQueue(t, "us", "jp")
 	done := fmt.Sprintf("Done · %d", a.Store.QueueCount(store.TabDone))
 	holdsStill(t, tt, "All", done)
-	// Done's disk check takes the place of "Newest first" without moving
-	// the tabs or the list under them.
+	// Done's bar takes the place of "Newest first" without moving the tabs
+	// or the list under them.
 	all, _ := tt.Find("All")
 	first, _ := tt.Find("Orchard Lights")
 	if err := tt.Click(done); err != nil {
@@ -132,8 +132,8 @@ func TestQueueTabsHoldStillOverRecords(t *testing.T) {
 	}
 	tt.Move(2, 2)
 	tt.Frame()
-	if !tt.HasText("Check files") {
-		t.Fatalf("Done has no disk check: %q", tt.Texts())
+	if tt.HasText("Check files") {
+		t.Fatalf("Done offers a disk check: %q", tt.Texts())
 	}
 	all2, _ := tt.Find("All")
 	first2, _ := tt.Find("Orchard Lights")
@@ -164,9 +164,8 @@ func TestTheQueuesFirstFrameHoldsItsCountsAndRows(t *testing.T) {
 	}
 }
 
-// Switching tabs shows the chosen tab's rows at once, read before, and a
-// quick disk check keeps the bar as it was until its answer.
-func TestQueueTabsAndTheCheckDoNotFlash(t *testing.T) {
+// Switching tabs shows the chosen tab's rows at once, read before.
+func TestQueueTabsDoNotFlash(t *testing.T) {
 	a, run := demoApp(t)
 	a.Screen = ScreenQueue
 	s := a.Store
@@ -184,8 +183,4 @@ func TestQueueTabsAndTheCheckDoNotFlash(t *testing.T) {
 	tt.Frame()
 	done := fmt.Sprintf("Done · %d", s.QueueCount(store.TabDone))
 	noFlash(t, tt, done, func() { run(ready) })
-	if !tt.HasText("Check files") {
-		t.Fatalf("Done has no disk check: %q", tt.Texts())
-	}
-	noFlash(t, tt, "Check files", func() { run(func() bool { return s.Records.Check != nil }) })
 }

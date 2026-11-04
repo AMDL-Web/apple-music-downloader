@@ -515,9 +515,6 @@ func (q *QueueList) count(s *Store) {
 			s.noteLoaded()
 			if sumErr == nil {
 				q.Summary = &sum
-				if sum.Check != nil && (s.Records.Check == nil || s.Records.Check.ID <= sum.Check.ID) {
-					s.Records.Check = sum.Check
-				}
 			}
 			if addsErr == nil {
 				q.Adds = q.Adds[:0]
