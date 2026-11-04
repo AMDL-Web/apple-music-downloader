@@ -640,6 +640,15 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 	if len(s.orphans) != 1 || s.playlists["pl.1"].ID == "" {
 		t.Fatalf("after their overrides broke: runs of no record %+v, playlist %+v", s.orphans, s.playlists["pl.1"])
 	}
+	for _, id := range []string{playlistRun, stationRun} {
+		var refused struct {
+			Error struct{ Code, Message string } `json:"error"`
+		}
+		r.call(http.MethodPost, "/downloads/"+id+"/retry", "", http.StatusConflict, &refused)
+		if refused.Error.Code != "job_not_retryable" || strings.Contains(refused.Error.Message, "decode") {
+			t.Errorf("retry of run %s whose overrides do not decode = %+v, want job_not_retryable saying why in words", id, refused.Error)
+		}
+	}
 	r.call(http.MethodDelete, "/downloads/"+playlistRun+"?record=true", "", http.StatusOK, &gone)
 	if gone.Deleted != "record" || gone.Resource == nil || gone.Resource.ID != "pl.1" {
 		t.Fatalf("deleting a run whose overrides do not decode with record=true = %+v, want playlist pl.1", gone)

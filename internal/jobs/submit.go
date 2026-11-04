@@ -22,6 +22,10 @@ var ErrQueueFull = errors.New("job queue is full")
 // has nothing left to retry.
 var ErrJobNotRetryable = errors.New("only failed or cancelled jobs can be retried")
 
+// ErrJobUnreadable refuses a retry of a run whose stored overrides do not
+// decode (db.ErrCorruptOverrides): what it would download again is unknown.
+var ErrJobUnreadable = errors.New("this download's stored settings cannot be read; remove it and add its link again")
+
 // SubmitBatch validates and adds each url independently (design §3.1). An
 // album, an album-track link, a song an album record already lists and a
 // catalog playlist (pl.) become records, and the add queues the record's run
@@ -320,7 +324,8 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 // overrides (submitOne): an album, song or catalog playlist link becomes a
 // record or joins its record, a station queues a new one-off run; a full
 // queue fails with ErrQueueFull.
-// ErrJobNotRetryable refuses a queued, running or completed run;
+// ErrJobNotRetryable refuses a queued, running or completed run,
+// ErrJobUnreadable one whose stored overrides do not decode;
 // db.ErrDuplicateActive a record or input with an active run.
 func (m *Manager) RetryRun(ctx context.Context, jobID string) (RecordDownloadResult, error) {
 	m.submitMu.Lock()
@@ -330,6 +335,9 @@ func (m *Manager) RetryRun(ctx context.Context, jobID string) (RecordDownloadRes
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return RecordDownloadResult{}, db.ErrJobNotFound
+		}
+		if errors.Is(err, db.ErrCorruptOverrides) {
+			return RecordDownloadResult{}, ErrJobUnreadable
 		}
 		return RecordDownloadResult{}, err
 	}

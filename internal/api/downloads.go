@@ -212,7 +212,7 @@ func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 	res, err := s.manager.RetryRun(r.Context(), id)
 	if err != nil {
 		switch {
-		case errors.Is(err, jobs.ErrJobNotRetryable):
+		case errors.Is(err, jobs.ErrJobNotRetryable), errors.Is(err, jobs.ErrJobUnreadable):
 			writeError(w, http.StatusConflict, CodeJobNotRetryable, err.Error())
 		case errors.Is(err, db.ErrDuplicateActive):
 			writeError(w, http.StatusConflict, CodeDuplicateActive, "an active job already downloads this input")

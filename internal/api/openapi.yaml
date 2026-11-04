@@ -2395,9 +2395,10 @@ paths:
           $ref: '#/components/responses/JobNotFound'
         '409':
           description: |
-            job_not_retryable: the job is not in the failed or cancelled state;
-            duplicate_active: the record, or the station link, already has a
-            queued or running job.
+            job_not_retryable: the job is not in the failed or cancelled state,
+            or its stored download overrides cannot be read (remove it and add
+            its link again); duplicate_active: the record, or the station link,
+            already has a queued or running job.
           content:
             application/json:
               schema:

@@ -599,7 +599,8 @@ curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/cancel
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/retry
 ```
 
-Only `failed` and `cancelled` jobs can be retried: otherwise `409 job_not_retryable`.
+Only `failed` and `cancelled` jobs can be retried: otherwise `409 job_not_retryable`, as for
+a job whose stored download overrides cannot be read (remove it and add its link again).
 Only a `queued` or `running` job can be cancelled: a `completed` or `failed` one is
 `409 job_not_cancellable`, and a `cancelled` one answers `200` again. Cancel on a record's
 run pauses the record (clients label it Pause); a station's run is cancelled.
