@@ -181,14 +181,15 @@ func (s *Shell) Close() {
 }
 
 // JobFinished shows a notification for a download that finished or failed.
-// It implements store.Notifier.
+// It implements store.Notifier. A record's next run replaces the one still
+// shown for it, so a record downloaded again in a row shows once.
 func (s *Shell) JobFinished(j *store.Job) {
 	if !s.opts.Notify() || !mygo.NotificationsSupported() {
 		return
 	}
 	title, body := notification(j)
 	n := mygo.NewNotification(mygo.NotificationOptions{
-		ID:    j.ID + "/" + string(j.Status),
+		ID:    j.Target() + "/" + string(j.Status),
 		Title: title,
 		Body:  body,
 		Group: "downloads",

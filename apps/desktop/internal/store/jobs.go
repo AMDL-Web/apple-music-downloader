@@ -607,7 +607,7 @@ func (s *Store) Summary() Summary {
 			if j.FinishedAt == nil || j.FinishedAt.Before(midnight) {
 				continue
 			}
-			if t := runTarget(j); today[t] == nil || j.FinishedAt.After(*today[t].FinishedAt) {
+			if t := j.Target(); today[t] == nil || j.FinishedAt.After(*today[t].FinishedAt) {
 				today[t] = j
 			}
 		}

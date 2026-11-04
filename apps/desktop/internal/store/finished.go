@@ -23,7 +23,7 @@ func (s *Store) Finished() []*Job {
 	seen := map[string]bool{}
 	kept := out[:0]
 	for _, j := range out {
-		if t := runTarget(j); !seen[t] {
+		if t := j.Target(); !seen[t] {
 			seen[t] = true
 			kept = append(kept, j)
 		}
@@ -31,9 +31,9 @@ func (s *Store) Finished() []*Job {
 	return kept
 }
 
-// runTarget is what a run downloads: its record, or a station run itself,
-// so the runs of one record count once.
-func runTarget(j *Job) string {
+// Target is what the run downloads: its record, or a station run itself,
+// so the runs of one record count, and notify, once.
+func (j *Job) Target() string {
 	if j.ResourceID != "" {
 		return string(j.ResourceKind) + ":" + j.ResourceID
 	}
