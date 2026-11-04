@@ -94,7 +94,7 @@ func TestQueueShowsTheLatestDownloadUntilOneRuns(t *testing.T) {
 	// Active tab lists neither finished album, so only the covers name them.
 	s.Jobs = append([]*store.Job{job("c", "Running Album", domain.JobRunning, now, nil)}, s.Jobs...)
 	tt.Frame()
-	if !tt.HasText("DOWNLOADING NOW") || tt.HasText("LATEST DOWNLOAD · FINISHED "+strings.ToUpper(dayClock(later, now))) {
+	if _, ok := tt.Find("Open Running Album"); !ok || tt.HasText("LATEST DOWNLOAD · FINISHED "+strings.ToUpper(dayClock(later, now))) {
 		t.Errorf("with a download running: %q", tt.Texts())
 	}
 	if !tt.HasText("Newest Album") || !tt.HasText("Older Album") {

@@ -11,8 +11,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// hero is the "downloading now" band: the cover, the album in big type, its
-// stage bar and the percent, all in the album's colors.
+// hero is the band of the download under way: the cover, the album in big
+// type, its stage bar and the percent, all in the album's colors.
 func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	size := float32(heroCover)
 	var video *ui.VideoPlayer
@@ -28,7 +28,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: 1, Video: video}.Show(c)
 		})
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
-			a.heroNames(c, k, j, "Downloading now", hc, compact)
+			a.heroNames(c, k, j, "", hc, compact)
 			ui.Column(c).MaxWidth(600).Gap(6).Margin(6, 0, 0, 0).Children(func() {
 				widgets.StageBar{Stages: j.Stages, Color: hc.accent, Track: k.Track, Height: 10, Gap: 3, Running: true, Still: a.scrolling(c)}.Show(c, "hero-bar")
 				ui.Row(c).Children(func() {
@@ -95,11 +95,14 @@ func (a *App) heroInk(c *ui.Context, pal Palette, k *Tokens) heroColors {
 	return hc
 }
 
-// heroNames are the queue hero's label, title, artists and tags, which fly
-// to the album page's as it opens from the hero (flySource).
+// heroNames are the queue hero's label, if it has one, title, artists and
+// tags, which fly to the album page's as it opens from the hero
+// (flySource).
 func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, hc heroColors, compact bool) {
 	from := heroFrom(j)
-	a.flySourceLabel(label(c, k, kicker).TextColor(hc.label), from, partKicker, kicker, hc.label)
+	if kicker != "" {
+		a.flySourceLabel(label(c, k, kicker).TextColor(hc.label), from, partKicker, kicker, hc.label)
+	}
 	size, lines := float32(heroTitle), 2
 	if compact {
 		size, lines = heroTitleCompact, 1

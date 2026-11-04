@@ -98,18 +98,18 @@ func (a *App) recentWall(c *ui.Context, k *Tokens, finished []*store.Job, hero *
 	}
 	w, _ := c.Size()
 	n := min(len(jobs), max(1, int((w-side-56+wallGap)/(size+wallGap))))
+	shown := n
+	if hero != nil {
+		shown++
+	}
 	ui.Column(c).Padding(0, 28, 10, 28).Gap(8).Children(func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			label(c, k, "Recently finished")
-			ui.Spacer(c)
-			shown := n
-			if hero != nil {
-				shown++
-			}
-			if done := a.Store.Count(store.TabDone); done > shown {
+		// The covers need no title; the count says how many more there are.
+		if done := a.Store.Count(store.TabDone); done > shown {
+			ui.Row(c).Children(func() {
+				ui.Spacer(c)
 				mono(c, fmt.Sprintf("%d downloaded", done), 11).TextColor(k.Muted)
-			}
-		})
+			})
+		}
 		ui.Row(c).Gap(wallGap).Padding(2, 0, 4, 0).Children(func() {
 			for _, j := range jobs[:n] {
 				a.wallCover(c, k, j, size)
