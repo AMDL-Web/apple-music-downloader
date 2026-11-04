@@ -5,9 +5,13 @@
 package artwork
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,19 +22,27 @@ import (
 
 	"github.com/egoist/mygo/netproxy"
 	"github.com/egoist/mygo/ui"
+	"golang.org/x/image/draw"
 )
 
 // keepBytes bounds the decoded covers kept: past it, the covers shown
-// longest ago are released, never one shown in the last shownLately. A
-// screen left and opened again finds its covers decoded, which a fetch,
-// even from the disk, would show only some frames late, as placeholders
-// first. failedRelease is how long a cover that failed and is no longer
-// asked for is remembered, and sweepEvery how often the cache looks.
+// longest ago are released, never one shown in the last shownLately, nor
+// one the window's last frame drew (lastFrame), however long ago that
+// was: an idle window draws no frames, and a cover it shows must not go
+// when a fetch lands meanwhile. A screen left and opened again finds its
+// covers decoded, which a fetch, even from the disk, would show only some
+// frames late, as placeholders first. failedRelease is how long a cover
+// that failed and is no longer asked for is remembered, and sweepEvery how
+// often the cache looks. maxSide is the longest side a cover is decoded
+// at: a URL without a size, as a private playlist's, is the picture as
+// uploaded, up to 4000 pixels, where no view shows more than 1200.
 const (
 	keepBytes     = 384 << 20
 	shownLately   = 5 * time.Second
+	lastFrame     = 250 * time.Millisecond
 	failedRelease = 2 * time.Minute
 	sweepEvery    = time.Minute
+	maxSide       = 1200
 )
 
 // retryFirst is how long a cover that failed to load waits before it is
@@ -65,6 +77,10 @@ type Cache struct {
 	// bytes is what the decoded covers of entries take, and keep its bound:
 	// keepBytes but in tests.
 	bytes, keep int
+	// lastGet is the last Get, in the window's last frame; sweepQueued
+	// says a sweep waits for the end of the frame (Get).
+	lastGet     time.Time
+	sweepQueued bool
 	swept       time.Time
 	// now is time.Now but in tests.
 	now func() time.Time
@@ -140,13 +156,22 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 		e = &entry{}
 		c.entries[key] = e
 	}
-	e.used, e.src = now, template
+	e.used, e.src, c.lastGet = now, template, now
 	if e.img == nil && !e.loading && (e.failures == 0 || now.Sub(e.failedAt) >= retryWait(e.failures)) {
 		e.loading = true
 		go c.fetch(key, e.src)
 	}
-	if now.Sub(c.swept) > sweepEvery {
-		c.sweep(now)
+	if c.swept.IsZero() {
+		// Nothing to sweep yet: the first sweep falls due a while on.
+		c.swept = now
+	}
+	if now.Sub(c.swept) > sweepEvery && !c.sweepQueued {
+		// After the frame, once every cover it shows has been asked for.
+		c.sweepQueued = true
+		c.post(func() {
+			c.sweepQueued = false
+			c.sweep(c.now())
+		})
 	}
 	return e.img
 }
@@ -236,7 +261,7 @@ func refused(status int) bool { return status == http.StatusForbidden || status 
 // it, with the HTTP status it came with: 200 from the disk, 0 when none came.
 func (c *Cache) load(url string) (ui.ImageSource, int, error) {
 	if data, ok := c.disk.get(keyOf(url)); ok {
-		if img, err := ui.DecodeImage(data); err == nil {
+		if img, err := decode(data); err == nil {
 			return img, http.StatusOK, nil
 		}
 	}
@@ -244,12 +269,34 @@ func (c *Cache) load(url string) (ui.ImageSource, int, error) {
 	if err != nil {
 		return nil, status, err
 	}
-	img, err := ui.DecodeImage(data)
+	img, err := decode(data)
 	if err != nil {
 		return nil, status, err
 	}
 	c.disk.put(keyOf(url), data)
 	return img, status, nil
+}
+
+// decode decodes a cover, no larger than maxSide on its longer side.
+func decode(data []byte) (ui.ImageSource, error) {
+	img, err := ui.DecodeImage(data)
+	b, ok := img.(*ui.Bitmap)
+	if err != nil || !ok {
+		return img, err
+	}
+	w, h := b.Size()
+	if max(w, h) <= maxSide {
+		return img, nil
+	}
+	src, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		// A format only the view decodes shows at its own size.
+		return img, nil
+	}
+	f := float64(maxSide) / float64(max(w, h))
+	dst := image.NewRGBA(image.Rect(0, 0, max(1, int(float64(w)*f)), max(1, int(float64(h)*f))))
+	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Src, nil)
+	return ui.NewBitmap(dst), nil
 }
 
 func (c *Cache) download(url string) ([]byte, int, error) {
@@ -281,7 +328,10 @@ func (c *Cache) download(url string) ([]byte, int, error) {
 }
 
 // sweep forgets covers that failed and are not asked for, then releases
-// the covers shown longest ago while the kept ones take more than keep.
+// the covers shown longest ago while the kept ones take more than keep,
+// none that the last frame drew. It runs between frames, never in Get,
+// where the covers a frame draws after it would not have been asked for
+// yet.
 func (c *Cache) sweep(now time.Time) {
 	c.swept = now
 	var old []coverKey
@@ -290,7 +340,7 @@ func (c *Cache) sweep(now time.Time) {
 		case e.loading:
 		case e.img == nil && now.Sub(e.used) > failedRelease:
 			delete(c.entries, k)
-		case e.img != nil && now.Sub(e.used) > shownLately:
+		case e.img != nil && now.Sub(e.used) > shownLately && e.used.Before(c.lastGet.Add(-lastFrame)):
 			old = append(old, k)
 		}
 	}

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func pngBytes(t *testing.T) []byte {
@@ -23,15 +25,25 @@ func pngBytes(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// getOnce asks for a cover and runs what the fetch posts back.
+// getOnce asks for a cover and runs what is posted back until its fetch
+// has landed or failed; a sweep may be posted on the way.
 func getOnce(t *testing.T, c *Cache, posted chan func(), tpl string, px int) {
 	t.Helper()
 	c.Get(tpl, px)
-	select {
-	case fn := <-posted:
-		fn()
-	case <-time.After(10 * time.Second):
-		t.Fatal("the cover never loaded nor failed")
+	key := coverKey{keyOf(tpl), 0}
+	if strings.Contains(tpl, "{w}") {
+		key.px = bucket(px)
+	}
+	for {
+		select {
+		case fn := <-posted:
+			fn()
+		case <-time.After(10 * time.Second):
+			t.Fatal("the cover never loaded nor failed")
+		}
+		if e := c.entries[key]; e == nil || !e.loading {
+			return
+		}
 	}
 }
 
@@ -245,5 +257,67 @@ func TestAPresignedCoverIsOnePictureWhateverItsSignature(t *testing.T) {
 	}
 	if hits != 1 {
 		t.Errorf("the cover was fetched %d times, want once", hits)
+	}
+}
+
+// A window at rest draws no frames: a cover it shows was last asked for
+// minutes ago when a fetch lands past the bound, and it stays, as does
+// every cover of that last frame; one shown before that goes.
+func TestCoversOfTheLastFrameStayWhileTheWindowRests(t *testing.T) {
+	img := pngBytes(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(img) }))
+	t.Cleanup(srv.Close)
+	posted := make(chan func(), 8)
+	c := NewWith(func(fn func()) { posted <- fn }, http.DefaultTransport)
+	clock := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	c.now = func() time.Time { return clock }
+	// Room for one cover: the two of the last frame stay over the bound.
+	c.keep = 21
+	// No sweep of its own falls due in the test: only the late cover's
+	// landing sweeps.
+	c.swept = clock.Add(time.Hour)
+	tpl := func(n string) string { return srv.URL + "/" + n + "/{w}x{h}bb.jpg" }
+	getOnce(t, c, posted, tpl("old"), 100)
+	clock = clock.Add(time.Minute)
+	// The last frame: two covers shown, one still loading.
+	getOnce(t, c, posted, tpl("shown"), 100)
+	c.Get(tpl("late"), 100)
+	// Ten minutes at rest, then the late cover lands, past the bound.
+	clock = clock.Add(10 * time.Minute)
+	select {
+	case fn := <-posted:
+		fn()
+	case <-time.After(10 * time.Second):
+		t.Fatal("the late cover never landed")
+	}
+	has := func(n string) bool {
+		e := c.entries[coverKey{tpl(n), 128}]
+		return e != nil && e.img != nil
+	}
+	if !has("shown") || !has("late") {
+		t.Errorf("covers of the last frame were released at rest: shown %v, late %v", has("shown"), has("late"))
+	}
+	if has("old") {
+		t.Error("the cover no frame drew lately stays past the bound")
+	}
+}
+
+// A picture uploaded larger than any view shows, as a private playlist's
+// cover, is decoded at maxSide.
+func TestAnOversizedCoverIsDecodedSmaller(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 3000, 2000))); err != nil {
+		t.Fatal(err)
+	}
+	img, err := decode(buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := img.(*ui.Bitmap)
+	if !ok {
+		t.Fatalf("decoded as %T", img)
+	}
+	if w, h := b.Size(); w != maxSide || h != maxSide*2/3 {
+		t.Errorf("decoded at %d×%d, want %d×%d", w, h, maxSide, maxSide*2/3)
 	}
 }

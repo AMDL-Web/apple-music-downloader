@@ -17,6 +17,7 @@ require (
 	github.com/iyear/gowidevine v0.1.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/zhaarey/go-mp4tag v0.0.0-20260509131819-a89fa417cd97
+	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/time v0.16.0
 	google.golang.org/protobuf v1.36.12
@@ -48,7 +49,6 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
