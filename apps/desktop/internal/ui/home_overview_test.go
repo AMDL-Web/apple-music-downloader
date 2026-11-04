@@ -119,3 +119,49 @@ func TestATabsFirstPageKeepsItsTilesSize(t *testing.T) {
 		t.Errorf("with more to come, the Albums tab's tile is %.1f wide, the overview's %.1f", tab.W, over.W)
 	}
 }
+
+// Going from one tab to another, the group left has faded out by the time
+// the one chosen starts to show: the two never show through each other.
+// The window builds a frame more than once, and the group left fades as
+// the frame's last build laid it out.
+func TestATabLeftIsGoneBeforeTheNextShows(t *testing.T) {
+	a, tt, _ := overviewApp(t, true)
+	a.Theme = "light"
+	tt.SetScale(1)
+	tt.Frame()
+	if err := tt.Click("Albums"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(2 * time.Second)
+	tt.Frame()
+	// A point of the second row of album tiles, where the songs, a shorter
+	// list, leave the page's ground.
+	tile, ok := tt.Find("Late Bloom")
+	if !ok {
+		t.Fatalf("no second row of albums: %q", tt.Texts())
+	}
+	x, y := int(tile.X+tile.W/2), int(tile.Y-60)
+	at := func() [3]uint8 {
+		img := tt.Image()
+		o := img.PixOffset(x, y)
+		return [3]uint8{img.Pix[o], img.Pix[o+1], img.Pix[o+2]}
+	}
+	before := at()
+	if err := tt.Click("Songs"); err != nil {
+		t.Fatal(err)
+	}
+	var seen [][3]uint8
+	for range 12 {
+		tt.Advance(filmFrame)
+		seen = append(seen, at())
+	}
+	tt.Advance(2 * time.Second)
+	ground := at()
+	if ground == before {
+		t.Fatalf("the point %d,%d shows the same before and after: %v", x, y, ground)
+	}
+	// groupFade is 160 ms: by the eleventh frame the albums are gone.
+	if got := seen[10]; got != ground {
+		t.Errorf("183 ms after the click the albums still show: %v, the ground is %v (frames %v)", got, ground, seen)
+	}
+}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -200,9 +201,9 @@ func buttonRoom(c *ui.Context, k *Tokens, kind buttonKind, text, room string, ic
 	return b
 }
 
-// segmented is the design's segmented control: the chosen segment white on
-// dark (ink on light), the others muted. colors may tint a segment's label,
-// as Failed in red.
+// segmented is the design's segmented control, every switch between
+// options in the app: a capsule track whose chosen segment is filled, as
+// the search's tabs. colors may tint a segment's label, as Failed in red.
 func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []string, colors map[int]ui.Color) {
 	segmentedRoom(c, k, key, selected, labels, labels, colors)
 }
@@ -215,13 +216,21 @@ func segmentedRoom(c *ui.Context, k *Tokens, key string, selected *int, labels, 
 	segmentedTips(c, k, key, selected, labels, room, colors, nil)
 }
 
+// segmentSlide is how the fill goes from the segment left to the one
+// chosen, and the labels' colors with it.
+var segmentSlide = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond, Bounce: 0.05}}
+
 // segmentedTips is segmentedRoom with a tooltip on each segment that has
-// one in tips.
+// one in tips. The fill is painted on the track, under the labels, and
+// slides to the chosen segment's box as the last frame laid it out; a
+// segment not laid out yet fills itself.
 func segmentedTips(c *ui.Context, k *Tokens, key string, selected *int, labels, room []string, colors map[int]ui.Color, tips []string) {
 	s := ui.SegmentedBase(c.Key(key), selected, len(labels))
-	s.Track.Padding(padControl).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line).Children(func() {
+	track := s.Track.Height(groupRow).Padding(3).Radius(radiusFull).Background(k.Wash).AlignItems(ui.Center)
+	var chosen ui.Rect
+	track.Children(func() {
 		for i, l := range labels {
-			seg := s.Segment(i).PaddingX(10).PaddingY(2).Radius(radiusInner)
+			seg := s.Segment(i).Height(groupRow - 6).PaddingX(12).Radius(radiusFull).AlignItems(ui.Center)
 			if i < len(tips) && tips[i] != "" {
 				seg.Tooltip(tips[i])
 			}
@@ -229,22 +238,34 @@ func segmentedTips(c *ui.Context, k *Tokens, key string, selected *int, labels, 
 			if col, ok := colors[i]; ok {
 				fg = col
 			}
-			weight := 500
-			if i == *selected {
-				seg.Background(k.Pill).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.25))
-				fg, weight = k.PillInk, 600
+			switch {
+			case i == *selected:
+				fg = k.PillInk
+				if chosen = seg.LayoutBounds(); chosen.W <= 0 {
+					seg.Background(k.Pill)
+				}
+			case seg.Hovered():
+				seg.Background(k.Track)
 			}
-			// Each segment keeps the width of its bold label, so choosing one
-			// moves neither the others nor the track's edge.
+			fg = seg.AnimateColor("ink", fg, segmentSlide)
+			// Each segment keeps the width of its widest label.
 			seg.Cursor(ui.CursorPointer).Children(func() {
 				ui.Box(c).Children(func() {
-					ui.Text(c, room[i]).FontSize(12).FontWeight(600).FontFeatures("tnum").SingleLine().Invisible()
-					ui.Text(c, l).FontSize(12).FontWeight(weight).FontFeatures("tnum").TextColor(fg).SingleLine().TextAlign(ui.Center).
+					ui.Text(c, room[i]).FontSize(13.5).FontWeight(600).FontFeatures("tnum").SingleLine().Invisible()
+					ui.Text(c, l).FontSize(13.5).FontWeight(600).FontFeatures("tnum").TextColor(fg).SingleLine().TextAlign(ui.Center).
 						Absolute().Top(0).Left(0).Right(0)
 				})
 			})
 		}
 	})
+	if at := track.LayoutBounds(); chosen.W > 0 && at.W > 0 {
+		x := track.AnimateTo("x", chosen.X-at.X, segmentSlide)
+		w := track.AnimateTo("w", chosen.W, segmentSlide)
+		y, h := chosen.Y-at.Y, chosen.H
+		track.Draw(func(p *ui.Painter, r ui.Rect) {
+			p.Fill(ui.Rect{X: r.X + x, Y: r.Y + y, W: w, H: h}, k.Pill, radiusFull)
+		})
+	}
 }
 
 // toggle is a switch in the design's look.

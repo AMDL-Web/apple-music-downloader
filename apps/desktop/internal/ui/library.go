@@ -11,7 +11,9 @@ import (
 // libraryForm is the Library screen's own state: its Apple list as the
 // segmented control holds it, and the Apple playlists opened.
 type libraryForm struct {
-	apple  int
+	apple int
+	// kindAt is when another kind was chosen (appleMotion).
+	kindAt time.Time
 	opened map[string]bool
 	// appleLists are the places of the Apple lists, by kind, and addedAt
 	// when each Apple item's Add was clicked, by URL.

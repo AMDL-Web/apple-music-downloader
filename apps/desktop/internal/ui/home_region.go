@@ -25,7 +25,7 @@ func (a *App) searchRegion(c *ui.Context, k *Tokens) {
 	sel := max(slices.Index(regions, s.SearchRegion()), 0)
 	prev := sel
 	if len(regions) == 2 {
-		regionPair(c, k, &sel, labels)
+		segmented(c, k, "search-region", &sel, labels, nil)
 	} else {
 		regionMenu(c, k, &sel, labels)
 	}
@@ -33,25 +33,6 @@ func (a *App) searchRegion(c *ui.Context, k *Tokens) {
 		s.SetSearchRegion(regions[sel])
 		a.focusField = true
 	}
-}
-
-// regionPair is the two regions as one pill track in the tabs' colors, the
-// chosen one filled as the shown tab is.
-func regionPair(c *ui.Context, k *Tokens, sel *int, labels []string) {
-	s := ui.SegmentedBase(c.Key("search-region"), sel, len(labels))
-	s.Track.Height(groupRow).Padding(3).Radius(radiusFull).Background(k.Wash).AlignItems(ui.Center).Children(func() {
-		for i, l := range labels {
-			seg := s.Segment(i).Height(groupRow - 6).PaddingX(12).Radius(radiusFull).AlignItems(ui.Center).Label(l)
-			fg := k.Muted
-			if i == *sel {
-				seg.Background(k.Pill)
-				fg = k.PillInk
-			}
-			seg.Cursor(ui.CursorPointer).Children(func() {
-				ui.Text(c, l).FontSize(13.5).FontWeight(600).TextColor(fg).SingleLine()
-			})
-		}
-	})
 }
 
 // regionMenu is the chosen region in a pill like a tab that opens the list

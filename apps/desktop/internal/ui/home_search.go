@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,7 +38,24 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 	if since := c.Now().Sub(a.groupsAt); since < groupEnter {
 		c.After(groupEnter - since)
 	}
+	// With motion, the tab the frame before showed is shown for the whole
+	// of this frame, its groups leaving (searchGroups), however its change
+	// reached the store: a frame may build more than once, and a copy that
+	// goes fades as the frame's last build laid it out.
+	if now := c.Now(); !now.Equal(a.groupsFrame) {
+		a.groupsFrame, a.groupsLast = now, a.groupsShown
+	}
 	focus := q.Focus
+	if a.PageMotion {
+		focus = a.groupsLast
+	}
+	defer func() {
+		a.groupsShown = q.Focus
+		if focus != q.Focus {
+			// The next frame shows the tab now chosen.
+			c.After(time.Millisecond)
+		}
+	}()
 	a.followView(c, q.Artist.ID)
 	body := ui.Column(c).Width(width)
 	if q.Stale {
@@ -134,7 +152,7 @@ func groupTitle(g string) string { return strings.ToUpper(g[:1]) + g[1:] }
 var (
 	groupEase  = ui.Animation{Duration: 320 * time.Millisecond, Ease: ui.EaseInOut}
 	groupFade  = ui.Animation{Duration: 160 * time.Millisecond, Ease: ui.EaseOut}
-	groupClear = groupFade.Duration - 20*time.Millisecond
+	groupClear = groupFade.Duration
 	groupEnter = groupClear + groupEase.Duration + groupFade.Duration + 50*time.Millisecond
 
 	groupGlideLate = ui.Animation{Duration: groupEase.Duration, Ease: groupEase.Ease, Delay: groupClear}
@@ -219,8 +237,9 @@ func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.S
 	s := a.Store
 	q := &s.Search
 	type built struct {
-		g  string
-		el ui.Element
+		g       string
+		el      ui.Element
+		leaving bool
 	}
 	var groups [4]built
 	n := 0
@@ -230,17 +249,18 @@ func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.S
 		if focus != "" && !alone || focus == "" && (hg == nil || len(hg.Items) == 0) {
 			continue
 		}
+		leaving := q.Focus != focus && q.Focus != "" && g != q.Focus
 		el := ui.Column(c.Key(g)).Gap(14).Children(func() {
 			if !alone {
 				n := overviewCount(g, width)
 				q.SetOverview(g, n)
 				a.groupHead(c, k, g)
-				a.groupGrid(c, k, g, hg.Items[:min(n, len(hg.Items))], false, sel, width)
+				a.groupGrid(c, k, g, hg.Items[:min(n, len(hg.Items))], false, leaving, sel, width)
 				return
 			}
 			switch {
 			case hg != nil && len(hg.Items) > 0:
-				a.groupGrid(c, k, g, hg.Items, hg.NextOffset == 0, sel, width)
+				a.groupGrid(c, k, g, hg.Items, hg.NextOffset == 0, leaving, sel, width)
 			case hg != nil && hg.NextOffset > 0:
 				skeletonTiles(c, k, width, 5)
 			default:
@@ -250,11 +270,11 @@ func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.S
 				a.groupMore(c, k, g)
 			}
 		})
-		groups[n] = built{g, el}
+		groups[n] = built{g, el, leaving}
 		n++
 	}
 	for _, b := range groups[:n] {
-		b.el.Transition(a.groupMotion(c, b.g, q.Focus != focus && q.Focus != "" && b.g != q.Focus))
+		b.el.Transition(a.groupMotion(c, b.g, b.leaving))
 	}
 }
 
@@ -309,9 +329,10 @@ func (a *App) groupMore(c *ui.Context, k *Tokens, g string) {
 
 // groupGrid lays a group's hits out: songs as cards, the rest as tiles,
 // whole when they are all the group has (tileGrid). It moves as its group
-// does when the title over it goes.
-func (a *App) groupGrid(c *ui.Context, k *Tokens, g string, hits []client.SearchHit, whole bool, sel *client.SearchHit, width float32) {
-	ui.Column(c.Key("grid")).Transition(a.groupMotion(c, g, false)).Children(func() {
+// does when the title over it goes, and goes as quickly as its group when
+// that leaves.
+func (a *App) groupGrid(c *ui.Context, k *Tokens, g string, hits []client.SearchHit, whole, leaving bool, sel *client.SearchHit, width float32) {
+	ui.Column(c.Key("grid")).Transition(a.groupMotion(c, g, leaving)).Children(func() {
 		if g == "songs" {
 			a.songGrid(c, k, hits, sel, width)
 			return
@@ -346,8 +367,8 @@ func (a *App) focusGroup(group string) {
 // top as a tab opens; from further it jumps there.
 const groupGlideMax = 400
 
-// groupTabs are Overview and the four groups as pills, the one shown
-// filled, and the search's region at the right (searchRegion).
+// groupTabs are Overview and the four groups as one segmented track, and
+// the search's region at the right (searchRegion).
 func (a *App) groupTabs(c *ui.Context, k *Tokens) {
 	q := &a.Store.Search
 	ui.Row(c.Key("tabs-row")).FillWidth().Height(groupRow).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -369,32 +390,22 @@ func (a *App) regionRow(c *ui.Context, k *Tokens) {
 	})
 }
 
-// groupPills are the tabs of groupTabs.
+// groupPills are the tabs of groupTabs, one segmented track.
 func (a *App) groupPills(c *ui.Context, k *Tokens, q *store.Search) {
-	ui.Row(c.Key("tabs")).Height(groupRow).Gap(8).AlignItems(ui.Center).Children(func() {
-		for _, g := range append([]string{""}, store.SearchGroups...) {
-			on := g == q.Focus
-			name := "Overview"
-			if g != "" {
-				name = groupTitle(g)
-			}
-			t := ui.ButtonBase(c.Key("tab-" + g)).Height(groupRow).PaddingX(14).Radius(radiusFull).AlignItems(ui.Center).Label(name)
-			bg, fg := k.Wash, k.Fg
-			switch {
-			case on:
-				bg, fg = k.Pill, k.PillInk
-			case t.Hovered():
-				bg = k.Track
-			}
-			t.Background(bg)
-			if t.Clicked() {
-				a.focusGroup(g)
-			}
-			t.Cursor(ui.CursorPointer).Children(func() {
-				ui.Text(c, name).FontSize(13.5).FontWeight(600).TextColor(fg).SingleLine()
-			})
+	groups := append([]string{""}, store.SearchGroups...)
+	names := make([]string, len(groups))
+	for i, g := range groups {
+		names[i] = "Overview"
+		if g != "" {
+			names[i] = groupTitle(g)
 		}
-	})
+	}
+	sel := max(slices.Index(groups, q.Focus), 0)
+	prev := sel
+	segmented(c, k, "tabs", &sel, names, nil)
+	if sel != prev {
+		a.focusGroup(groups[sel])
+	}
 }
 
 // artistView is the open artist: its round cover, name and Download all

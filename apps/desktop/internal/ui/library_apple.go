@@ -43,6 +43,7 @@ func (a *App) appleList(c *ui.Context, k *Tokens) {
 		segmented(c, k, "apple", &f.apple, []string{"Albums", "Songs", "Playlists"}, nil)
 		if f.apple != prev {
 			s.SetAppleKind(store.AppleKinds[f.apple])
+			f.kindAt = c.Now()
 		}
 		ui.Spacer(c)
 		a.appleAccounts(c, k)
@@ -81,7 +82,7 @@ func (a *App) appleListState(kind string) *ui.ListState {
 
 // appleSongs is the Apple library's songs, a row each, built as they show.
 func (a *App) appleSongs(c *ui.Context, k *Tokens, items []domain.AppleLibraryItem) {
-	ui.Box(c.Key("apple-area")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
+	ui.Box(c.Key("apple-area-songs")).Grow(1).MinHeight(0).Background(k.Ground).Transition(a.appleMotion(c)).Children(func() {
 		st := a.scrollState(c, "apple-songs")
 		list := ui.List(c.Key("apple-songs"), a.appleListState("songs"), len(items), func(i int) {
 			a.appleRow(c, k, items[i])
@@ -89,6 +90,24 @@ func (a *App) appleSongs(c *ui.Context, k *Tokens, items []domain.AppleLibraryIt
 		a.fadeEdges(list, st)
 		a.noteView(list)
 	})
+}
+
+// swapFadeLate fades a kind's list in once the one it replaces has faded
+// out (groupFade), as the search's tabs go from one group to another.
+var swapFadeLate = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupFade.Duration}
+
+// appleMotion is the Transition of the Apple list of a kind: the one left
+// fades out, and the one chosen fades in after it, so the two never show
+// through each other. It is none without page motion.
+func (a *App) appleMotion(c *ui.Context) ui.ElementTransition {
+	if !a.PageMotion {
+		return ui.ElementTransition{}
+	}
+	t := ui.ElementTransition{Animation: &groupFade, Enter: &fadeOut, Exit: &fadeOut}
+	if c.Now().Sub(a.lib.kindAt) < 2*groupFade.Duration {
+		t.Animation = &swapFadeLate
+	}
+	return t
 }
 
 // appleGridGapY is the room between two rows of the Apple grid, as between
@@ -120,7 +139,7 @@ func (a *App) appleGrid(c *ui.Context, k *Tokens, items []domain.AppleLibraryIte
 			}
 		}
 	}
-	ui.Box(c.Key("apple-area")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
+	ui.Box(c.Key("apple-area-" + kind)).Grow(1).MinHeight(0).Background(k.Ground).Transition(a.appleMotion(c)).Children(func() {
 		st := a.scrollState(c, "apple-"+kind)
 		list := ui.List(c.Key("apple-"+kind), a.appleListState(kind), len(places), func(i int) {
 			p := places[i]

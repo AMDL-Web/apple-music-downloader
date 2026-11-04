@@ -173,9 +173,14 @@ type App struct {
 	keys struct{ toggle, field, home, queue, library, settings, tune func() }
 	// groupsAt is when the search last changed tab, from groupsFrom, which
 	// groupsMoved asks the next frame to note (tabChange).
-	groupsAt    time.Time
-	groupsFrom  string
-	groupsMoved bool
+	groupsAt time.Time
+	// groupsShown is the tab the search's last build asked for, and
+	// groupsLast the one the frame before showed, which the frame at
+	// groupsFrame shows (searchBody).
+	groupsShown, groupsLast string
+	groupsFrame             time.Time
+	groupsFrom              string
+	groupsMoved             bool
 	// viewArtist is the artist whose albums the search shows, "" for the
 	// results, since viewAt; viewScroll waits for the view going out to
 	// fade before the search scrolls (followView).
