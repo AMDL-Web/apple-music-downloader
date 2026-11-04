@@ -232,8 +232,10 @@ func (s *Store) RequestSlot(ctx context.Context, key domain.FileKey, now time.Ti
 			return struct{}{}, err
 		}
 		// A done main slot with no codec holds a file whose quality amdl
-		// never read: one adopted at the track's path, or a 1.x item that
-		// stored none. It may be exactly the asked-for quality, and a second
+		// does not know: one adopted at the track's path whose boxes could
+		// not be read or name only the AAC kind
+		// (internal/media#adoptedCodec), or a 1.x item that stored none. It
+		// may be exactly the asked-for quality, and a second
 		// slot would then download a byte-identical copy under a
 		// quality-suffixed name, so it counts as the track's copy of every
 		// quality until its codec is known.

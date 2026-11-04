@@ -1845,7 +1845,8 @@ paths:
           description: >-
             main_not_done: no asked-for track has its first quality done;
             quality_present: the first quality already is that codec, or is a
-            file of unknown quality (one adopted at the track's path).
+            file of unknown quality (one adopted at the track's path whose
+            codec could not be read).
           content:
             application/json:
               schema:

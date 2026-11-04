@@ -75,6 +75,15 @@ func (m simulatedMedia) statOutput(outPath string) (int64, bool) {
 	return statDiskOutput(outPath)
 }
 
+// outputEntry reads a real file; a simulated commit holds no boxes, so its
+// quality stays unknown.
+func (m simulatedMedia) outputEntry(outPath string) string {
+	if _, ok := m.outputs.stat(outPath); ok {
+		return ""
+	}
+	return realMedia{}.outputEntry(outPath)
+}
+
 func (simulatedMedia) rewriteLyrics(ctx context.Context, _, _ string) error {
 	return simulatePause(ctx, simulatedTagPause)
 }

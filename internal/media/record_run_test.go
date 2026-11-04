@@ -426,6 +426,47 @@ func TestRecordRunAdoptsAFileAtTheTarget(t *testing.T) {
 	}
 }
 
+// A file adopted at a track's path keeps the codec its boxes name, so
+// another quality of the track can still be added, and the same one cannot.
+func TestRecordRunRecordsTheCodecOfAnAdoptedFile(t *testing.T) {
+	cfg := recordTestConfig(t)
+	catalog := newRecordCatalog()
+	catalog.addAlbum("100", "Album", "Artist", 2, 2, 1000, "")
+	existing := filepath.Join(cfg.Download.DownloadsDir, "library", "Artist", "Album", "01. Song 1.m4a")
+	if err := os.MkdirAll(filepath.Dir(existing), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alac, err := os.ReadFile(writeALACInit(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(existing, alac, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := newRecordHarness(t, cfg, nil, catalog)
+	h.start()
+	h.submit("https://music.apple.com/cn/album/album/100")
+	h.waitFor("the album", h.albumComplete("100"))
+	h.waitFor("the run to end", h.idle())
+
+	adopted := h.files(domain.ResourceAlbum, "100")[0]
+	if adopted.AudioState != domain.AudioDone || adopted.Codec != "alac" || adopted.FileSize != int64(len(alac)) {
+		t.Fatalf("adopted slot = %+v, want done, alac, with the file's size", adopted)
+	}
+	if got, err := os.ReadFile(existing); err != nil || string(got) != string(alac) {
+		t.Fatalf("the adopted file changed: %v", err)
+	}
+	key := adopted.FileKey
+	key.Slot = "aac-lc"
+	if err := h.store.RequestSlot(context.Background(), key, time.Now()); err != nil {
+		t.Errorf("another quality of the adopted ALAC track: %v, want it added", err)
+	}
+	key.Slot = "alac"
+	if err := h.store.RequestSlot(context.Background(), key, time.Now()); !errors.Is(err, db.ErrQualityPresent) {
+		t.Errorf("ALAC again for the adopted ALAC track: %v, want ErrQualityPresent", err)
+	}
+}
+
 // Two editions whose template gives one path: the second fails with
 // path_taken before it downloads and is given up at once, and the first
 // edition's file is untouched.

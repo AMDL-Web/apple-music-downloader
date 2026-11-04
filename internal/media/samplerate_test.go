@@ -78,3 +78,62 @@ func TestFinalizeFillsAMissingSampleRateOnly(t *testing.T) {
 		})
 	}
 }
+
+// writeALACInit writes an MP4 whose only track is 24-bit ALAC at 48 kHz.
+func writeALACInit(t *testing.T) string {
+	t.Helper()
+	init := mp4.CreateEmptyInit()
+	trak := init.AddEmptyTrack(48000, "audio", "und")
+	cookie := &mp4.AlacBox{FrameLength: 4096, BitDepth: 24, Pb: 40, Mb: 10, Kb: 14, NumChannels: 2, MaxRun: 255, SampleRate: 48000}
+	trak.Mdia.Minf.Stbl.Stsd.AddChild(mp4.CreateAudioSampleEntryBox("alac", 2, 24, 0, cookie))
+	path := filepath.Join(t.TempDir(), "flat.m4a")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := init.Encode(f); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestReadSampleEntryNamesTheAudioCodecKind(t *testing.T) {
+	if got, err := readSampleEntry(writeALACInit(t)); err != nil || got != "alac" {
+		t.Errorf("ALAC file: readSampleEntry = %q, %v; want alac", got, err)
+	}
+	if got, err := readSampleEntry(writeAACInit(t, 44100)); err != nil || got != "mp4a" {
+		t.Errorf("AAC file: readSampleEntry = %q, %v; want mp4a", got, err)
+	}
+	notMP4 := filepath.Join(t.TempDir(), "flat.m4a")
+	if err := os.WriteFile(notMP4, []byte("hand placed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := readSampleEntry(notMP4); err == nil {
+		t.Errorf("readSampleEntry on a non-MP4 = %q, nil; want an error", got)
+	}
+}
+
+// An adopted file keeps the selected codec when it is of that codec's kind,
+// takes the one codec of its own kind when it is not, and stays unknown when
+// its kind (AAC) has several codecs or it could not be read.
+func TestAdoptedCodecReadsTheFileKind(t *testing.T) {
+	for _, tc := range []struct {
+		entry, selected, codec string
+		same                   bool
+	}{
+		{"alac", "alac", "alac", true},
+		{"mp4a", "aac-lc", "aac-lc", true},
+		{"mp4a", "aac", "aac", true},
+		{"ec-3", "ec3", "ec3", true},
+		{"alac", "aac-lc", "alac", false},
+		{"ec-3", "alac", "ec3", false},
+		{"ac-3", "alac", "ac3", false},
+		{"mp4a", "alac", "", false},
+		{"", "alac", "", false},
+	} {
+		if codec, same := adoptedCodec(tc.entry, tc.selected); codec != tc.codec || same != tc.same {
+			t.Errorf("adoptedCodec(%q, %q) = %q, %v; want %q, %v", tc.entry, tc.selected, codec, same, tc.codec, tc.same)
+		}
+	}
+}

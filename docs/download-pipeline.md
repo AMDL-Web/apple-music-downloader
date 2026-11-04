@@ -356,7 +356,10 @@ the same path fail the second with `path_taken` instead of overwriting the first
 
 The one stat left is at that claim (`internal/media#trackRun.handleExistingOutput`): a
 file already at the slot's path, put there by hand or by an earlier install, is adopted as
-the slot's file, `skipped_existing`, without a download. With `download.overwrite_existing`
+the slot's file, `skipped_existing`, without a download. The slot records the file's
+quality: the selected stream's when the file's audio sample entry is of the selected
+codec's kind, else the codec the entry names (`internal/media#adoptedCodec`); an entry it
+cannot read, or an AAC one under another selected codec, leaves the quality unknown. With `download.overwrite_existing`
 on, every run (an add, a retry, the library monitor) downloads the track instead and
 replaces that file. A reset of a done slot downloads it again to its stored path whatever
 the key. Either way the new file replaces the old one only once it is complete, then its

@@ -45,10 +45,14 @@ func (r *trackRun) handleExistingOutput(ctx context.Context, outPath string) (bo
 // adoptExisting finishes the item as skipped_existing: the track is already
 // at outPath, size bytes. The progress breakdown gets resolved and nothing
 // later: the catalog resolve is what produced outPath, and no later stage
-// ran.
+// ran. The item, and so its slot, keeps the quality of the file it adopts
+// (adoptedCodec).
 func (r *trackRun) adoptExisting(ctx context.Context, outPath string, size int64) {
 	item := &r.item
 	r.media.discardCheckpoint(r.owner, outPath)
+	if codec, same := adoptedCodec(r.media.outputEntry(outPath), item.Codec); !same {
+		item.Codec, item.BitDepth, item.SampleRate, item.Bitrate, r.quality = codec, 0, 0, 0, ""
+	}
 	item.OutputPath = domain.AbsolutePath(outPath)
 	item.Status = domain.ItemSkipped
 	markResolved(&item.Progress)
@@ -60,6 +64,33 @@ func (r *trackRun) adoptExisting(ctx context.Context, outPath string, size int64
 	r.d.persistTerminal(ctx, r.reporter, item, func() domain.Event {
 		return domain.Event{JobID: r.job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})}
 	})
+}
+
+// sampleEntryKinds is the audio sample entry type of each codec's file.
+var sampleEntryKinds = map[string]string{
+	"alac": "alac", "ec3": "ec-3", "ac3": "ac-3",
+	"aac": "mp4a", "aac-binaural": "mp4a", "aac-downmix": "mp4a", "aac-lc": "mp4a",
+}
+
+// adoptedCodec is the codec of a file adopted at a slot's path whose audio
+// sample entry is entry, when the run selected the codec selected: selected
+// when the file is of its kind (same; the selected stream then names its
+// quality), else the one codec of entry's kind, or "" when entry is unread or
+// of the AAC kind, whose codecs share one entry type. A slot whose codec is
+// "" counts as every quality (internal/db#Store.MarkFileDone).
+func adoptedCodec(entry, selected string) (codec string, same bool) {
+	if entry != "" && sampleEntryKinds[selected] == entry {
+		return selected, true
+	}
+	switch entry {
+	case "alac":
+		return "alac", false
+	case "ec-3":
+		return "ec3", false
+	case "ac-3":
+		return "ac3", false
+	}
+	return "", false
 }
 
 // outputLabels are the status messages and error prefixes of the finalize

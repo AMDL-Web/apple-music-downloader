@@ -367,10 +367,9 @@ func (r *trackRun) reportSlot(ctx context.Context, err error) {
 		out := db.FileOutcome{
 			Path: r.item.OutputPath, FileSize: r.item.FileSize, LyricsState: r.item.LyricsStatus,
 		}
-		if r.item.Status == domain.ItemCompleted {
-			out.Codec, out.QualityLabel = r.item.Codec, r.quality
-			out.BitDepth, out.SampleRate, out.Bitrate = r.item.BitDepth, r.item.SampleRate, r.item.Bitrate
-		}
+		// An adopted file's quality is the one adoptExisting left on the item.
+		out.Codec, out.QualityLabel = r.item.Codec, r.quality
+		out.BitDepth, out.SampleRate, out.Bitrate = r.item.BitDepth, r.item.SampleRate, r.item.Bitrate
 		r.writeSlot(ctx, log, "done", func(ctx context.Context) error { return r.record.SlotDone(ctx, r.job.ID, key, out) })
 		r.discardCheckpoint()
 	case err == nil:

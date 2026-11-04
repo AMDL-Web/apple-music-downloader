@@ -45,6 +45,9 @@ type mediaBackend interface {
 	// A file there is complete (finalizeToOutput), so a track run may adopt
 	// it (handleExistingOutput).
 	statOutput(outPath string) (size int64, ok bool)
+	// outputEntry is the audio sample entry type of the finished track at
+	// outPath (readSampleEntry), or "" when it cannot be read.
+	outputEntry(outPath string) string
 
 	// stage creates the scratch file a codec attempt flattens, verifies and
 	// tags before it is committed; cleanup removes whatever is left of it.
@@ -256,6 +259,12 @@ func (m realMedia) discardCheckpoint(owner, outPath string) {
 func (m realMedia) discardOutput(outPath string) { cleanupFailedOutput(outPath) }
 
 func (realMedia) statOutput(outPath string) (int64, bool) { return statDiskOutput(outPath) }
+
+func (realMedia) outputEntry(outPath string) string {
+	// An unreadable file is adopted all the same, with its quality unknown.
+	entry, _ := readSampleEntry(outPath)
+	return entry
+}
 
 func (m realMedia) stage(encryptedMedia) (stagedFile, func(), error) {
 	f, err := os.CreateTemp(m.cfg().Download.TempDir, "flat-*.m4a")

@@ -382,7 +382,7 @@ sets its failed, given-up and missing slots pending as a retry does, and answers
 "waiting"}` when no run takes the record now (a full queue, a record gone from the catalog). With `codec`, each track whose
 main slot is done gets that quality as another slot (`409 main_not_done` when none has its
 first quality, `409 quality_present` when the first quality is that codec or a file of
-unknown quality, such as one amdl adopted at the track's path). Pause cancels
+unknown quality, such as one amdl adopted at the track's path without reading its codec). Pause cancels
 the record's run, keeps its resume checkpoints and stops the scheduler from queuing it;
 resume queues its run again. Both answer the record, which names a queued or running run
 in `active_job_id`. Delete answers `204`; a record with a queued

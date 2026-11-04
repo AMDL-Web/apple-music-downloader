@@ -39,3 +39,33 @@ func readSampleRate(path string) (int, error) {
 	}
 	return 0, errors.New("no audio sample entry with a sample rate")
 }
+
+// readSampleEntry is the type of the audio sample entry of the MP4 at path
+// ("alac", "mp4a", "ec-3" or "ac-3"), reading box headers only, as
+// readSampleRate does.
+func readSampleEntry(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	file, err := mp4.DecodeFile(f, mp4.WithDecodeMode(mp4.DecModeLazyMdat))
+	if err != nil {
+		return "", fmt.Errorf("read MP4 boxes: %w", err)
+	}
+	if file.Moov == nil {
+		return "", errors.New("no moov box")
+	}
+	for _, trak := range file.Moov.Traks {
+		if trak.Mdia == nil || trak.Mdia.Minf == nil || trak.Mdia.Minf.Stbl == nil || trak.Mdia.Minf.Stbl.Stsd == nil {
+			continue
+		}
+		for _, entry := range trak.Mdia.Minf.Stbl.Stsd.Children {
+			switch t := entry.Type(); t {
+			case "alac", "mp4a", "ec-3", "ac-3":
+				return t, nil
+			}
+		}
+	}
+	return "", errors.New("no audio sample entry")
+}
