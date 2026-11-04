@@ -41,6 +41,7 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 	// A pinned record is read in the storefront its add named, so the
 	// account of that storefront decrypts it; an unpinned one in the default
 	// account's.
+	d.awaitWrapper(ctx)
 	if err := d.validateStorefront(ctx, storefront, which); err != nil {
 		return err
 	}

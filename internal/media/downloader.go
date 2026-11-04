@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/jobs"
 	"amdl/internal/limits"
+	"amdl/internal/logging"
 	"amdl/internal/usertoken"
 	"amdl/internal/wrapper"
 )
@@ -199,6 +201,47 @@ func (d *Downloader) requestStorefront(ctx context.Context, typ applemusic.URLTy
 		return "", "", false
 	}
 	return account, "the account storefront", true
+}
+
+// How long a run waits for a wrapper that does not answer or is not ready
+// yet, as when the backend starts it with runs to recover, and how often it
+// asks. Variables so tests can shorten them.
+var (
+	wrapperStartWait = 2 * time.Minute
+	wrapperStartPoll = 2 * time.Second
+)
+
+// awaitWrapper holds a run until the wrapper answers ready, for at most
+// wrapperStartWait or until ctx ends (a pause, a cancel, shutdown); the
+// run's validateStorefront then says what still stands in the way. A ready
+// wrapper whose account is logged out, or serves another storefront, is not
+// waited for: nothing would change by itself.
+func (d *Downloader) awaitWrapper(ctx context.Context) {
+	if d.cfg.Simulate.Enabled {
+		return
+	}
+	deadline := time.Now().Add(wrapperStartWait)
+	logged := false
+	for {
+		status, err := d.wrapper.Status(ctx)
+		if err == nil && status.Ready {
+			return
+		}
+		if ctx.Err() != nil || !time.Now().Before(deadline) {
+			return
+		}
+		if !logged {
+			logged = true
+			logging.FromContext(ctx, d.logger).Info("waiting for the wrapper before the run starts", "error", err)
+		}
+		timer := time.NewTimer(wrapperStartPoll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
 }
 
 // validateStorefront checks that the wrapper's account serves storefront,

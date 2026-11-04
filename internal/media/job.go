@@ -134,6 +134,7 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 
 	// The wrapper may change between submission and execution, so retain a
 	// defensive check even though Submit already validated this storefront.
+	d.awaitWrapper(ctx)
 	if err := d.validateStorefront(ctx, parsed.Storefront, "the link's storefront"); err != nil {
 		return err
 	}

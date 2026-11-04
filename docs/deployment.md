@@ -83,6 +83,8 @@ another port in the file fails the check; publish another host port with the com
 run. On SIGTERM the backend stops taking requests, ends open event streams, and stops
 its workers without cancelling their jobs: those stay `running` in the database and
 resume on the next start (`job_recovered`), skipping tracks whose files are already there.
+A run that starts while the wrapper does not answer yet, or is not ready, waits for it
+(`internal/media#Downloader.awaitWrapper`, about two minutes at most) before it fails.
 Partial transfers resume too while the container's `data/tmp` survives (a restart keeps
 it; recreating the container starts those tracks over). Each shutdown step is bounded,
 about 105 s in the worst case, so the container needs more than Docker's default 10 s:
