@@ -225,3 +225,49 @@ func TestTheQueueCountsDoneAndFailed(t *testing.T) {
 		}
 	}
 }
+
+// The store is Loaded once every tab's first read is in, whatever order
+// they land: the queue opens on All, and a Done or Failed answer first
+// must not end the loading while All's rows are still out.
+func TestTheStoreIsNotLoadedWhileATabIsStillBeingRead(t *testing.T) {
+	hold := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(hold) }) }
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if r.URL.Path == "/api/v1/library/albums" && q.Get("state") == "" && q.Get("flag") == "" && q.Get("limit") != "1" {
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/library/albums", "/api/v1/library/playlists":
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{}, "total": 0})
+		case "/api/v1/downloads":
+			_ = json.NewEncoder(w).Encode(client.DownloadList{Downloads: []domain.Job{}})
+		case "/api/v1/library/summary":
+			_ = json.NewEncoder(w).Encode(client.LibrarySummary{})
+		case "/api/v1/library/pending":
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{}})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	s, settle := live(t, h)
+	t.Cleanup(release)
+	s.ApplySnapshot(client.DownloadList{})
+	q := &s.Queue
+	settle(func() bool {
+		return q.countsIn && q.List(TabDone).Status == SearchReady && q.List(TabFailed).Status == SearchReady
+	})
+	if s.Loaded || q.Ready() {
+		t.Fatalf("loaded while All is still being read: All is %v", q.List(TabAll).Status)
+	}
+	release()
+	settle(func() bool { return s.Loaded })
+	if st := q.List(TabAll).Status; st != SearchReady {
+		t.Errorf("loaded with All %v, want ready", st)
+	}
+}

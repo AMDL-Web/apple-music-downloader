@@ -107,10 +107,9 @@ type QueueList struct {
 	counted      bool
 	countBusy    bool
 	countAgain   bool
-	// countsIn and listIn are set once the first read of the counts, and
-	// of a tab, landed or failed.
-	countsIn, listIn bool
-	open             bool
+	// countsIn is set once the first read of the counts landed or failed.
+	countsIn bool
+	open     bool
 }
 
 func (q *QueueList) reset() { *q = QueueList{} }
@@ -165,9 +164,20 @@ func (q *QueueList) SetCounts(done, failed int) { q.done, q.failed, q.counted = 
 func (q *QueueList) Counting() bool { return q.countBusy }
 
 // Ready reports whether the queue has what its first frame shows: the
-// counts and a tab's list, read or failed. A queue that follows no backend
-// is ready.
-func (q *QueueList) Ready() bool { return !q.open || (q.countsIn && q.listIn) }
+// counts and every tab's list, read or failed, for the tab shown is not
+// known and the reads land in any order. A queue that follows no backend is
+// ready.
+func (q *QueueList) Ready() bool {
+	if !q.open {
+		return true
+	}
+	for t := TabAll; t <= TabFailed; t++ {
+		if s := q.tabs[t].Status; t != TabActive && (s == SearchIdle || s == SearchLoading) {
+			return false
+		}
+	}
+	return q.countsIn
+}
 
 // noteLoaded sets Loaded once the snapshot and the queue's first reads are
 // in; it stays set.
@@ -349,8 +359,7 @@ func (q *QueueList) readTab(s *Store, t Tab) {
 			}
 		}
 		s.postIf(ctx, func() {
-			l.busy, q.listIn = false, true
-			s.noteLoaded()
+			l.busy = false
 			switch {
 			case err != nil && !l.read:
 				l.Status, l.Err = SearchFailed, Reason(err)
@@ -370,6 +379,7 @@ func (q *QueueList) readTab(s *Store, t Tab) {
 				}
 				l.read, l.Status, l.Err = true, SearchReady, ""
 			}
+			s.noteLoaded()
 			if l.again {
 				l.again = false
 				q.readTab(s, t)
@@ -383,7 +393,7 @@ func (q *QueueList) readTab(s *Store, t Tab) {
 // the counts: tests seed a store without a backend with it.
 func (s *Store) SeedQueue(records []Record) {
 	q := &s.Queue
-	q.open, q.counted, q.countsIn, q.listIn, q.done, q.failed = true, true, true, true, 0, 0
+	q.open, q.counted, q.countsIn, q.done, q.failed = true, true, true, 0, 0
 	for t := TabAll; t <= TabFailed; t++ {
 		l := &q.tabs[t]
 		*l = tabList{read: true, Status: SearchReady}
