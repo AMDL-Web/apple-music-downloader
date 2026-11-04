@@ -35,6 +35,10 @@ func (a *App) View(c *ui.Context) {
 	a.su.login.settle(a.Store.Login)
 	w, _ := c.Size()
 	a.followWidth(w)
+	if a.Screen != ScreenSetup {
+		a.Store.WatchAccounts()
+		c.After(store.ServerEvery)
+	}
 	// The setup screen has the window to itself; the sidebar keeps the
 	// user's choice for the screens after it.
 	inSetup := a.Screen == ScreenSetup

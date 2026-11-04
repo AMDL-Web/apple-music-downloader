@@ -45,9 +45,13 @@ type Config struct {
 	// restartSince.
 	stale        bool
 	restartSince time.Time
-	// tried is when the last read started: after a failed one the next
-	// waits ServerEvery, as the server's state does.
+	// tried is when the last read started: the next waits ServerEvery,
+	// whether it failed or not, as the server's state does, so a change made
+	// elsewhere (the console, the CLI) shows within it.
 	tried time.Time
+	// edits counts the answers that replaced Values with a newer
+	// configuration than a read sent before them can hold.
+	edits int
 	// pending holds the values on their way, which Value shows until the
 	// backend answers, and sent when each left.
 	pending map[string]any
@@ -93,16 +97,19 @@ const (
 )
 
 // WatchConfig reads the configuration when it has not been read on this
-// connection, the last read failed, or a restart made it stale.
+// connection, the last read is older than ServerEvery, or a restart made it
+// stale. Views that show it call it every frame, so a change made by
+// another client shows while one is on screen.
 func (s *Store) WatchConfig() {
 	cf := &s.Config
-	if s.client == nil || cf.reading || (cf.Values != nil && cf.Err == "" && !cf.stale) ||
-		(cf.Err != "" && s.now().Sub(cf.tried) < ServerEvery) ||
+	if s.client == nil || cf.reading ||
+		(cf.Values != nil && !cf.stale && s.now().Sub(cf.tried) < ServerEvery) ||
+		(cf.Values == nil && cf.Err != "" && s.now().Sub(cf.tried) < ServerEvery) ||
 		(cf.stale && s.now().Sub(cf.tried) < restartPoll) {
 		return
 	}
 	cf.reading, cf.tried = true, s.now()
-	c, ctx := s.client, s.ctx
+	c, ctx, edits := s.client, s.ctx, cf.edits
 	go func() {
 		var ans configAnswer
 		raw, err := c.Call(ctx, http.MethodGet, "/api/v1/config", nil, nil)
@@ -118,8 +125,12 @@ func (s *Store) WatchConfig() {
 				cf.Err, cf.stale, cf.Restarting = Reason(err), false, false
 				return
 			}
-			cf.Values, cf.Persisted, cf.Err, cf.PendingRestart, cf.Restarting = ans.Config, ans.Persisted, "", ans.PendingRestart, false
-			cf.stale = false
+			cf.Err, cf.Restarting, cf.stale = "", false, false
+			// A change answered while this read was out is newer than it.
+			if edits != cf.edits {
+				return
+			}
+			cf.Values, cf.Persisted, cf.PendingRestart = ans.Config, ans.Persisted, ans.PendingRestart
 		})
 	}()
 }
@@ -154,6 +165,7 @@ func (s *Store) SetConfig(key string, v any) {
 				return
 			}
 			cf.Values, cf.Persisted, cf.PendingRestart = ans.Config, ans.Persisted, ans.PendingRestart
+			cf.edits++
 			// Folders and switches show in the server's state, such as
 			// the free space of a new downloads folder.
 			s.refreshServer()
@@ -187,6 +199,7 @@ func (s *Store) ReloadConfig() {
 				cf.ReloadErr = ans.ReloadError
 			default:
 				cf.Values, cf.Persisted, cf.PendingRestart = ans.Config, ans.Persisted, ans.PendingRestart
+				cf.edits++
 				s.refreshServer()
 			}
 		})

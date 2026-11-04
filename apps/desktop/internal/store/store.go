@@ -84,6 +84,10 @@ type Store struct {
 	Login Login
 	// accountOps counts the account changes waiting for their answer.
 	accountOps int
+	// accountsRead is when the accounts were last read, by WatchAccounts or
+	// the server's state; accountsReading is set while a read is out.
+	accountsRead    time.Time
+	accountsReading bool
 
 	nextSeq   int
 	followers map[string]context.CancelFunc
@@ -118,6 +122,7 @@ func (s *Store) reset() {
 	s.Omni.reset()
 	s.Search.reset()
 	s.Server, s.Config, s.Login, s.accountOps = Server{}, Config{}, Login{}, 0
+	s.accountsRead, s.accountsReading = time.Time{}, false
 	s.Records.reset()
 	s.Queue.reset()
 	s.Library.reset()

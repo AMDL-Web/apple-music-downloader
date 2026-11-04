@@ -73,6 +73,33 @@ func (s *Store) AppleLibraryOn() bool {
 	return false
 }
 
+// WatchAccounts reads the accounts when the last read of them is older than
+// ServerEvery, whichever screen shows: the sidebar's Library follows the
+// accounts' Apple library switches, which another client may change. The
+// main window calls it every frame and redraws after ServerEvery.
+func (s *Store) WatchAccounts() {
+	if s.client == nil || s.accountsReading || s.now().Sub(s.accountsRead) < ServerEvery {
+		return
+	}
+	s.accountsReading = true
+	c, ctx := s.client, s.ctx
+	go func() {
+		v, err := c.ListAccounts(ctx)
+		s.postIf(ctx, func() {
+			s.accountsReading, s.accountsRead = false, s.now()
+			// A change on its way keeps the list it made; a failed read
+			// keeps the last one.
+			if err != nil || s.accountOps > 0 {
+				return
+			}
+			s.Server.Accounts = v.Accounts
+			if s.Server.Accounts == nil {
+				s.Server.Accounts = []client.Account{}
+			}
+		})
+	}()
+}
+
 // WatchServer reads the server's state when the last read is older than
 // ServerEvery. Views that show it call it every frame and redraw after
 // ServerEvery, so it reads only while one of them is on screen.
@@ -159,6 +186,9 @@ func (s *Store) WatchServerWithin(every time.Duration) {
 			// it: this read may have left before it.
 			if s.accountOps > 0 {
 				next.Accounts = sv.Accounts
+			}
+			if next.Accounts != nil {
+				s.accountsRead = s.now()
 			}
 			if next.System != nil {
 				next.Active = append(next.Active, next.System.Jobs.Active)

@@ -274,6 +274,66 @@ func TestAFailedConfigReadWaitsBeforeTheNext(t *testing.T) {
 	}
 }
 
+// A key another client changed shows within ServerEvery, while a view that
+// shows the configuration is on screen: the configuration is read again,
+// not once per connection.
+func TestAConfigChangedElsewhereShowsOnTheNextRead(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{"download": {"overwrite_existing": false}}}
+	s, settle := live(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Values != nil && !s.Config.reading })
+	if s.Config.Value("download.overwrite_existing") != false {
+		t.Fatalf("first read: %v", s.Config.Value("download.overwrite_existing"))
+	}
+	f.mu.Lock()
+	f.config["download"]["overwrite_existing"] = true
+	f.mu.Unlock()
+	// Within the interval the views' every-frame calls read nothing.
+	for range 5 {
+		s.WatchConfig()
+	}
+	if s.Config.reading {
+		t.Fatal("read again before ServerEvery")
+	}
+	now = now.Add(ServerEvery)
+	s.WatchConfig()
+	settle(func() bool { return !s.Config.reading })
+	if got := s.Config.Value("download.overwrite_existing"); got != true {
+		t.Errorf("after ServerEvery the setting reads %v, want the console's true", got)
+	}
+}
+
+// A read sent before this app's own change was answered never puts the old
+// value back.
+func TestAConfigReadSentBeforeAChangeDoesNotUndoIt(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{"download": {"max_attempts": 3}}}
+	s, settle := live(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Values != nil && !s.Config.reading })
+	now = now.Add(ServerEvery)
+	s.WatchConfig()
+	// The change is answered while that read is out.
+	s.Config.edits++
+	settle(func() bool { return !s.Config.reading })
+	if v := s.Config.Value("download.max_attempts"); v != float64(3) {
+		t.Fatalf("setup: %v", v)
+	}
+	f.mu.Lock()
+	f.config["download"]["max_attempts"] = 9
+	f.mu.Unlock()
+	now = now.Add(ServerEvery)
+	s.WatchConfig()
+	s.Config.edits++
+	settle(func() bool { return !s.Config.reading })
+	if v := s.Config.Value("download.max_attempts"); v != float64(3) {
+		t.Errorf("a read that left before the change landed set %v", v)
+	}
+}
+
 // A restart keeps the configuration on screen while the backend is down: the
 // reads that fail meanwhile set no Err and are retried, and the read that
 // answers clears PendingRestart and Restarting together.
