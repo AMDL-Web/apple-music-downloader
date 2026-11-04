@@ -8,15 +8,15 @@ import (
 )
 
 // An album page opened from a cover other than the queue hero's (a search
-// tile, a row, the wall, a song) grows out of that cover: it is an opaque
-// surface whose rounded box goes from the cover's box to the main column's,
+// tile, a row, the wall, a song) grows out of that cover: it is a surface
+// whose rounded box goes from the cover's box to the main column's,
 // with the page, title bar included, laid out at its full size from the
 // box's top-left corner, so what is on the page moves with it. The screen
 // under it stays whole, blurred and dimmed (motionTune), and nothing of the
 // two washes out over the other. The cover flies on q like the box, so it
-// stays inside it all the way; the page's light comes in from the plain
-// ground; its other parts fade in late, in place on the surface
-// (lateShown). Going out runs the same way back. The hero's page morphs
+// stays inside it all the way; the page's ground, its light and its other
+// parts come in late and together, in place on the surface (lateShown),
+// and turn it opaque. Going out runs the same way back. The hero's page morphs
 // into place instead (flight.go).
 
 // growLand is the q at which a page going back into its cover has landed.
@@ -35,15 +35,15 @@ func (a *App) lateShown() float32 {
 	return smoothstep(from, min(1, from+0.35), a.fly.q)
 }
 
-// groundGrown is how much of the growing page's ground shows: none at the
-// cover, all of it by the time the page's parts start to show (lateShown).
-// The box sets off larger than the cover at once, so an opaque ground
-// would show as a box over the tile beside it in the first frame.
+// groundGrown is how much of the growing page's ground shows: as much as
+// its parts (lateShown). The box is larger than the cover from the first
+// frame, so a ground ahead of the parts would lead the cover as an empty
+// box over the screen under it.
 func (a *App) groundGrown() float32 {
 	if !a.fly.growing() {
 		return 1
 	}
-	return smoothstep(0, a.tune.Text, a.fly.q)
+	return a.lateShown()
 }
 
 func smoothstep(a, b, x float32) float32 {

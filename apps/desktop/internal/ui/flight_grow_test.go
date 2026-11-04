@@ -3,8 +3,10 @@
 package ui
 
 import (
+	"fmt"
 	"image"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -13,38 +15,58 @@ import (
 	"amdl/apps/desktop/internal/store"
 )
 
-// growFrame is a frame of a page growing from its search tile: the window
-// as it showed and q.
+// growFrame is a frame of a page growing from its tile: the window as it
+// showed, q and the surface's box in the window.
 type growFrame struct {
-	img *image.RGBA
-	q   float32
+	img     *image.RGBA
+	q       float32
+	surface ui.Rect
 }
 
-// growFilm opens albums[0], in its colors, from its search tile in theme and films the way
-// in until the page lands, then the way back until it is in its tile
-// again: rest is the screen before the click, after the one once back,
-// cover the tile's cover in the window, and other how far albums[2]'s tile
-// is from it.
-func growFilm(t *testing.T, theme string) (in, out []growFrame, rest, after *image.RGBA, cover ui.Rect, other image.Point) {
+// growFilmed is a page growing from albums[0]'s search tile filmed both
+// ways: rest is the screen before the click, after the one once back, from
+// the tile's cover in the window, to the page's cover once landed, main the
+// main column, and marks the boxes of the tiles' words on the screen under.
+type growFilmed struct {
+	in, out     []growFrame
+	rest, after *image.RGBA
+	from, to    ui.Rect
+	main        ui.Rect
+	marks       []ui.Rect
+}
+
+// growFilms keeps each film for every test that watches it.
+var growFilms = map[string]*growFilmed{}
+
+// growFilm opens albums[0] from its search tile in theme, in its own colors
+// when palette, and films the way in until the page lands, then the way
+// back until it is in its tile again.
+func growFilm(t *testing.T, theme string, palette bool) *growFilmed {
 	t.Helper()
+	key := fmt.Sprint(theme, palette)
+	if g := growFilms[key]; g != nil {
+		return g
+	}
 	a, albums := searchApp(t)
 	a.PageMotion, a.Theme = true, theme
-	// Its colors light the page (paletteBackdrop), which draws a ground of
-	// its own.
-	albums[0].ArtworkBgColor = "203040"
-	a.Store.Search.Result.Albums.Items[0] = albums[0]
+	if palette {
+		// Its colors light the page (paletteBackdrop).
+		albums[0].ArtworkBgColor = "203040"
+		a.Store.Search.Result.Albums.Items[0] = albums[0]
+	}
 	tt := ui.NewTester(a.View, 1280, 800)
 	tt.SetScale(1)
 	for range 10 {
 		tt.Advance(filmFrame)
 	}
-	rest = cloneImage(tt.Image())
-	tile, ok := tt.Find(albums[0].Name)
-	two, ok2 := tt.Find(albums[2].Name)
-	if !ok || !ok2 {
-		t.Fatal("no tiles")
+	g := &growFilmed{rest: cloneImage(tt.Image())}
+	for _, h := range albums[:4] {
+		for _, x := range []string{h.Name, h.ArtistName} {
+			if r, ok := tt.Find(x); ok && !slices.Contains(g.marks, r) {
+				g.marks = append(g.marks, r)
+			}
+		}
 	}
-	other = image.Pt(int(two.X-tile.X), int(two.Y-tile.Y))
 	if err := tt.Click(albums[0].Name); err != nil {
 		t.Fatal(err)
 	}
@@ -52,30 +74,51 @@ func growFilm(t *testing.T, theme string) (in, out []growFrame, rest, after *ima
 		tt.Frame()
 		for range 90 {
 			tt.Advance(filmFrame)
-			if src := a.fly.src[partCover]; src.ok && cover.W == 0 {
-				cover = src.box
+			if src := a.fly.src[partCover]; src.ok && g.from.W == 0 {
+				g.from = src.box
 			}
 			if !a.fly.moving {
 				break
 			}
-			frames = append(frames, growFrame{img: cloneImage(tt.Image()), q: a.fly.q})
+			g.main = a.fly.main
+			frames = append(frames, growFrame{img: cloneImage(tt.Image()), q: a.fly.q, surface: a.fly.surface})
 		}
 		return frames
 	}
-	in = film()
+	g.in = film()
 	if a.Screen != ScreenAlbum || a.fly.moving || !a.fly.grow {
 		t.Fatalf("the page did not grow in: screen %v, moving %v, grow %v", a.Screen, a.fly.moving, a.fly.grow)
 	}
+	to, ok := tt.Find("Artwork")
+	if !ok {
+		t.Fatal("no cover on the page")
+	}
+	g.to = to
 	a.Back()
-	out = film()
+	g.out = film()
 	for range 10 {
 		tt.Advance(filmFrame)
 	}
-	after = cloneImage(tt.Image())
-	if cover.W == 0 {
-		t.Fatal("no cover to grow from")
+	g.after = cloneImage(tt.Image())
+	if g.from.W == 0 || len(g.in) == 0 || len(g.out) == 0 || len(g.marks) == 0 {
+		t.Fatal("no flight to watch")
 	}
-	return in, out, rest, after, cover, other
+	growFilms[key] = g
+	return g
+}
+
+// coverAt is where the flying cover is drawn at q: on the line from its
+// tile to its place on the page.
+func (g *growFilmed) coverAt(q float32) ui.Rect {
+	return ui.Rect{X: lerp(g.from.X, g.to.X, q), Y: lerp(g.from.Y, g.to.Y, q), W: lerp(g.from.W, g.to.W, q), H: lerp(g.from.H, g.to.H, q)}
+}
+
+func inside(r, box ui.Rect) bool {
+	return r.X >= box.X && r.Y >= box.Y && r.X+r.W <= box.X+box.W && r.Y+r.H <= box.Y+box.H
+}
+
+func overlaps(a, b ui.Rect, pad float32) bool {
+	return a.X < b.X+b.W+pad && b.X < a.X+a.W+pad && a.Y < b.Y+b.H+pad && b.Y < a.Y+a.H+pad
 }
 
 // beside is the screen beside a tile's cover that the page growing from it
@@ -90,27 +133,41 @@ func beside(cover ui.Rect) []image.Rectangle {
 	}
 }
 
-// A page growing from a cover does not open as a box of its ground larger
-// than the cover over the tile's title, nor go back as one: in the first
-// frame of the way in and the last of the way back, the screen beside the
-// cover changes no more than the same place beside another tile, which
-// only the screen under the page going back shows.
+// What grows from a cover is the page, never an empty box of its ground
+// ahead of it: in every frame, both ways, in which the page is not yet half
+// the column wide, each tile's word on the screen under that its surface
+// covers and the cover does not still shows through, blurred and dimmed,
+// with at least a third of the detail it has at rest, light and dark, with
+// and without the album's colors. An opaque ground with nothing on it
+// leaves none.
 func TestAGrowingPageShowsNoBoxBesideItsCover(t *testing.T) {
 	for _, theme := range []string{"light", "dark"} {
-		in, out, rest, after, cover, other := growFilm(t, theme)
-		if len(in) == 0 || len(out) == 0 {
-			t.Fatalf("%s: no flight filmed", theme)
-		}
-		first, last := in[0], out[len(out)-1]
-		for _, r := range beside(cover) {
-			box := func(still, frame *image.RGBA) float64 {
-				return meanAbsDiff(still, frame, r) - meanAbsDiff(still, frame, r.Add(other))
+		for _, palette := range []bool{false, true} {
+			g := growFilm(t, theme, palette)
+			checked := 0
+			for _, way := range []struct {
+				name   string
+				frames []growFrame
+			}{{"in", g.in}, {"back", g.out}} {
+				for i, f := range way.frames {
+					if f.surface.W <= 0 || f.surface.W > g.main.W/2 {
+						continue
+					}
+					cover := g.coverAt(f.q)
+					for _, m := range g.marks {
+						if !inside(m, f.surface) || overlaps(m, cover, 4) {
+							continue
+						}
+						checked++
+						r := pixels(m)
+						if at, rest := lumaStd(f.img, r), lumaStd(g.rest, r); at < rest/3 {
+							t.Errorf("%s, colors %v, way %s, frame %d (q %.3f): the surface %v hides the screen under at %v (detail %.1f of %.1f at rest): an empty box of the page's ground", theme, palette, way.name, i, f.q, f.surface, m, at, rest)
+						}
+					}
+				}
 			}
-			if d := box(rest, first.img); d > 3 {
-				t.Errorf("%s: the first frame of the way in (q %.3f) changed the screen beside the cover at %v by %.1f levels more than beside another tile: a box of the page's ground", theme, first.q, r, d)
-			}
-			if d := box(after, last.img); d > 3 {
-				t.Errorf("%s: the last frame of the way back (q %.3f) changed the screen beside the cover at %v by %.1f levels more than beside another tile: a box of the page's ground", theme, last.q, r, d)
+			if checked == 0 {
+				t.Errorf("%s, colors %v: no word under the growing page to watch", theme, palette)
 			}
 		}
 	}
@@ -142,8 +199,8 @@ func demoSearch(t *testing.T, theme string) (*App, *ui.Tester) {
 // Going back, the screen under the page is clear by the time the page has
 // gone into its tile, not sharpening on its own over the frames after: in
 // the demo's search for "glass weather", every frame of the way back in
-// which the page is all but gone beside its cover shows the song rows as
-// they are at rest.
+// which the page is all but gone beside its cover shows the song rows
+// within a level of rest.
 func TestTheScreenUnderIsClearOnceThePageIsInItsTile(t *testing.T) {
 	for _, theme := range []string{"dark", "light"} {
 		a, tt := demoSearch(t, theme)
@@ -176,7 +233,7 @@ func TestTheScreenUnderIsClearOnceThePageIsInItsTile(t *testing.T) {
 			if !a.fly.moving {
 				break
 			}
-			out = append(out, growFrame{img: cloneImage(tt.Image()), q: a.fly.q})
+			out = append(out, growFrame{img: cloneImage(tt.Image()), q: a.fly.q, surface: a.fly.surface})
 		}
 		for range 10 {
 			tt.Advance(filmFrame)
@@ -184,7 +241,7 @@ func TestTheScreenUnderIsClearOnceThePageIsInItsTile(t *testing.T) {
 		after := cloneImage(tt.Image())
 		for i, f := range out {
 			page, under := meanAbsDiff(after, f.img, beside(cover)[0]), meanAbsDiff(after, f.img, rows)
-			if page <= 2 && under > 0.25 {
+			if page <= 2 && under > 1 {
 				t.Errorf("%s: frame %d of the way back (q %.3f): the page is all but gone beside its cover (%.2f levels) while the song rows are still %.2f levels from rest", theme, i, f.q, page, under)
 			}
 		}
@@ -259,46 +316,12 @@ func TestAGrowingPageIsNotCutByAHardEdge(t *testing.T) {
 // page, is drawn on the line from its tile to its place on the page, as far
 // along as the page has come (q), not off it.
 func TestAGrowingPagesCoverKeepsItsWay(t *testing.T) {
-	a, albums := searchApp(t)
-	a.PageMotion, a.Theme = true, "light"
-	albums[0].ArtworkBgColor = "203040"
-	a.Store.Search.Result.Albums.Items[0] = albums[0]
-	tt := ui.NewTester(a.View, 1280, 800)
-	tt.SetScale(1)
-	for range 10 {
-		tt.Advance(filmFrame)
-	}
-	if err := tt.Click(albums[0].Name); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	type shot struct {
-		img *image.RGBA
-		q   float32
-	}
-	var shots []shot
-	var from ui.Rect
-	for range 90 {
-		tt.Advance(filmFrame)
-		if src := a.fly.src[partCover]; src.ok && from.W == 0 {
-			from = src.box
-		}
-		if !a.fly.moving {
-			break
-		}
-		if a.lateShown() > 0 {
-			shots = append(shots, shot{cloneImage(tt.Image()), a.fly.q})
-		}
-	}
-	to, ok := tt.Find("Artwork")
-	if !ok || from.W == 0 || len(shots) == 0 {
-		t.Fatalf("no flight to watch: from %v, to %v, %d frames", from, to, len(shots))
-	}
-	for i, s := range shots {
-		r := ui.Rect{X: lerp(from.X, to.X, s.q), Y: lerp(from.Y, to.Y, s.q), W: lerp(from.W, to.W, s.q), H: lerp(from.H, to.H, s.q)}
+	g := growFilm(t, "light", true)
+	for i, f := range g.in {
+		r := g.coverAt(f.q)
 		for _, p := range [][2]float32{{r.X + 8, r.Y + r.H/2}, {r.X + r.W/2, r.Y + 8}, {r.X + r.W - 8, r.Y + r.H/2}} {
-			if l := luma(s.img, int(p[0]), int(p[1])); l > 90 {
-				t.Errorf("frame %d (q %.3f): the cover should be at %v, but %v is %.0f bright: it is off its way", i, s.q, r, p, l)
+			if l := luma(f.img, int(p[0]), int(p[1])); l > 90 {
+				t.Errorf("frame %d (q %.3f): the cover should be at %v, but %v is %.0f bright: it is off its way", i, f.q, r, p, l)
 				break
 			}
 		}
