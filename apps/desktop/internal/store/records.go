@@ -159,7 +159,8 @@ func (s *Store) RecordMark(kind domain.ResourceKind, id string) *domain.Resource
 // paused with its album, anything else marks nothing. tracks is the
 // album's track count where the caller knows it (a hit's), else 0: an
 // album record that wants only some of its tracks reads partial while it
-// holds fewer than the album's (MarkTotal), so its Download adds the rest.
+// holds fewer than the album's (MarkTotal), so its Download adds the rest,
+// and so it does while it wants fewer (WantsMore) with a run in the queue.
 func MarkOf(r *domain.ResourceMark, song bool, tracks int) (MarkState, string) {
 	if r == nil {
 		return MarkNone, ""
@@ -179,6 +180,8 @@ func MarkOf(r *domain.ResourceMark, song bool, tracks int) (MarkState, string) {
 		return MarkNone, ""
 	}
 	switch {
+	case r.ActiveJobID != "" && WantsMore(r, tracks):
+		return MarkPartial, ""
 	case r.ActiveJobID != "":
 		return MarkActive, r.ActiveJobID
 	case r.Paused && r.State != domain.RecordComplete:
@@ -205,6 +208,14 @@ func MarkTotal(r *domain.ResourceMark, tracks int) int {
 		return max(r.TracksWanted, tracks-r.WithheldCount)
 	}
 	return r.TracksWanted
+}
+
+// WantsMore reports whether an album's add wants more of it than record
+// mark r does: r wants only the tracks added one by one, fewer than the
+// album's available ones. The backend accepts that add while r's run is in
+// the queue, and the run that follows downloads the rest.
+func WantsMore(r *domain.ResourceMark, tracks int) bool {
+	return r != nil && r.Kind == domain.ResourceAlbum && !r.WantedAll && tracks > 0 && r.TracksWanted < MarkTotal(r, tracks)
 }
 
 // HitRecord is the record a hit's mark reads, with the newest news: an

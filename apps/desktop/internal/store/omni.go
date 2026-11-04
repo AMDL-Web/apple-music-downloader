@@ -144,9 +144,13 @@ func (s *Store) lookup(ctx context.Context, c *client.Client, l *Link) {
 }
 
 // Running returns the queued or running job that downloads the same thing as
-// the link, or nil.
+// the link, or nil. An album's run that takes only songs added one by one
+// is not the album (WantsMore).
 func (s *Store) Running(l *Link) *Job {
 	if l.State != LinkReady {
+		return nil
+	}
+	if l.Lookup.Type == "album" && l.Lookup.Resource != nil && WantsMore(s.Latest(l.Lookup.Resource), l.Lookup.TrackCount) {
 		return nil
 	}
 	for _, j := range s.Jobs {

@@ -31,6 +31,11 @@ test("a record of songs added one by one is partial while its album has more", (
   assert.equal(resourceMark(oneSong).state, 'complete', 'without the album size the record says');
   assert.equal(resourceMark(album({ state: 'complete', tracks_done: 9 }), undefined, 20).state, 'complete', 'a whole-album record (wanted_all absent) is not stretched');
   assert.equal(resourceMark(oneSong, 'done', 3).state, 'complete', "a song reads its own track");
+  const running = { ...oneSong, state: 'none', tracks_done: 0, active_job_id: 'job_s' };
+  const withRun = resourceMark(running, undefined, 3);
+  assert.deepEqual([withRun.state, withRun.done, withRun.total, withRun.job], ['partial', 0, 2, { id: 'job_s' }], "a song's run does not hold the album: its Download adds the rest");
+  assert.equal(resourceMark(running, undefined, 2).state, 'active', 'a run of every available track is the album in the queue');
+  assert.equal(resourceMark(running).state, 'active', 'without the album size the run is the album in the queue');
 });
 
 test("a song is marked by its own track, not by its album's other tracks", () => {

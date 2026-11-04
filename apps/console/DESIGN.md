@@ -717,7 +717,8 @@ a reload or Back, stays) and the page writes its links back (replace), so a
   submit's `results[].resource` taken at once (`lib/marks.js`
   `resourceMark`, `views/download-mark.js`): "In the queue now", "Paused",
   "In your library" or "9/12 in your library", a song by its own track's
-  state; Open goes to the run while one is queued or running, else to the
+  state, and an album whose record wants only songs added one by one by
+  those songs, so it reads partial while their run is in the queue; Open goes to the run while one is queued or running, else to the
   record. When a song link's album run ends, the link is looked up again in
   the background (`createLookupQueue` `refresh`, which keeps the shown
   answer meanwhile); coming back to the page reads every answer that names

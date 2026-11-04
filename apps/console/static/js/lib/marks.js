@@ -21,7 +21,7 @@ const WAITING = new Set(['pending', 'running', 'failed']);
  * `tracks`, its track count where known: a record that wants only the
  * songs added one by one (wanted_all false) is out of the album's
  * available tracks then, so with all of its own done it is still partial
- * and its Download adds the rest.
+ * and its Download adds the rest, with a run queued or running too.
  */
 export function resourceMark(resource, songState, tracks) {
   const r = resource && typeof resource === 'object' && resource.kind && resource.id ? resource : null;
@@ -41,7 +41,10 @@ export function resourceMark(resource, songState, tracks) {
   const songsOnly = r.kind === 'album' && r.wanted_all === false && Number(tracks) > 0;
   const total = songsOnly ? Math.max(wanted, Number(tracks) - withheld) : wanted;
   const base = { done, total, withheld, job, resource: ref };
-  if (job) return { state: 'active', ...base };
+  // The run of a record that wants only some of the album's tracks does not
+  // take the rest; the backend accepts the album's add then, so it reads
+  // partial and its Download adds the rest.
+  if (job) return { state: songsOnly && total > wanted ? 'partial' : 'active', ...base };
   if (r.paused && r.state !== 'complete') return { state: 'paused', ...base };
   if (r.state === 'complete' && done < total) return { state: 'partial', ...base };
   if (r.state === 'complete' || r.state === 'partial') return { state: r.state, ...base };

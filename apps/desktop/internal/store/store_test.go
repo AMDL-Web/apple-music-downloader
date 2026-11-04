@@ -315,3 +315,31 @@ func TestActivityListsEachEventOnceNewestFirst(t *testing.T) {
 		t.Errorf("activity %q, want %q", got, want)
 	}
 }
+
+// A run of an album record that wants only the songs added one by one does
+// not hold the album: its link and its hit offer the add, which the backend
+// accepts, and a run of the whole album still holds them.
+func TestASongsRunLeavesItsAlbumToAdd(t *testing.T) {
+	s, _ := newTestStore(t)
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
+		{ID: "j", Type: "album", Status: domain.JobRunning, Input: "https://music.apple.com/cn/album/x/1858184006"},
+	}})
+	song := &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1858184006", State: domain.RecordNone, TracksWanted: 1, ActiveJobID: "j"}
+	l := &Link{State: LinkReady, Lookup: client.Lookup{Type: "album", ID: "1858184006", TrackCount: 5, Resource: song}}
+	if j := s.Running(l); j != nil {
+		t.Errorf("the album link of a one-song record is running %s, want it ready", j.ID)
+	}
+	hit := client.SearchHit{Type: "album", ID: "1858184006", TrackCount: 5, Resource: song}
+	if m, _ := s.HitMark(hit); m != MarkPartial {
+		t.Errorf("the album hit of a one-song record reads %v, want partial", m)
+	}
+	whole := *song
+	whole.WantedAll, whole.TracksWanted = true, 5
+	l.Lookup.Resource, hit.Resource = &whole, &whole
+	if j := s.Running(l); j == nil || j.ID != "j" {
+		t.Errorf("the album link of a whole-album run is running %v, want j", j)
+	}
+	if m, id := s.HitMark(hit); m != MarkActive || id != "j" {
+		t.Errorf("the album hit of a whole-album run reads %v %q, want active j", m, id)
+	}
+}
