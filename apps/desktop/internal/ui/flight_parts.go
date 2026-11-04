@@ -114,6 +114,21 @@ func (a *App) flyFade(el ui.Element) {
 	}
 }
 
+// flyFadeClear fades el in with the album page as flyFade does, but not
+// before the screen under the page is gone (cross): el is a control that
+// screen shows too, as the page's Pause is the queue hero's, which would
+// otherwise show twice as the two cross. Going out the page's parts are
+// gone before the screen under shows again (outParts).
+func (a *App) flyFadeClear(el ui.Element) {
+	f := &a.fly
+	if f.growing() || !f.moving || f.out {
+		a.flyFade(el)
+		return
+	}
+	from := max(f.partsFrom(), inCross)
+	f.fade(el, unit((f.q-from)/(1-from)))
+}
+
 // fade shows el, which fades in or out in a flight, at opacity op, and
 // blurred as far as it has faded, up to flightBlur: it goes soft as it goes.
 // Whole, or gone, it is not blurred, which costs a layer; nor while the
