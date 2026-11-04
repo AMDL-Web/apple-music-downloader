@@ -125,10 +125,11 @@ type App struct {
 	fly flight
 	// tune is how the album page grows, which the tuning panel changes.
 	tune motionTune
-	// Tab is the queue's filter, and tabShown the one its list last read
-	// for.
+	// Tab is the queue's filter, tabShown the one its list last read for,
+	// and tabAt when the list last changed filter (switchMotion).
 	Tab      int
 	tabShown int
+	tabAt    time.Time
 
 	// winW is the window's width as last built; compact is set while the
 	// page is narrower than compactContent. openNarrow is set while the

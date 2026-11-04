@@ -35,6 +35,23 @@ func switching(c *ui.Context, at time.Time) bool {
 	return true
 }
 
+// switchMotion is the Transition of el, what a switch made at at shows as
+// a whole, keyed by the choice and the state it is in: the Library's list
+// of a kind, the queue's list of a filter, or what stands for either while
+// there is none. Only el's first frame is given switchIn, which it enters
+// with: one chosen again before the switch settles goes out with
+// switchOut. Outside a switch, what comes shows at once. It is none
+// without page motion.
+func (a *App) switchMotion(c *ui.Context, el ui.Element, at time.Time) ui.ElementTransition {
+	switch {
+	case !a.PageMotion:
+		return ui.ElementTransition{}
+	case switching(c, at) && fresh(el):
+		return ui.ElementTransition{Animation: &switchIn, Enter: &fadeOut, Exit: &fadeOut}
+	}
+	return ui.ElementTransition{Animation: &switchOut, Exit: &fadeOut}
+}
+
 // fresh reports whether el is new in this frame: no frame before laid it
 // out.
 func fresh(el ui.Element) bool { return el.LayoutBounds().W <= 0 }

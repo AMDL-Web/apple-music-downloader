@@ -117,3 +117,159 @@ func TestASearchTabSwitchShowsNoGap(t *testing.T) {
 		tt.Advance(time.Second)
 	}
 }
+
+// switchShape is when a filmed switch's old content has faded below half
+// of what it showed before (out) and its new content risen past half of
+// what it ends on (in), in frames.
+func switchShape(before int, film []int) (out, in int) {
+	out, low := -1, 0
+	for i, n := range film {
+		if out < 0 && n < before/2 {
+			out = i
+		}
+		if n < film[low] {
+			low = i
+		}
+	}
+	last := film[len(film)-1]
+	in = -1
+	for i := low; i < len(film); i++ {
+		if film[i]-film[low] >= (last-film[low])/2 {
+			in = i
+			break
+		}
+	}
+	return out, in
+}
+
+// startsWith is the first text of tt that starts with prefix, as a
+// segment whose label carries a count.
+func startsWith(t *testing.T, tt *ui.Tester, prefix string) string {
+	t.Helper()
+	for _, x := range tt.Texts() {
+		if len(x) >= len(prefix) && x[:len(prefix)] == prefix {
+			return x
+		}
+	}
+	t.Fatalf("no %q…: %q", prefix, tt.Texts())
+	return ""
+}
+
+// Changing what a screen shows with its segmented control moves alike on
+// every screen: the search's tabs, the Library's kinds and the queue's
+// filters fade the old content out and the new in on the same frames, with
+// no stretch showing neither, and settle with the capsule's fill.
+func TestEverySwitchMovesAlike(t *testing.T) {
+	type shot struct {
+		name        string
+		before      int
+		film        []int
+		outAt, inAt int
+	}
+	var shots []shot
+	film := func(name string, tt *ui.Tester, click string, area image.Rectangle) {
+		before, f := switchFilm(t, tt, click, area, 40)
+		out, in := switchShape(before, f)
+		shots = append(shots, shot{name, before, f, out, in})
+	}
+
+	// The search, from Albums to Songs.
+	a, run := demoApp(t)
+	a.Screen, a.PageMotion, a.Theme = ScreenHome, true, "dark"
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	s := a.Store
+	s.SetOmniText("glass weather")
+	tt.Frame()
+	run(func() bool { tt.Frame(); return s.Search.Status == store.SearchReady })
+	run(func() bool {
+		tt.Advance(50 * time.Millisecond)
+		return a.Art.Get(s.Search.ShownHits()[0].ArtworkURL, 512) != nil
+	})
+	if err := tt.Click("Albums"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	tabs, _ := tt.Find("Overview")
+	film("search", tt, "Songs", image.Rect(int(tabs.X), int(tabs.Y+tabs.H+8), 1280-24, 800-24))
+
+	// The Library, from Albums to Songs, each kind read once before.
+	a, run = demoApp(t)
+	a.PageMotion, a.Theme = true, "dark"
+	run(func() bool { return a.Store.Loaded })
+	a.Go(ScreenLibrary)
+	tt = ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	l := &a.Store.Library
+	read := func(kind string) {
+		if kind != "Albums" || l.AppleStatus == store.SearchReady {
+			if err := tt.Click(kind); err != nil {
+				t.Fatal(err)
+			}
+		}
+		run(func() bool { tt.Advance(50 * time.Millisecond); return l.AppleStatus == store.SearchReady })
+		for range 20 {
+			run(func() bool { return true })
+			tt.Advance(50 * time.Millisecond)
+		}
+	}
+	tt.Frame()
+	for _, kind := range []string{"Albums", "Songs", "Albums"} {
+		read(kind)
+	}
+	seg, _ := tt.Find("Albums")
+	film("library", tt, "Songs", image.Rect(0+int(seg.X)-12, int(seg.Y+seg.H+12), 1280-24, 800-24))
+
+	// The queue, from All to Done, each filter read once before.
+	a, run = demoApp(t)
+	a.PageMotion, a.Theme = true, "dark"
+	run(func() bool { return a.Store.Loaded && a.heroJob() != nil })
+	a.Go(ScreenQueue)
+	tt = ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	settle := func() {
+		for range 20 {
+			run(func() bool { return true })
+			tt.Advance(50 * time.Millisecond)
+		}
+	}
+	settle()
+	for _, f := range []string{"Done", "All"} {
+		if err := tt.Click(startsWith(t, tt, f)); err != nil {
+			t.Fatal(err)
+		}
+		settle()
+	}
+	all, _ := tt.Find("All")
+	area := image.Rect(int(all.X)-12, int(all.Y+all.H+12), 1280-24, 800-24)
+	film("queue", tt, startsWith(t, tt, "Done"), area)
+
+	// A filter chosen while the last switch still runs goes out as quickly:
+	// the list coming in fades out before the next shows, not through it.
+	tt.Advance(time.Second)
+	if err := tt.Click("All"); err != nil {
+		t.Fatal(err)
+	}
+	for range 6 {
+		tt.Advance(filmFrame)
+		tt.Frame()
+	}
+	before, again := switchFilm(t, tt, startsWith(t, tt, "Failed"), area, 12)
+	if shows := max(again[1], again[2]); shows > before/10 {
+		t.Errorf("chosen again 100 ms into a switch, the list coming in still shows %d of %d two frames later (%v)", shows, before, again)
+	}
+
+	for _, sh := range shots {
+		t.Logf("%s: out by frame %d, in by %d: %v", sh.name, sh.outAt, sh.inAt, sh.film)
+		if n := blankRun(sh.before, sh.film); n > 3 {
+			t.Errorf("%s: %d frames show neither (%v, before %d)", sh.name, n, sh.film, sh.before)
+		}
+		if at := settledBy(sh.film); at > 24 {
+			t.Errorf("%s: settles at frame %d, past 400 ms (%v)", sh.name, at, sh.film)
+		}
+		if d := sh.outAt - shots[0].outAt; d < -1 || d > 1 || sh.inAt-shots[0].inAt < -1 || sh.inAt-shots[0].inAt > 1 {
+			t.Errorf("%s: the old content fades by frame %d and the new by %d; the search's by %d and %d (%v, before %d)",
+				sh.name, sh.outAt, sh.inAt, shots[0].outAt, shots[0].inAt, sh.film, sh.before)
+		}
+	}
+}

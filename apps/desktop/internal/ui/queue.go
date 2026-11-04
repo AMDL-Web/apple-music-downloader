@@ -155,7 +155,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	if s.Loaded {
 		s.OpenQueue(tab)
 		if a.tabShown != a.Tab {
-			a.tabShown = a.Tab
+			a.tabShown, a.tabAt = a.Tab, c.Now()
 			s.ShowQueueTab(tab)
 		}
 	}
@@ -222,17 +222,38 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 			}
 		})
 	})
-	if !upNext && len(rows) == 0 && len(adds) == 0 {
-		switch {
-		case tab != store.TabActive && l.Status == store.SearchFailed:
-			queueFailed(c, k, l.Err, func() { s.RetryQueue(tab) })
-		case tab != store.TabActive && l.Status != store.SearchReady:
-			// The first read is out; what it brings takes the room.
-		default:
-			a.emptyQueue(c, k, latest != nil)
-		}
-		return
+	// What the filter shows changes as a switch does: its list, or what
+	// stands for it.
+	state := "list"
+	switch {
+	case upNext || len(rows) > 0 || len(adds) > 0:
+	case tab != store.TabActive && l.Status == store.SearchFailed:
+		state = "failed"
+	case tab != store.TabActive && l.Status != store.SearchReady:
+		// The first read is out; what it brings takes the room.
+		state = "reading"
+	default:
+		state = "empty"
 	}
+	shown := ui.Column(c.Key(fmt.Sprintf("queue-%d-%s", tab, state))).Grow(1).MinHeight(0)
+	shown.Transition(a.switchMotion(c, shown, a.tabAt)).Children(func() {
+		switch state {
+		case "failed":
+			queueFailed(c, k, l.Err, func() { s.RetryQueue(tab) })
+		case "empty":
+			a.emptyQueue(c, k, latest != nil)
+		case "list":
+			a.queueList(c, k, tab, rows, more, adds, running, queued, compact)
+		}
+	})
+}
+
+// queueList is the queue's list of filter tab: Up next, the failed adds,
+// then rows, one each, newest activity first, page after page.
+func (a *App) queueList(c *ui.Context, k *Tokens, tab store.Tab, rows []store.QueueRow, more bool, adds []domain.PendingAdd, running, queued []*store.Job, compact bool) {
+	s := a.Store
+	l := s.Queue.List(tab)
+	upNext := len(running)+len(queued) > 0
 	// The list's items: Up next as one, the failed adds as one, the
 	// heading of the rest, then the rest one by one, and the row that says
 	// a next page failed.
