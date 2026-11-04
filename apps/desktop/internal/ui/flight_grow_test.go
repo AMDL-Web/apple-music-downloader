@@ -27,16 +27,17 @@ type growFrame struct {
 }
 
 // growFilmed is a page growing from the first tile of a search or the
-// library filmed both ways: rest is the screen before the click, after the
-// one once back, from the tile's cover in the window, to the page's cover
-// once landed, main the main column, and marks the boxes of the tiles'
-// words on the screen under.
+// library, or the queue's last recent cover, filmed both ways: rest is the
+// screen before the click, landed the page once in, after the screen once
+// back, from the cover clicked in the window, to the page's cover once
+// landed, main the main column, and marks the boxes of the tiles' words on
+// the screen under.
 type growFilmed struct {
-	in, out     []growFrame
-	rest, after *image.RGBA
-	from, to    ui.Rect
-	main        ui.Rect
-	marks       []ui.Rect
+	in, out             []growFrame
+	rest, landed, after *image.RGBA
+	from, to            ui.Rect
+	main                ui.Rect
+	marks               []ui.Rect
 }
 
 // growFilms keeps each film for every test that watches it.
@@ -44,8 +45,9 @@ var growFilms = map[string]*growFilmed{}
 
 // growFilm opens the first album of scene, "search" or the demo's
 // "library", from its tile in theme, in its own colors when palette (the
-// search's), and films the way in until the page lands, then the way back
-// until it is in its tile again.
+// search's), or, in the demo's "queue", the last of its recent covers, and
+// films the way in until the page lands, then the way back until it is in
+// its cover again.
 func growFilm(t *testing.T, scene, theme string, palette bool) *growFilmed {
 	t.Helper()
 	key := fmt.Sprint(scene, theme, palette)
@@ -55,7 +57,34 @@ func growFilm(t *testing.T, scene, theme string, palette bool) *growFilmed {
 	var a *App
 	var tt *ui.Tester
 	var words [][2]string
-	if scene == "library" {
+	var click func()
+	switch scene {
+	case "queue":
+		var run func(func() bool)
+		a, run = demoApp(t)
+		a.PageMotion, a.Theme = true, theme
+		s := a.Store
+		run(func() bool { return s.Loaded && len(s.Finished()) > 1 })
+		fin := s.Finished()
+		j := fin[len(fin)-1]
+		a.Go(ScreenQueue)
+		tt = ui.NewTester(a.View, 1280, 800)
+		tt.SetScale(1)
+		run(func() bool {
+			tt.Advance(filmFrame)
+			return a.Art.Get(j.ArtworkURL, 160) != nil && a.Art.Get(j.ArtworkURL, 512) != nil
+		})
+		tt.Advance(time.Second)
+		r, ok := tt.Find(j.Name())
+		if !ok {
+			t.Fatalf("no recent cover %q", j.Name())
+		}
+		click = func() {
+			tt.Move(r.X+r.W/2, r.Y+r.H/2)
+			tt.Advance(time.Second)
+			tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+		}
+	case "library":
 		var run func(func() bool)
 		a, run = demoApp(t)
 		a.PageMotion, a.Theme = true, theme
@@ -79,7 +108,7 @@ func growFilm(t *testing.T, scene, theme string, palette bool) *growFilmed {
 			tt.Advance(250 * time.Millisecond)
 			return tt.HasText(words[0][0])
 		})
-	} else {
+	default:
 		var albums []client.SearchHit
 		a, albums = searchApp(t)
 		a.PageMotion, a.Theme = true, theme
@@ -106,7 +135,9 @@ func growFilm(t *testing.T, scene, theme string, palette bool) *growFilmed {
 			}
 		}
 	}
-	if err := tt.Click(words[0][0]); err != nil {
+	if click != nil {
+		click()
+	} else if err := tt.Click(words[0][0]); err != nil {
 		t.Fatalf("%v: %q", err, tt.Texts())
 	}
 	film := func() (frames []growFrame) {
@@ -132,14 +163,14 @@ func growFilm(t *testing.T, scene, theme string, palette bool) *growFilmed {
 	if !ok {
 		t.Fatal("no cover on the page")
 	}
-	g.to = to
+	g.to, g.landed = to, cloneImage(tt.Image())
 	a.Back()
 	g.out = film()
 	for range 10 {
 		tt.Advance(filmFrame)
 	}
 	g.after = cloneImage(tt.Image())
-	if g.from.W == 0 || len(g.in) == 0 || len(g.out) == 0 || len(g.marks) == 0 {
+	if g.from.W == 0 || len(g.in) == 0 || len(g.out) == 0 || len(g.marks) == 0 && scene != "queue" {
 		t.Fatal("no flight to watch")
 	}
 	growFilms[key] = g
@@ -249,6 +280,76 @@ func TestAGrowingPageIsNeitherAnEmptyBoxNorAVeil(t *testing.T) {
 	}
 }
 
+// flat reports whether img is plain around (x, y): its luma within 4
+// levels over the pixels as far as r from there, as on a ground or a
+// smooth light, not on a word's stroke or a cover's edge.
+func flat(img *image.RGBA, x, y, r int) bool {
+	b := img.Bounds()
+	if x < b.Min.X+r || y < b.Min.Y+r || x >= b.Max.X-r || y >= b.Max.Y-r {
+		return true
+	}
+	lo, hi := 255.0, 0.0
+	for dy := -r; dy <= r; dy++ {
+		for dx := -r; dx <= r; dx++ {
+			l := luma(img, x+dx, y+dy)
+			lo, hi = min(lo, l), max(hi, l)
+		}
+	}
+	return hi-lo < 4
+}
+
+// A growing page shows no more of its ground than its content fills: in
+// every frame, both ways, of a page growing from a search tile, a library
+// tile and a recent cover in the queue, light and dark, beside the flying
+// cover and in from the edges its parts fade at, the surface shows plain
+// ground where the landed page, around its cover and at its cover's size,
+// shows something (a stroke, an edge, or, once its parts are all in, a
+// shade far from it) over no more than a fifth of the flying cover's area.
+func TestAGrowingPageShowsNoGroundItsContentDoesNotFill(t *testing.T) {
+	for _, film := range []struct{ scene, theme string }{
+		{"search", "light"}, {"search", "dark"}, {"library", "light"}, {"library", "dark"}, {"queue", "light"}, {"queue", "dark"},
+	} {
+		g := growFilm(t, film.scene, film.theme, false)
+		for _, way := range []struct {
+			name   string
+			frames []growFrame
+		}{{"in", g.in}, {"back", g.out}} {
+			for i, f := range way.frames {
+				sf := f.surface
+				cover := g.coverAt(f.q)
+				if sf.W <= 0 || cover.W <= 0 {
+					continue
+				}
+				k := g.to.W / cover.W
+				empty := float32(0)
+				for y := int(sf.Y) + 1; y < int(sf.Y+sf.H-growBand); y += 2 {
+					for x := int(sf.X) + 1; x < int(sf.X+sf.W-growBand); x += 2 {
+						p := ui.Rect{X: float32(x), Y: float32(y)}
+						// Plain a little further round than the page's
+						// pixel, which its scale draws smaller.
+						if overlaps(p, cover, 4) || !flat(f.img, x, y, 2) {
+							continue
+						}
+						// Where the landed page shows what lies there
+						// from its cover, at its cover's size.
+						lx := int(g.to.X + (float32(x)-cover.X)*k)
+						ly := int(g.to.Y + (float32(y)-cover.Y)*k)
+						if lx < int(g.main.X) || ly < int(g.main.Y) || lx >= int(g.main.X+g.main.W) || ly >= int(g.main.Y+g.main.H) {
+							continue
+						}
+						if !flat(g.landed, lx, ly, 1) || f.parts >= 0.99 && math.Abs(luma(f.img, x, y)-luma(g.landed, lx, ly)) > 80 {
+							empty += 4
+						}
+					}
+				}
+				if area := cover.W * cover.H; empty > area/5 {
+					t.Errorf("%s, %s, way %s, frame %d (q %.3f): %.0f px of the surface %v is plain ground where the page shows something, more than a fifth of the cover's %.0f", film.scene, film.theme, way.name, i, f.q, empty, sf, area)
+				}
+			}
+		}
+	}
+}
+
 // demoSearch is the demo's search for "glass weather" in theme, its
 // results and covers in.
 func demoSearch(t *testing.T, theme string) (*App, *ui.Tester) {
@@ -344,7 +445,7 @@ func edgeDetail(img *image.RGBA, x, y0, y1 int, across bool) float64 {
 
 // A page growing from a cover is not cut by its surface's right and bottom
 // edges as hard lines through its words and rows: while its parts show and
-// the surface is still smaller than the column, the page right at those
+// the surface is still smaller than the page, the page right at those
 // edges has a fraction of the sharp detail it has a little further in.
 func TestAGrowingPageIsNotCutByAHardEdge(t *testing.T) {
 	for _, theme := range []string{"dark", "light"} {
@@ -361,9 +462,9 @@ func TestAGrowingPageIsNotCutByAHardEdge(t *testing.T) {
 			if !f.moving {
 				break
 			}
-			main, s := f.main, f.surface
+			main, s, p := f.main, f.surface, f.page
 			box := ui.Rect{X: s.X - main.X, Y: s.Y - main.Y, W: s.W, H: s.H}
-			if !f.growing() || a.lateShown() < 0.5 || box.W > main.W-60 || box.H > main.H-60 {
+			if !f.growing() || a.lateShown() < 0.5 || box.W > p.W-60 || box.H > p.H-60 {
 				continue
 			}
 			frames++
@@ -376,7 +477,7 @@ func TestAGrowingPageIsNotCutByAHardEdge(t *testing.T) {
 			bottomIn += edgeDetail(img, y1-40, x0+40, x1-40, true)
 		}
 		if frames == 0 {
-			t.Fatalf("%s: no frame showed the page's parts on a surface smaller than the column", theme)
+			t.Fatalf("%s: no frame showed the page's parts on a surface smaller than the page", theme)
 		}
 		if right > 0.3*rightIn {
 			t.Errorf("%s: over %d frames the page at its surface's right edge has %.0f sharp steps against %.0f further in: cut by a hard edge", theme, frames, right, rightIn)
