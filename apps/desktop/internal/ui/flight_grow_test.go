@@ -4,6 +4,7 @@ package ui
 
 import (
 	"image"
+	"math"
 	"testing"
 	"time"
 
@@ -111,6 +112,29 @@ func TestAGrowingPageShowsNoBoxBesideItsCover(t *testing.T) {
 	}
 }
 
+// demoSearch is the demo's search for "glass weather" in theme, its
+// results and covers in.
+func demoSearch(t *testing.T, theme string) (*App, *ui.Tester) {
+	t.Helper()
+	a, run := demoApp(t)
+	a.PageMotion, a.Theme = true, theme
+	s := a.Store
+	run(func() bool { return s.Loaded })
+	a.Go(ScreenHome)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	tt.Type("glass weather")
+	run(func() bool {
+		tt.Advance(filmFrame)
+		return s.Search.Status == store.SearchReady && s.Search.Result != nil
+	})
+	for range 20 {
+		run(func() bool { return true })
+		tt.Advance(50 * time.Millisecond)
+	}
+	return a, tt
+}
+
 // Going back, the screen under the page is clear by the time the page has
 // gone into its tile, not sharpening on its own over the frames after: in
 // the demo's search for "glass weather", every frame of the way back in
@@ -118,22 +142,7 @@ func TestAGrowingPageShowsNoBoxBesideItsCover(t *testing.T) {
 // they are at rest.
 func TestTheScreenUnderIsClearOnceThePageIsInItsTile(t *testing.T) {
 	for _, theme := range []string{"dark", "light"} {
-		a, run := demoApp(t)
-		a.PageMotion, a.Theme = true, theme
-		s := a.Store
-		run(func() bool { return s.Loaded })
-		a.Go(ScreenHome)
-		tt := ui.NewTester(a.View, 1280, 800)
-		tt.SetScale(1)
-		tt.Type("glass weather")
-		run(func() bool {
-			tt.Advance(filmFrame)
-			return s.Search.Status == store.SearchReady && s.Search.Result != nil
-		})
-		for range 20 {
-			run(func() bool { return true })
-			tt.Advance(50 * time.Millisecond)
-		}
+		a, tt := demoSearch(t, theme)
 		row, ok := tt.Find("Paper Satellites")
 		if !ok {
 			t.Fatal("no song row")
@@ -174,6 +183,69 @@ func TestTheScreenUnderIsClearOnceThePageIsInItsTile(t *testing.T) {
 			if page <= 2 && under > 0.25 {
 				t.Errorf("%s: frame %d of the way back (q %.3f): the page is all but gone beside its cover (%.2f levels) while the song rows are still %.2f levels from rest", theme, i, f.q, page, under)
 			}
+		}
+	}
+}
+
+// edgeDetail is how many sharp steps, as a word's strokes or a row's line
+// make, the window takes from pixel to pixel along a line: down column x
+// from y0 to y1, or, with across, along row x from y0 to y1. A light's
+// smooth ramp takes none.
+func edgeDetail(img *image.RGBA, x, y0, y1 int, across bool) float64 {
+	n := 0.0
+	for y := y0 + 1; y < y1; y++ {
+		d := luma(img, x, y) - luma(img, x, y-1)
+		if across {
+			d = luma(img, y, x) - luma(img, y-1, x)
+		}
+		if math.Abs(d) > 8 {
+			n++
+		}
+	}
+	return n
+}
+
+// A page growing from a cover is not cut by its surface's right and bottom
+// edges as hard lines through its words and rows: while its parts show and
+// the surface is still smaller than the column, the page right at those
+// edges has a fraction of the sharp detail it has a little further in.
+func TestAGrowingPageIsNotCutByAHardEdge(t *testing.T) {
+	for _, theme := range []string{"dark", "light"} {
+		a, tt := demoSearch(t, theme)
+		if err := tt.Click("Glass Weather"); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		var right, rightIn, bottom, bottomIn float64
+		frames := 0
+		for range 90 {
+			tt.Advance(filmFrame)
+			f := &a.fly
+			if !f.moving {
+				break
+			}
+			main := f.main
+			box, _ := f.growBox(main)
+			if !f.growing() || a.lateShown() < 0.5 || box.W > main.W-60 || box.H > main.H-60 {
+				continue
+			}
+			frames++
+			img := tt.Image()
+			x0, y0 := int(main.X+box.X), int(main.Y+box.Y)
+			x1, y1 := x0+int(box.W), y0+int(box.H)
+			right += edgeDetail(img, x1-2, y0+40, y1-40, false)
+			rightIn += edgeDetail(img, x1-40, y0+40, y1-40, false)
+			bottom += edgeDetail(img, y1-2, x0+40, x1-40, true)
+			bottomIn += edgeDetail(img, y1-40, x0+40, x1-40, true)
+		}
+		if frames == 0 {
+			t.Fatalf("%s: no frame showed the page's parts on a surface smaller than the column", theme)
+		}
+		if right > 0.3*rightIn {
+			t.Errorf("%s: over %d frames the page at its surface's right edge has %.0f sharp steps against %.0f further in: cut by a hard edge", theme, frames, right, rightIn)
+		}
+		if bottom > 0.3*bottomIn {
+			t.Errorf("%s: over %d frames the page at its surface's bottom edge has %.0f sharp steps against %.0f further in: cut by a hard edge", theme, frames, bottom, bottomIn)
 		}
 	}
 }

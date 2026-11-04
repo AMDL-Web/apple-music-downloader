@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/shader"
 )
 
 // An album page opened from a cover other than the queue hero's (a search
@@ -115,7 +116,9 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 				b.From, b.Mix = &plain, t
 			}
 			b.Show(c)
-			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
+			content := ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0)
+			a.growEdges(content, box, main)
+			content.Children(func() {
 				a.titleBar(c, k, sidebar, true)
 				ui.Box(c).Grow(1).MinHeight(0).Children(func() {
 					ui.Column(c.Key(screenLayer(ScreenAlbum))).Absolute().Top(0).Left(0).Right(0).Bottom(0).
@@ -124,6 +127,59 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 			})
 		})
 	})
+}
+
+// growBand is how far in from the growing surface's right and bottom edges
+// the page's content fades to nothing (growEdges).
+const growBand = 2 * scrollFade
+
+// growEdge fades what an element draws to nothing towards Right and Bottom,
+// over BandX and BandY DIPs inward, 0 for an edge that stays.
+var growEdge = shader.MustCompile(`package main
+
+var Right float
+var Bottom float
+var BandX float
+var BandY float
+
+func ColorEffect(pos vec2, color vec4) vec4 {
+	k := 1.0
+	if BandX > 0 {
+		k *= smoothstep(0, BandX, Right-pos.x)
+	}
+	if BandY > 0 {
+		k *= smoothstep(0, BandY, Bottom-pos.y)
+	}
+	return color * k
+}
+`)
+
+var (
+	growEdgeRight  = growEdge.Uniform("Right")
+	growEdgeBottom = growEdge.Uniform("Bottom")
+	growEdgeBandX  = growEdge.Uniform("BandX")
+	growEdgeBandY  = growEdge.Uniform("BandY")
+)
+
+// growEdges fades el, the growing page's content, laid out at the main
+// column's full size from the surface's corner, towards the surface's right
+// and bottom edges (growBand), so the surface's edge does not cut its words
+// and rows as a hard line while it is smaller than the column. The band
+// comes in with the page's parts (lateShown), which leaves the cover alone
+// as it sets off, and narrows to nothing as the surface reaches the
+// column's edges, so nothing changes as it lands.
+func (a *App) growEdges(el ui.Element, box, main ui.Rect) {
+	if !a.fly.growing() {
+		return
+	}
+	band := growBand * a.lateShown()
+	bx, by := min(band, main.W-box.W), min(band, main.H-box.H)
+	if bx < 0.5 && by < 0.5 {
+		return
+	}
+	v := growEdge.NewValues().Float(growEdgeRight, box.W).Float(growEdgeBottom, box.H).
+		Float(growEdgeBandX, max(0, bx)).Float(growEdgeBandY, max(0, by))
+	el.Effect(growEdge.Effect(shader.Options{Values: v}))
 }
 
 // underGone is how far the screen under the growing page has gone back,
