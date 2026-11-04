@@ -22,8 +22,6 @@ type diskCache struct {
 	dir string
 }
 
-// WithDisk keeps fetched covers in dir across launches and trims dir to
-// diskLimit in the background. Call it before the first Get.
 // WithBudget bounds the decoded covers at n bytes instead of keepBytes,
 // for a test of what a full cache shows.
 func (c *Cache) WithBudget(n int) *Cache {
@@ -38,6 +36,8 @@ func (c *Cache) WithClock(now func() time.Time) *Cache {
 	return c
 }
 
+// WithDisk keeps fetched covers in dir across launches and trims dir to
+// diskLimit in the background. Call it before the first Get.
 func (c *Cache) WithDisk(dir string) *Cache {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		slog.Warn("artwork disk cache unavailable", "dir", dir, "err", err)

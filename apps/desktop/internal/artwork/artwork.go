@@ -1,7 +1,7 @@
 // Package artwork fetches and decodes album covers for the views: off the UI
-// thread, a few at a time, sized for where they show, and kept decoded until
-// they take more memory than keepBytes, the least lately shown released
-// first.
+// thread, a few at a time, the ones the window shows now before any it showed
+// before, sized for where they show, and kept decoded until they take more
+// memory than keepBytes, the least lately shown released first.
 package artwork
 
 import (
@@ -62,6 +62,19 @@ const (
 	referer   = "https://music.apple.com/"
 )
 
+// slots is how many covers load at once. Past it, a cover waits in the
+// queue: the one asked for last goes first, those one frame asked for
+// within sameFrame of each other in the order asked, which is the screen's
+// from the top; one not asked for in the window's last frame (lastFrame)
+// leaves the queue, and one loading that the window no longer shows gives
+// its slot to one waiting (pump). A frame slower than lastFrame takes the
+// covers it asked for first as no longer shown: they lose a load or their
+// place, and are asked for again the next frame.
+const (
+	slots     = 6
+	sameFrame = 4 * time.Millisecond
+)
+
 // fallbackPx are the smaller sizes a cover is asked for when its size is
 // refused: an Apple-generated playlist cover serves 512 pixels to nobody.
 var fallbackPx = []int{256, 128}
@@ -72,8 +85,14 @@ type Cache struct {
 	http *http.Client
 	// disk, when set, keeps fetched covers across launches.
 	disk    *diskCache
-	slots   chan struct{}
 	entries map[coverKey]*entry
+	// queue are the covers waiting for a slot, in the order asked for;
+	// running counts the ones loading; pumpQueued says a pump waits for the
+	// end of the frame (Get), pumpNext that the next frame's end pumps, and
+	// waiting that a loading cover is to be no longer shown (pump).
+	queue                         []coverKey
+	running                       int
+	pumpQueued, pumpNext, waiting bool
 	// bytes is what the decoded covers of entries take, and keep its bound:
 	// keepBytes but in tests.
 	bytes, keep int
@@ -99,9 +118,12 @@ type entry struct {
 	src string
 	img ui.ImageSource
 	// bytes is what img takes decoded.
-	bytes   int
-	used    time.Time
-	loading bool
+	bytes int
+	used  time.Time
+	// loading is set while the cover waits in the queue or loads; running
+	// while it loads, which cancel stops.
+	loading, running bool
+	cancel           context.CancelFunc
 	// failures counts the loads that failed in a row, the last at failedAt.
 	failures int
 	failedAt time.Time
@@ -121,7 +143,6 @@ func NewWith(post func(func()), rt http.RoundTripper) *Cache {
 	return &Cache{
 		post:    post,
 		http:    &http.Client{Transport: rt, Timeout: 30 * time.Second},
-		slots:   make(chan struct{}, 6),
 		entries: map[coverKey]*entry{},
 		keep:    keepBytes,
 		now:     time.Now,
@@ -159,7 +180,19 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 	e.used, e.src, c.lastGet = now, template, now
 	if e.img == nil && !e.loading && (e.failures == 0 || now.Sub(e.failedAt) >= retryWait(e.failures)) {
 		e.loading = true
-		go c.fetch(key, e.src)
+		if c.running < slots {
+			c.start(key, e)
+		} else {
+			c.queue = append(c.queue, key)
+			c.pumpNext = true
+		}
+	}
+	if c.pumpNext && !c.pumpQueued {
+		// After the frame, once every cover it shows has been asked for.
+		// The covers it queues are still loading in the next, which queues
+		// none of them again: one pump, not a loop.
+		c.pumpNext, c.pumpQueued = false, true
+		c.post(c.pump)
 	}
 	if c.swept.IsZero() {
 		// Nothing to sweep yet: the first sweep falls due a while on.
@@ -190,17 +223,114 @@ func bucket(px int) int {
 	return 1200
 }
 
-func (c *Cache) fetch(key coverKey, template string) {
-	c.slots <- struct{}{}
-	defer func() { <-c.slots }()
+// shown reports whether the window's last frame asked for e.
+func (c *Cache) shown(e *entry) bool { return !e.used.Before(c.lastGet.Add(-lastFrame)) }
+
+// start loads the cover of e in a slot.
+func (c *Cache) start(key coverKey, e *entry) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c.running++
+	e.running, e.cancel = true, cancel
+	go c.fetch(ctx, cancel, key, e.src)
+}
+
+// pump runs after a frame that queued covers: the ones that frame no longer
+// asked for leave the queue, and each loading cover it no longer shows,
+// the one shown longest ago first, gives its slot to one it does, as long
+// as one waits. A loading cover the frame did not ask for, which a stalled
+// request may hold for its whole timeout, is no longer shown lastFrame
+// after it was last asked for: pump looks again then, and the frame its
+// post draws asks for what the window shows; a window that draws no frame,
+// as a hidden one, is not looked at again.
+func (c *Cache) pump() {
+	c.pumpQueued = false
+	c.dropUnshown()
+	var stale []*entry
+	for _, e := range c.entries {
+		if e.running && e.cancel != nil && !c.shown(e) {
+			stale = append(stale, e)
+		}
+	}
+	slices.SortFunc(stale, func(a, b *entry) int { return a.used.Compare(b.used) })
+	for _, e := range stale[:min(len(stale), len(c.queue))] {
+		e.cancel()
+		// Its slot frees as its fetch returns (fetch).
+		e.cancel = nil
+	}
+	if len(c.queue) == 0 || c.waiting {
+		return
+	}
+	var last, soonest time.Time
+	for _, k := range c.queue {
+		if u := c.entries[k].used; u.After(last) {
+			last = u
+		}
+	}
+	for _, e := range c.entries {
+		if e.running && e.cancel != nil && e.used.Before(last.Add(-sameFrame)) && (soonest.IsZero() || e.used.Before(soonest)) {
+			soonest = e.used
+		}
+	}
+	if !soonest.IsZero() {
+		c.waiting = true
+		time.AfterFunc(max(soonest.Add(lastFrame).Sub(c.lastGet), 0)+time.Millisecond, func() {
+			// The frame this post draws pumps at its end (Get).
+			c.post(func() { c.waiting, c.pumpNext = false, true })
+		})
+	}
+}
+
+// dropUnshown takes out of the queue the covers the last frame did not ask
+// for; a view showing one again asks for it again.
+func (c *Cache) dropUnshown() {
+	c.queue = slices.DeleteFunc(c.queue, func(k coverKey) bool {
+		e := c.entries[k]
+		if e == nil || !e.loading || e.running {
+			return true
+		}
+		if !c.shown(e) {
+			e.loading = false
+			return true
+		}
+		return false
+	})
+}
+
+// next starts the queued covers the last frame asked for while slots are
+// free, the ones asked for last first.
+func (c *Cache) next() {
+	c.dropUnshown()
+	for c.running < slots && len(c.queue) > 0 {
+		var last time.Time
+		for _, k := range c.queue {
+			if u := c.entries[k].used; u.After(last) {
+				last = u
+			}
+		}
+		i := slices.IndexFunc(c.queue, func(k coverKey) bool { return !c.entries[k].used.Before(last.Add(-sameFrame)) })
+		k := c.queue[i]
+		c.queue = slices.Delete(c.queue, i, i+1)
+		c.start(k, c.entries[k])
+	}
+}
+
+func (c *Cache) fetch(ctx context.Context, cancel context.CancelFunc, key coverKey, template string) {
 	url := URL(template, key.px)
-	img, status, err := c.loadSized(template, key.px)
+	img, status, err := c.loadSized(ctx, template, key.px)
+	cancel()
 	c.post(func() {
+		c.running--
+		defer c.next()
 		e := c.entries[key]
 		if e == nil {
 			return
 		}
-		e.loading = false
+		e.loading, e.running, e.cancel = false, false, nil
+		if errors.Is(err, context.Canceled) {
+			// Given up for a cover shown now (pump): asked for again, it
+			// loads again.
+			return
+		}
 		if err != nil {
 			e.failures++
 			e.failedAt = c.now()
@@ -223,8 +353,8 @@ func (c *Cache) fetch(key coverKey, template string) {
 
 // loadSized loads the cover at its size, or, when the CDN refuses that size,
 // at the next smaller one that it serves.
-func (c *Cache) loadSized(template string, want int) (ui.ImageSource, int, error) {
-	img, status, err := c.load(URL(template, want))
+func (c *Cache) loadSized(ctx context.Context, template string, want int) (ui.ImageSource, int, error) {
+	img, status, err := c.load(ctx, URL(template, want))
 	if err == nil || !refused(status) || !strings.Contains(template, "{w}") {
 		return img, status, err
 	}
@@ -232,7 +362,7 @@ func (c *Cache) loadSized(template string, want int) (ui.ImageSource, int, error
 		if px >= want {
 			continue
 		}
-		if smaller, _, ferr := c.load(URL(template, px)); ferr == nil {
+		if smaller, _, ferr := c.load(ctx, URL(template, px)); ferr == nil {
 			// The disk keeps it under the refused size's URL too, so a later
 			// load of that size finds it without asking the CDN again.
 			if data, ok := c.disk.get(keyOf(URL(template, px))); ok {
@@ -259,14 +389,17 @@ func refused(status int) bool { return status == http.StatusForbidden || status 
 
 // load reads and decodes the cover at url, from the disk cache when it holds
 // it, with the HTTP status it came with: 200 from the disk, 0 when none came.
-func (c *Cache) load(url string) (ui.ImageSource, int, error) {
+func (c *Cache) load(ctx context.Context, url string) (ui.ImageSource, int, error) {
 	if data, ok := c.disk.get(keyOf(url)); ok {
 		if img, err := decode(data); err == nil {
 			return img, http.StatusOK, nil
 		}
 	}
-	data, status, err := c.download(url)
+	data, status, err := c.download(ctx, url)
 	if err != nil {
+		return nil, status, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, status, err
 	}
 	img, err := decode(data)
@@ -299,8 +432,8 @@ func decode(data []byte) (ui.ImageSource, error) {
 	return ui.NewBitmap(dst), nil
 }
 
-func (c *Cache) download(url string) ([]byte, int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (c *Cache) download(ctx context.Context, url string) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
