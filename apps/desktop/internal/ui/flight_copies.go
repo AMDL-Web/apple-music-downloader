@@ -21,6 +21,11 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 	}
 	over := ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough()
 	o, t := over.LayoutBounds(), f.travel()
+	if f.growing() {
+		// Where the surface carries the layer in this frame, not where it
+		// did in the frame before.
+		o.X, o.Y = o.X-f.ridePrev.X+f.ride.X, o.Y-f.ridePrev.Y+f.ride.Y
+	}
 	over.Children(func() {
 		if f.paired[partTag] == morphs {
 			src, dst := f.src[partTag], f.tag
@@ -96,7 +101,10 @@ func (a *App) flyBadges(c *ui.Context, o ui.Rect, t float32) {
 		}
 		y := at.Y + at.H - (from.Y + from.H - src.box.Y)
 		op := 1 - unit(t/0.35)
-		if f.out {
+		switch {
+		case f.growing():
+			op = 1 - smoothstep(0, 0.3, t)
+		case f.out:
 			op = f.underShown()
 		}
 		f.fade(ui.Box(c.Key(part+flightParts)).Absolute().Left(x-o.X).Top(y-o.Y), op).

@@ -64,6 +64,8 @@ func (a *App) openPage(album, job string) {
 	if a.Screen != ScreenAlbum {
 		// Setup leaves the window to the page at once.
 		f.under, f.instant = a.Screen, a.Screen == ScreenSetup
+		f.grow = growsFrom(f.from) && a.PageMotion && !f.still && !f.instant
+		f.growFrom, f.growRadius = ui.Rect{}, 0
 	}
 	if key := album + "\x00" + job; key != a.pageKey {
 		a.pageKey = key

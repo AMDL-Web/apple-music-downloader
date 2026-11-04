@@ -120,6 +120,8 @@ type App struct {
 	albumSeen string
 	// fly is the album page's way in and out.
 	fly flight
+	// tune is how the album page grows, which the tuning panel changes.
+	tune motionTune
 	// Tab is the queue's filter, and tabShown the one its list last read
 	// for.
 	Tab      int
@@ -165,7 +167,7 @@ type App struct {
 	searchReveal bool
 	searchKeyed  bool
 	// keys are the window shortcuts' actions (shortcuts).
-	keys struct{ toggle, field, home, queue, library, settings func() }
+	keys struct{ toggle, field, home, queue, library, settings, tune func() }
 	// groupsAt is when the search last changed tab, from groupsFrom, which
 	// groupsMoved asks the next frame to note (tabChange).
 	groupsAt    time.Time

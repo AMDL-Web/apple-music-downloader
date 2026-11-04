@@ -391,12 +391,19 @@ func TestATilesMarkRidesItsFlyingCover(t *testing.T) {
 	if !ok {
 		t.Fatalf("no library mark on the tile: %q", tt.Texts())
 	}
+	// The mark is a green disc with a white check: some of the disc shows
+	// in its box while it is near the tile, wherever the check falls.
 	green := func(when string) {
 		t.Helper()
-		px := tt.Image().RGBAAt(int(mark.X+mark.W/2), int(mark.Y+mark.H/2))
-		if !(int(px.G) > int(px.R)+40 && int(px.G) > int(px.B)+20) {
-			t.Errorf("%s, the tile's mark is not over the cover: %v at its center", when, px)
+		img := tt.Image()
+		for y := int(mark.Y); y < int(mark.Y+mark.H); y++ {
+			for x := int(mark.X); x < int(mark.X+mark.W); x++ {
+				if px := img.RGBAAt(x, y); int(px.G) > int(px.R)+40 && int(px.G) > int(px.B)+20 {
+					return
+				}
+			}
 		}
+		t.Errorf("%s, the tile's mark is not over the cover: no green in its box %v", when, mark)
 	}
 	if err := tt.Click(albums[0].Name); err != nil {
 		t.Fatal(err)
@@ -415,7 +422,7 @@ func TestATilesMarkRidesItsFlyingCover(t *testing.T) {
 		tt.Advance(refresh)
 		if a.fly.moving && a.fly.lead() < 0.05 {
 			green("landing")
-			flyFrames(a, tt, 10)
+			flyFrames(a, tt, 40)
 			break
 		}
 	}

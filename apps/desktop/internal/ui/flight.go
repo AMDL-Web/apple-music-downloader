@@ -214,6 +214,16 @@ type flight struct {
 	// (fadeEdges), and viewsPrev the frame before's, which tell how the
 	// screen under the page clips its tile (flightClip).
 	views, viewsPrev []ui.Rect
+	// grow is set while the page shown opened from a cover it grows out of
+	// (flight_grow.go); main is the main column's box in the window as the
+	// frame before laid it out; ride is how far the surface carries the page
+	// from its place in this frame, ridePrev in the frame before; growFrom
+	// and growRadius the cover's box and corners it grows from, as last seen.
+	grow           bool
+	main           ui.Rect
+	ride, ridePrev ui.Point
+	growFrom       ui.Rect
+	growRadius     float32
 }
 
 // openingFrom names the element the next OpenAlbum or OpenJob opens from,
@@ -224,6 +234,7 @@ func (a *App) openingFrom(from string) { a.fly.next = from }
 // flightQ moves q towards the page while the album screen is shown, else
 // towards the screen under it, and notes where it is.
 func (a *App) flightQ(c *ui.Context, root ui.Element) {
+	a.tune.load()
 	f := &a.fly
 	f.still = c.Preferences().ReduceMotion
 	inPage := a.Screen == ScreenAlbum
@@ -259,6 +270,19 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		}
 		root.Jump(flightKey{}, target)
 		f.q = q
+	case a.tune.scrubbing && inPage && f.ready:
+		root.Jump(flightKey{}, a.tune.Scrub)
+		f.q = a.tune.Scrub
+	case f.grow:
+		f.q = root.AnimateTo(flightKey{}, target, a.tune.spring(target == 1))
+		f.fadeFrom, f.fadeTo = target, target
+		if target == 0 && f.q < growLand {
+			// The cover is within a DIP of its tile: the flight ends there
+			// rather than over the spring's tail, which would keep the
+			// screen under deaf to the pointer for a quarter second more.
+			root.Jump(flightKey{}, 0)
+			f.q = 0
+		}
 	default:
 		aim, spring := target, flightSpring
 		if f.out && f.q > 0 {
@@ -266,7 +290,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 			// 0 and asks for no frames.
 			aim, spring = -flightPast, flightBack
 		}
-		f.q = root.AnimateTo(flightKey{}, aim, spring)
+		f.q = root.AnimateTo(flightKey{}, aim, a.tune.slowed(spring))
 		f.fadeFrom, f.fadeTo = target, target
 		if f.out && f.q <= 0 {
 			// Going out, the cover has landed and the screens have crossed
@@ -290,6 +314,10 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		for i := range f.own {
 			f.own[i] = f.q == 1
 		}
+	}
+	if !f.moving && f.q == 0 && a.tune.replay {
+		a.tune.replay, f.closeDetail = false, false
+		a.reopen()
 	}
 	if !f.moving && f.q == 0 {
 		f.ready = false
@@ -380,6 +408,10 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 		a.flyRise(el)
 		return
 	}
+	if part == partCover && f.growing() {
+		f.growCover(el, src, dst, size)
+		return
+	}
 	t := f.travel()
 	if part == partCover {
 		t = f.lead()
@@ -422,6 +454,10 @@ func (a *App) flyCover() (tone, dim, shadow float32, jump bool) {
 // flight has it: fading in as it rises into place, or in place while the
 // desktop asks for less motion.
 func (a *App) flyRise(el ui.Element) {
+	if a.fly.growing() {
+		el.Opacity(a.lateShown())
+		return
+	}
 	if a.fly.moving {
 		a.flyFade(el)
 		if !a.fly.still {
@@ -435,7 +471,9 @@ func (a *App) flyRise(el ui.Element) {
 // cut to the cover's box, which would clip its shadow to a rectangle and
 // let the whole shadow pop out as the layer goes.
 func (a *App) flyRiseCover(el ui.Element) {
-	if f := &a.fly; f.moving {
+	if f := &a.fly; f.growing() {
+		el.Opacity(a.lateShown())
+	} else if f.moving {
 		el.Opacity(unit((f.q - f.partsFrom()) / (1 - f.partsFrom())))
 		if !f.still {
 			el.Translate(0, flightRise*(1-f.travel()))
@@ -459,7 +497,7 @@ func (a *App) flyEdge(el ui.Element) {
 // of its own while it fades.
 func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	f := &a.fly
-	if !f.moving {
+	if !f.moving || f.growing() {
 		return
 	}
 	shown := f.groundShown()
@@ -484,7 +522,9 @@ func (f *flight) groundShown() float32 { return unit(2 * f.cross()) }
 // of a flight has it: fading in over the panel's ground once that is whole
 // (groundShown), so no row is drawn over the screen under the page.
 func (a *App) flyRows(el ui.Element) {
-	if f := &a.fly; f.moving {
+	if f := &a.fly; f.growing() {
+		el.Opacity(a.lateShown())
+	} else if f.moving {
 		f.fade(el, unit(2*f.cross()-1))
 	}
 }
@@ -492,7 +532,9 @@ func (a *App) flyRows(el ui.Element) {
 // flyFade fades el in with the album page, in place, once the screen under
 // it is gone.
 func (a *App) flyFade(el ui.Element) {
-	if f := &a.fly; f.moving {
+	if f := &a.fly; f.growing() {
+		el.Opacity(a.lateShown())
+	} else if f.moving {
 		from := f.partsFrom()
 		f.fade(el, unit((f.q-from)/(1-from)))
 	}
@@ -504,7 +546,7 @@ func (a *App) flyFade(el ui.Element) {
 // desktop asks for less motion.
 func (f *flight) fade(el ui.Element, op float32) ui.Element {
 	el.Opacity(op)
-	if op > 0 && op < 1 && !f.still {
+	if op > 0 && op < 1 && !f.still && !f.grow {
 		el.Blur(flightBlur * (1 - op))
 	}
 	return el

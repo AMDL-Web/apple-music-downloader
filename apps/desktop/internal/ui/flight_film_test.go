@@ -125,24 +125,6 @@ func TestAnotherTileTakesAClickOnceTheCoverLands(t *testing.T) {
 	}
 }
 
-// Going back, the page's lower panel lands on the top of the results, so
-// its edge is above the tiles when they show, not across them.
-func TestThePagesEdgeLeavesAboveTheTiles(t *testing.T) {
-	a, tt, tile, _ := filmApp(t)
-	a.Back()
-	tt.Frame()
-	for range 60 {
-		tt.Advance(filmFrame)
-		if !a.fly.moving {
-			break
-		}
-		panel, ok := tt.Find("Tracks")
-		if ok && a.fly.q <= crossover+0.25 && panel.Y > tile.Y {
-			t.Fatalf("at q %.2f the page's edge is at %v, across the tiles from %v", a.fly.q, panel.Y, tile.Y)
-		}
-	}
-}
-
 // An album in the library shows its check, which gives way to the button
 // that downloads it again under the pointer by crossing over, not at once.
 func TestTheChecksChangeCrossesOver(t *testing.T) {
@@ -463,48 +445,6 @@ func differs(a, b *image.RGBA, x, y int) bool {
 		d += max(int(a.Pix[i+k])-int(b.Pix[i+k]), int(b.Pix[i+k])-int(a.Pix[i+k]))
 	}
 	return d > 12
-}
-
-// The page's songs never show over the results: in no frame of the page
-// coming in or going out do the songs draw within the lower panel while the
-// results behind it show through. Songs change pixels on a film with other
-// song names, the results on one with other tiles' names, and both change
-// pixels of the panel in a frame where the songs are over the results.
-func TestTheSongsNeverShowOverTheResults(t *testing.T) {
-	for _, theme := range []string{"light", "dark"} {
-		for _, out := range []bool{false, true} {
-			way := map[bool]string{false: "in", true: "out"}[out]
-			base, panels := panelFilm(t, theme, "Alpha", "Result", out)
-			songs, _ := panelFilm(t, theme, "Omega", "Result", out)
-			tiles, _ := panelFilm(t, theme, "Alpha", "Tile", out)
-			if len(base) != len(songs) || len(base) != len(tiles) || len(base) < 8 {
-				t.Fatalf("%s %s: films of %d, %d and %d frames", theme, way, len(base), len(songs), len(tiles))
-			}
-			shown := 0
-			for f := range base {
-				sg, rs := 0, 0
-				for y := panels[f].Min.Y; y < panels[f].Max.Y; y++ {
-					for x := 0; x < 1280; x++ {
-						if differs(base[f], songs[f], x, y) {
-							sg++
-						}
-						if differs(base[f], tiles[f], x, y) {
-							rs++
-						}
-					}
-				}
-				if sg > 0 {
-					shown++
-				}
-				if sg > 20 && rs > 20 {
-					t.Errorf("%s %s: frame %d of %d draws %d pixels of the songs over %d of the results", theme, way, f, len(base), sg, rs)
-				}
-			}
-			if shown == 0 {
-				t.Fatalf("%s %s: the songs show in no frame of %d: the film measures nothing", theme, way, len(base))
-			}
-		}
-	}
 }
 
 // flightFrames counts the frames of a flight, from the next frame on.

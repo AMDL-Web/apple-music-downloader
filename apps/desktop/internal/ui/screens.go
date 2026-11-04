@@ -22,12 +22,13 @@ func (a *App) screens(c *ui.Context, k *Tokens, page float32) {
 	}
 	if under != ScreenAlbum && (!inPage || f.moving) {
 		l := layer(under)
-		if f.moving {
+		if f.moving && !f.growing() {
 			f.fade(l, f.underShown())
 		}
 		l.Children(func() { a.screen(c, k, under, page) })
 	}
-	if inPage || f.moving {
+	// A page that grows is built over the whole column (growSurface).
+	if (inPage || f.moving) && !f.grow {
 		l := layer(ScreenAlbum)
 		if !f.ready {
 			// Laid out, then matched with what is under it, before it
@@ -36,22 +37,28 @@ func (a *App) screens(c *ui.Context, k *Tokens, page float32) {
 		}
 		l.Children(func() { a.albumScreen(c, k, page) })
 	}
-	if f.moving {
-		// Neither screen takes the pointer while the page moves; Back and
-		// Escape still turn it round, and so does a click, while it goes
-		// out, where its cover lands: the screen under it shows that
-		// cover's place before it takes the pointer again.
-		guard := ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0)
-		if src := f.src[partCover]; !inPage && src.ok {
-			o := guard.LayoutBounds()
-			guard.Children(func() {
-				again := ui.ButtonBase(c.Key("reopen")).Absolute().Left(src.box.X-o.X).Top(src.box.Y-o.Y).Size(src.box.W, src.box.H).
-					Label("Open again").Cursor(ui.CursorPointer)
-				if again.Clicked() {
-					a.reopen()
-				}
-			})
-		}
+	if f.moving && !f.grow {
+		a.flightGuard(c)
+	}
+}
+
+// flightGuard keeps the pointer from both screens while the page moves;
+// Back and Escape still turn it round, and so does a click, while it goes
+// out, where its cover lands: the screen under it shows that cover's place
+// before it takes the pointer again. A page that grows is above the
+// screens, so its guard is built over it (growSurface's caller).
+func (a *App) flightGuard(c *ui.Context) {
+	f := &a.fly
+	guard := ui.Box(c.Key("guard")).Absolute().Top(0).Left(0).Right(0).Bottom(0)
+	if src := f.src[partCover]; a.Screen != ScreenAlbum && src.ok {
+		o := guard.LayoutBounds()
+		guard.Children(func() {
+			again := ui.ButtonBase(c.Key("reopen")).Absolute().Left(src.box.X-o.X).Top(src.box.Y-o.Y).Size(src.box.W, src.box.H).
+				Label("Open again").Cursor(ui.CursorPointer)
+			if again.Clicked() {
+				a.reopen()
+			}
+		})
 	}
 }
 

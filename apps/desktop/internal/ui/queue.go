@@ -41,6 +41,12 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 		from := paletteBackdrop(k, a.screenPalette(c, under), under == ScreenHome)
 		b = paletteBackdrop(k, a.screenPalette(c, ScreenAlbum), false)
 		b.From, b.Mix = &from, f.light()
+		if f.grow {
+			// The page brings its own light (growSurface); the screen under
+			// it keeps its own, as a mix, so that the light it keeps at rest
+			// starts again where the flight ends rather than easing there.
+			b, b.From, b.Mix = from, &from, 0
+		}
 	}
 	b.Show(c)
 }

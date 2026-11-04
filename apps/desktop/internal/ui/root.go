@@ -61,19 +61,29 @@ func (a *App) View(c *ui.Context) {
 		ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 			a.sidebar(c, k, vib, side)
 			main := ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Background(k.Ground).Clip()
+			a.fly.main = main.LayoutBounds()
 			main.Children(func() {
 				// Absolute children paint above the flow, in the order they
 				// are built, so the content is a layer of its own over the
 				// backdrop.
 				a.backdrop(c, k)
-				ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
+				content := ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0)
+				a.growUnder(content)
+				content.Children(func() {
 					if inSetup {
 						a.setupScreen(c, k)
 						return
 					}
-					a.titleBar(c, k, shown)
+					a.titleBar(c, k, shown, !a.fly.grow)
 					ui.Box(c).Grow(1).MinHeight(0).Children(func() { a.screens(c, k, page) })
 				})
+				if a.fly.grow && !inSetup && (a.Screen == ScreenAlbum || a.fly.moving) {
+					a.growDim(c)
+					a.growSurface(c, k, shown, page)
+					if a.fly.moving {
+						a.flightGuard(c)
+					}
+				}
 				// Home's field is where links land there; elsewhere a card
 				// over the page shows it.
 				if a.linkOver && a.Screen != ScreenHome {
@@ -90,6 +100,7 @@ func (a *App) View(c *ui.Context) {
 	a.downloadSheet(c, k)
 	a.hookDialog(c, k)
 	a.toast(c, k)
+	a.tunePanel(c, k)
 	a.scrollbars(c, k)
 	// Last: SetTheme, which scrollbars calls, gives the root the theme's
 	// ground, which would cover the window's material under the sidebar.
@@ -117,6 +128,7 @@ func (a *App) shortcuts(c *ui.Context) {
 			}
 		}
 		k.settings = func() { a.Go(ScreenSettings) }
+		k.tune = func() { a.tune.load(); a.tune.open = !a.tune.open }
 	}
 	if runtime.GOOS != "darwin" {
 		c.OnShortcut(sidebarMods, ui.KeyS, k.toggle)
@@ -126,6 +138,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	c.OnShortcut(ui.Cmd, ui.Key2, k.queue)
 	c.OnShortcut(ui.Cmd, ui.Key3, k.library)
 	c.OnShortcut(ui.Cmd, ui.KeyComma, k.settings)
+	c.OnShortcut(ui.Ctrl|ui.Alt, ui.KeyM, k.tune)
 	switch a.Screen {
 	case ScreenAlbum:
 		if c.Shortcut(0, ui.KeyEscape) {
@@ -152,7 +165,7 @@ func captionGapFor(goos string) float32 {
 // titleBar is the content's top strip, which drags the window, clear of
 // the window controls; with the sidebar closed it keeps the traffic lights
 // and the sidebar button (sidebarToggle) on the content's own ground.
-func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
+func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar, page bool) {
 	bar := c.TitleBar()
 	right := float32(18)
 	if bar.Right > 0 {
@@ -166,6 +179,10 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 		// Back and the page's buttons come and go with the page, Back
 		// naming where it went.
 		in := a.Screen == ScreenAlbum
+		if !page {
+			// The page's own title bar grows with it (growSurface).
+			return
+		}
 		if in {
 			a.fly.back = a.backLabel()
 		} else if !a.fly.moving {
