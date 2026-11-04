@@ -332,7 +332,7 @@ func (a *App) nowCard(c *ui.Context, k *Tokens, j *store.Job) {
 		a.OpenJob(j.ID)
 	}
 	card.Cursor(ui.CursorPointer).Children(func() {
-		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 80), Placeholder: pal.Bg, Size: 40, Radius: radiusInner, Color: 0.25 + 0.75*float32(j.Progress)}.Show(c)
+		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 80), Placeholder: pal.Bg, Size: 40, Radius: radiusInner, Color: 1}.Show(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(12).FontWeight(600).Ellipsis("…").SingleLine()
 			line := fmt.Sprintf("%d of %d", j.Done(), j.TotalItems)
