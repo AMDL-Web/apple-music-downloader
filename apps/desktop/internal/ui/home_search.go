@@ -35,9 +35,7 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 	if a.groupsMoved {
 		a.groupsAt, a.groupsMoved = c.Now(), false
 	}
-	if since := c.Now().Sub(a.groupsAt); since < groupEnter {
-		c.After(groupEnter - since)
-	}
+	switching(c, a.groupsAt)
 	// With motion, the tab the frame before showed is shown for the whole
 	// of this frame, its groups leaving (searchGroups), however its change
 	// reached the store: a frame may build more than once, and a copy that
@@ -140,89 +138,69 @@ const groupRow, loadAhead = 30, 600
 
 func groupTitle(g string) string { return strings.ToUpper(g[:1]) + g[1:] }
 
-// The motion between the overview and a group alone, when the window
-// moves the album page too (App.PageMotion), in turns so that nothing
-// passes over what is still there. Into a tab, the other groups and the
-// group's title fade (groupFade); then the group glides to the top
-// (groupEase, after groupClear) and the hits past the overview's fade in
-// where they land. Out to the overview, the group glides to its place
-// first and the other groups fade in after it. Things fade in only for
-// groupEnter after a tab changes, so a new answer in the same tab shows
-// at once.
+// The motion of a new answer in the same tab, and of the results and an
+// artist's albums taking each other's place (viewMotion); a change of tab
+// is a switch (switch_motion.go).
 var (
-	groupEase  = ui.Animation{Duration: 320 * time.Millisecond, Ease: ui.EaseInOut}
-	groupFade  = ui.Animation{Duration: 160 * time.Millisecond, Ease: ui.EaseOut}
-	groupClear = groupFade.Duration
-	groupEnter = groupClear + groupEase.Duration + groupFade.Duration + 50*time.Millisecond
-
-	groupGlideLate = ui.Animation{Duration: groupEase.Duration, Ease: groupEase.Ease, Delay: groupClear}
-	groupFadeLate  = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupEase.Duration}
-	hitFadeLate    = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupClear + groupEase.Duration/2}
-	landFadeLate   = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupClear + groupEase.Duration}
-	fadeOut        = ui.Motion{}
-	riseIn         = ui.Motion{Y: 12}
+	groupEase = ui.Animation{Duration: 320 * time.Millisecond, Ease: ui.EaseInOut}
+	groupFade = ui.Animation{Duration: 160 * time.Millisecond, Ease: ui.EaseOut}
+	fadeOut   = ui.Motion{}
+	riseIn    = ui.Motion{Y: 12}
 )
 
-// tabChange reports whether the search changed tab within groupEnter, and
-// whether into a group's rather than out to the overview.
-func (a *App) tabChange(c *ui.Context) (changing, into bool) {
-	if c.Now().Sub(a.groupsAt) >= groupEnter {
-		return false, false
-	}
-	return true, a.Store.Search.Focus != ""
-}
+// tabChange reports whether the search changed tab within switchSettle.
+func (a *App) tabChange(c *ui.Context) bool { return switching(c, a.groupsAt) }
 
-// groupMotion is the Transition of a group of the search: one leaving
-// fades out; one coming into the overview fades in after the group that
-// stays has moved; the one that stays glides, after the others clear the
-// way into a tab. It is none without page motion.
-func (a *App) groupMotion(c *ui.Context, g string, leaving bool) ui.ElementTransition {
-	if !a.PageMotion {
-		return ui.ElementTransition{}
-	}
-	changing, into := a.tabChange(c)
+// tabLeaving reports whether this frame shows the tab left, its parts
+// going: the next shows the one chosen (searchBody).
+func (a *App) tabLeaving() bool { return a.PageMotion && a.groupsLast != a.Store.Search.Focus }
+
+// groupMotion is the Transition of el, a group of the search or its grid,
+// as a switch goes (switch_motion.go): a group the tab left leaves goes
+// out; one the tab chosen brings comes in; the one both show glides. It is
+// none without page motion.
+func (a *App) groupMotion(c *ui.Context, el ui.Element, leaving bool) ui.ElementTransition {
 	switch {
+	case !a.PageMotion:
+		return ui.ElementTransition{}
 	case leaving:
-		return ui.ElementTransition{Animation: &groupFade, Exit: &fadeOut}
-	case changing && !into && g != a.groupsFrom:
-		return ui.ElementTransition{Animation: &groupFadeLate, Exit: &fadeOut, Enter: &fadeOut}
+		return ui.ElementTransition{Animation: &switchOut, Exit: &fadeOut}
+	case a.tabChange(c) && fresh(el):
+		return ui.ElementTransition{Animation: &switchIn, Enter: &fadeOut, Exit: &fadeOut}
 	}
-	t := ui.ElementTransition{Animation: &groupEase, Position: true, Exit: &fadeOut}
-	if changing && into {
-		t.Animation, t.Enter = &groupGlideLate, &fadeOut
-	}
-	return t
+	return ui.ElementTransition{Animation: &switchGlide, Position: true, Exit: &fadeOut}
 }
 
-// titleMotion is the Transition of a group's title, or of the row under a
-// group alone, which fade out at once and in once the group has landed.
-func (a *App) titleMotion(c *ui.Context) ui.ElementTransition {
-	if !a.PageMotion {
+// titleMotion is the Transition of el, a group's title or the row under a
+// group alone, which go out with the tab left and come in with the tab
+// chosen.
+func (a *App) titleMotion(c *ui.Context, el ui.Element) ui.ElementTransition {
+	switch {
+	case !a.PageMotion:
 		return ui.ElementTransition{}
+	case a.tabLeaving():
+		return ui.ElementTransition{Animation: &switchOut, Exit: &fadeOut}
+	case a.tabChange(c) && fresh(el):
+		return ui.ElementTransition{Animation: &switchIn, Enter: &fadeOut, Exit: &fadeOut}
 	}
-	t := ui.ElementTransition{Animation: &groupFade, Exit: &fadeOut}
-	if changing, into := a.tabChange(c); changing {
-		t.Enter, t.Animation = &fadeOut, &groupFadeLate
-		if into {
-			t.Animation = &landFadeLate
-		}
-	}
-	return t
+	return ui.ElementTransition{Animation: &groupFade, Exit: &fadeOut}
 }
 
-// hitMotion is the Transition of a hit of the search: it settles as its
-// row lays out again and fades out when its group no longer shows it;
-// one appearing in a tab just opened rises in once its group is there.
-func (a *App) hitMotion(c *ui.Context) ui.ElementTransition {
-	if !a.PageMotion {
-		return ui.ElementTransition{}
-	}
+// hitMotion is the Transition of el, a hit of the search: it settles as
+// its row lays out again and fades out when its group no longer shows it.
+// As the tab changes, one the tab left leaves goes out, one the tab chosen
+// brings comes in, and one both show glides.
+func (a *App) hitMotion(c *ui.Context, el ui.Element) ui.ElementTransition {
 	t := ui.ElementTransition{Animation: &groupFade, Position: true, Size: true, Exit: &fadeOut}
-	if changing, into := a.tabChange(c); changing {
-		t.Enter = &riseIn
-		if into {
-			t.Animation = &hitFadeLate
-		}
+	switch {
+	case !a.PageMotion:
+		return ui.ElementTransition{}
+	case a.tabLeaving():
+		t.Animation = &switchOut
+	case a.tabChange(c) && fresh(el):
+		t.Animation, t.Enter = &switchIn, &fadeOut
+	case a.tabChange(c):
+		t.Animation = &switchGlide
 	}
 	return t
 }
@@ -237,7 +215,6 @@ func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.S
 	s := a.Store
 	q := &s.Search
 	type built struct {
-		g       string
 		el      ui.Element
 		leaving bool
 	}
@@ -270,11 +247,11 @@ func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.S
 				a.groupMore(c, k, g)
 			}
 		})
-		groups[n] = built{g, el, leaving}
+		groups[n] = built{el, leaving}
 		n++
 	}
 	for _, b := range groups[:n] {
-		b.el.Transition(a.groupMotion(c, b.g, b.leaving))
+		b.el.Transition(a.groupMotion(c, b.el, b.leaving))
 	}
 }
 
@@ -290,7 +267,8 @@ func overviewCount(g string, width float32) int {
 // groupHead is a group's title in the overview, which opens its tab.
 func (a *App) groupHead(c *ui.Context, k *Tokens, g string) {
 	head := ui.ButtonBase(c.Key("head")).Height(groupRow).Gap(4).AlignItems(ui.Center).AlignSelf(ui.Start).
-		Label("See all " + g).Transition(a.titleMotion(c))
+		Label("See all " + g)
+	head.Transition(a.titleMotion(c, head))
 	col := k.Faint
 	if head.Hovered() {
 		col = k.Fg
@@ -309,7 +287,8 @@ func (a *App) groupHead(c *ui.Context, k *Tokens, g string) {
 func (a *App) groupMore(c *ui.Context, k *Tokens, g string) {
 	s := a.Store
 	q := &s.Search
-	ui.Row(c.Key("more")).Height(groupRow).Gap(10).Justify(ui.Center).AlignItems(ui.Center).Transition(a.titleMotion(c)).Children(func() {
+	more := ui.Row(c.Key("more")).Height(groupRow).Gap(10).Justify(ui.Center).AlignItems(ui.Center)
+	more.Transition(a.titleMotion(c, more)).Children(func() {
 		switch q.More[g] {
 		case store.PageLoading:
 			ui.Text(c, "Loading more…").FontSize(12).TextColor(k.Muted)
@@ -332,7 +311,8 @@ func (a *App) groupMore(c *ui.Context, k *Tokens, g string) {
 // does when the title over it goes, and goes as quickly as its group when
 // that leaves.
 func (a *App) groupGrid(c *ui.Context, k *Tokens, g string, hits []client.SearchHit, whole, leaving bool, sel *client.SearchHit, width float32) {
-	ui.Column(c.Key("grid")).Transition(a.groupMotion(c, g, leaving)).Children(func() {
+	grid := ui.Column(c.Key("grid"))
+	grid.Transition(a.groupMotion(c, grid, leaving)).Children(func() {
 		if g == "songs" {
 			a.songGrid(c, k, hits, sel, width)
 			return
@@ -346,7 +326,6 @@ func (a *App) focusGroup(group string) {
 	if a.Store.Search.Focus == group {
 		return
 	}
-	a.groupsFrom = a.Store.Search.Focus
 	a.Store.FocusGroup(group)
 	a.searchSel = ""
 	a.groupsMoved = true
@@ -356,7 +335,7 @@ func (a *App) focusGroup(group string) {
 		// its top and only the groups move: a glide up while the group
 		// moves down would carry it and the tabs in from above the window.
 		if a.PageMotion && group != "" && st.Y <= groupGlideMax {
-			st.ScrollTo(0, 0, groupEase)
+			st.ScrollTo(0, 0, switchGlide)
 		} else {
 			st.Y = 0
 		}
