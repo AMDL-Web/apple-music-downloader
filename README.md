@@ -238,7 +238,7 @@ is the API's only browser client: responses carry no CORS headers.
 | **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` · `POST /downloads/{id}/move`: runs, one per download of a record |
 | **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed (SSE) |
 | **Lookup** | `POST /lookup`: preview a link's title, artist and cover, and its record, without creating a job |
-| **Search** | `GET /search`: search the catalog for songs, albums, playlists and artists · `GET /artists/{id}/albums`: an artist's albums, page by page · `GET /albums/{id}`: an album's songs, each with its state in the album's record |
+| **Search** | `GET /search`: search the catalog for songs, albums, playlists and artists · `GET /artists/{id}/albums`: an artist's albums, page by page · `GET /albums/{id}`: an album's songs, each with its state in the album's record · `GET /playlists/{id}`: a playlist's songs, the same way |
 | **Quality** | `POST /quality`: probe a link's codecs and audio quality without creating a job |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Accounts** | `GET /accounts` · `PATCH /accounts/{account_id}`: library switches and position · `DELETE /accounts/{account_id}`: log the account out and drop its rows |

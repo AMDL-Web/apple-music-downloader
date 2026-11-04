@@ -206,6 +206,7 @@ func (s *Server) routes() []route {
 		{http.MethodGet, "/api/v1/search", h(s.search)},
 		{http.MethodGet, "/api/v1/artists/{artist_id}/albums", h(s.artistAlbums)},
 		{http.MethodGet, "/api/v1/albums/{album_id}", h(s.getAlbum)},
+		{http.MethodGet, "/api/v1/playlists/{playlist_id}", h(s.getPlaylist)},
 		// Records. The literal segments (summary, add, reset, check, pending)
 		// are more specific than {kind}.
 		{http.MethodGet, "/api/v1/library/summary", h(s.librarySummary)},

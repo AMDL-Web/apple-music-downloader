@@ -886,6 +886,27 @@ the album answers either way.
 `resource` is the album's record and each song's `state` its main slot's `audio_state`
 there; both are absent when amdl has no record of the album.
 
+### Playlist
+
+```bash
+curl 'http://localhost:18080/api/v1/playlists/pl.f4d106fed2bd41149aaacabb233eb5eb?storefront=cn'
+```
+
+Returns a catalog playlist in the shape of the album answer: `title`, `artist_name` (the
+curator), `artwork_url` and its palette, `track_count`, `audio_traits`, `resource` and
+`tracks`, its songs in the playlist's own order, each on `disc_number` 1 with `track_number`
+its place in the list from 1. The album-only fields are absent. `url` downloads the whole
+playlist when submitted to `POST /downloads`, a song's `url` that song alone, and each
+song's `state` is its main slot's `audio_state` in the playlist's record. The whole list
+comes in one answer, within 15 seconds.
+
+| Case | Answer |
+| --- | --- |
+| An id that is not a catalog playlist id (`pl.…`), a bad `storefront` | `400 invalid_request` |
+| Apple answers 404 (an unknown playlist id, or one the storefront does not have) | `404 catalog_not_found` |
+| The catalog read fails otherwise | `502 upstream_error` |
+| No answer within 15 seconds | `504 upstream_timeout` |
+
 ### Record marks
 
 `resource` on a search hit, a lookup and the album page is `{kind, id, state, tracks_done,

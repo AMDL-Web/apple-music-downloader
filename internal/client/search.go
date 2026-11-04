@@ -187,3 +187,12 @@ func (c *Client) Album(ctx context.Context, albumID, storefront string) (Album, 
 	err := c.do(ctx, http.MethodGet, "/api/v1/albums/"+url.PathEscape(albumID), PageQuery{Storefront: storefront}.values(), nil, &a)
 	return a, err
 }
+
+// Playlist reads a catalog playlist and its songs (GET
+// /api/v1/playlists/{playlist_id}), in the album's shape: the curator as
+// ArtistName, each song on disc 1 at its place in the list.
+func (c *Client) Playlist(ctx context.Context, playlistID, storefront string) (Album, error) {
+	var a Album
+	err := c.do(ctx, http.MethodGet, "/api/v1/playlists/"+url.PathEscape(playlistID), PageQuery{Storefront: storefront}.values(), nil, &a)
+	return a, err
+}

@@ -207,7 +207,7 @@ CORS 头。
 | **下载** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` · `POST /downloads/{id}/move`：运行，每次下载一条记录就是一次 |
 | **事件** | `GET /downloads/{id}/events` 单个作业 · `GET /downloads/events` 总览流（SSE） |
 | **链接预览** | `POST /lookup`：不建作业，预览链接的标题、艺人和封面，以及它的记录 |
-| **搜索** | `GET /search`：在曲库里搜歌曲、专辑、歌单和艺人 · `GET /artists/{id}/albums`：分页列出艺人的专辑 · `GET /albums/{id}`：专辑的歌曲列表，逐首标出在专辑记录里的状态 |
+| **搜索** | `GET /search`：在曲库里搜歌曲、专辑、歌单和艺人 · `GET /artists/{id}/albums`：分页列出艺人的专辑 · `GET /albums/{id}`：专辑的歌曲列表，逐首标出在专辑记录里的状态 · `GET /playlists/{id}`：歌单的歌曲列表，同样逐首标出状态 |
 | **音质探测** | `POST /quality`：不建作业，探测链接的编码和音质 |
 | **账户** | `GET /accounts` · `PATCH /accounts/{account_id}`：资料库开关与顺序 · `DELETE /accounts/{account_id}`：登出该账户并删除它的记录 |
 | **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |

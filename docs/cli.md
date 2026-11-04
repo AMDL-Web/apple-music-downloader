@@ -34,6 +34,7 @@ by meaning.
 | `search <term> [--types songs,albums,playlists,artists] [--storefront] [--limit] [--offset]` | `GET /search` | read |
 | `artists albums <artist_id> [--storefront] [--limit] [--offset]` | `GET /artists/{artist_id}/albums` | read |
 | `albums get <album_id> [--storefront]` | `GET /albums/{album_id}` | read |
+| `playlists get <playlist_id> [--storefront]` | `GET /playlists/{playlist_id}` | read |
 | `lookup <url>` | `POST /lookup` | read |
 | `quality <url>` | `POST /quality` | read |
 | `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--wait\|--watch] [--timeout] [--progress-interval]` | `POST /downloads` | write |
@@ -101,13 +102,13 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
 bytes, base64url), and contacts no server: set it on the wrapper's gateway and with
 `amdl config set wrapper.token=<key>` ([configuration.md](configuration.md#wrapper)).
 
-`--storefront` (the `storefront` argument of `search_catalog`, `list_artist_albums` and `get_album`)
+`--storefront` (the `storefront` argument of `search_catalog`, `list_artist_albums`, `get_album` and `get_playlist`)
 reads the catalog of another region: pass one a logged-in account serves (`accounts` shows each
 account's `region`), such as `jp`; every hit's `url` carries it. Without it, the default account's region answers.
 
 What is downloaded is what amdl's records say, never the disk: `library list` and
-`library get` show them, and `search`, `lookup` and `albums get` mark what they find with
-its record's `resource` (`albums get` gives each song in its `tracks` its `state`). `download` of a record
+`library get` show them, and `search`, `lookup`, `albums get` and `playlists get` mark what they find with
+its record's `resource` (`albums get` and `playlists get` give each song in their `tracks` its `state`). `download` of a record
 with every track done answers `already_downloaded` and queues nothing, ignoring `--codec`; the answer then
 carries a `hint` naming `library download <kind> <id> --codec <codec>`, which adds that quality
 as a second file. `library reset`
@@ -123,7 +124,7 @@ downloads it again (`--what audio`), and `library check` then `library reset --w
   API gives them; the backend's log lines use local time with its offset.
 - **`--fields a,b`** keeps only those keys: of the object itself when it has one of
   them, otherwise of each element of the arrays inside it (the jobs of a list, the hits of
-  each search group). `search`, `lookup`, `artists albums` and `albums get` leave out the
+  each search group). `search`, `lookup`, `artists albums`, `albums get` and `playlists get` leave out the
   artwork color palette (`artwork_bg_color`, `artwork_text_color1` to `4`) unless
   `--artwork-colors` is given.
   Every command takes it except `mcp`.
@@ -286,7 +287,7 @@ which are all queued or running already are not an error. `set_config`, like
   `start_download` answers `already_downloaded` for a `codec_priority` carries a `hint` naming
   `download_resource`. This shape is the MCP's own: the CLI's `download`
   prints the API's batch, whose jobs are `results[].job.id`. `search_catalog`,
-  `list_artist_albums`, `get_album` and `lookup_link` leave out the artwork color palette unless
+  `list_artist_albums`, `get_album`, `get_playlist` and `lookup_link` leave out the artwork color palette unless
   `artwork_colors` is true.
 - **`wait_for_job`** follows one job for at most `timeout_s` seconds
   (`apps/amdl/internal/mcpserver#maxWait`, default 120; a value outside 1 to 300 is an

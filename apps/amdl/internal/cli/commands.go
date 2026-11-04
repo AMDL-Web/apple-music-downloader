@@ -170,7 +170,7 @@ func specFlags(fs *flag.FlagSet, op capability.Operation, positional []string) m
 // paletteCommands answer with catalog hits that carry the artwork color
 // palette, which an agent has no use for; they leave it out unless
 // --artwork-colors asks for it, as the MCP tools do.
-var paletteCommands = map[string]bool{"search": true, "lookup": true, "artists albums": true, "albums get": true}
+var paletteCommands = map[string]bool{"search": true, "lookup": true, "artists albums": true, "albums get": true, "playlists get": true}
 
 // passthrough builds a command that sends one request from its flags and
 // positional arguments and prints the answer as is.

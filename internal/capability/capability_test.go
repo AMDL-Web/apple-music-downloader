@@ -95,6 +95,10 @@ func TestBuild(t *testing.T) {
 	if err != nil || album.Method != "GET" || album.Path != "/api/v1/albums/1783644603" || album.Query.Get("storefront") != "cn" {
 		t.Errorf("album request = %+v, %v", album, err)
 	}
+	playlist, err := Lookup("getPlaylist").Build(map[string]any{"playlist_id": "pl.abc", "storefront": "cn"})
+	if err != nil || playlist.Method != "GET" || playlist.Path != "/api/v1/playlists/pl.abc" || playlist.Query.Get("storefront") != "cn" {
+		t.Errorf("playlist request = %+v, %v", playlist, err)
+	}
 	lookup := Lookup("lookupLink")
 	req, err = lookup.Build(map[string]any{"url": "https://music.apple.com/us/album/x/1"})
 	if err != nil || req.Body["url"] != "https://music.apple.com/us/album/x/1" || req.Method != "POST" {

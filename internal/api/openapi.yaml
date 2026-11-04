@@ -1449,6 +1449,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/playlists/{playlist_id}:
+    get:
+      tags: [Search]
+      summary: Get a playlist and its songs
+      description: |
+        A catalog playlist's metadata and its song list in the playlist's own
+        order: the songs a playlist download (POST /api/v1/downloads with the
+        playlist's url) takes, music videos excluded. The answer has the shape
+        of AlbumResponse (PlaylistResponse). The whole list comes in one
+        answer, bounded by 15 seconds like GET /api/v1/albums/{album_id}. A
+        song's url submitted to POST /api/v1/downloads downloads that song
+        alone.
+
+        resource is the playlist's record and each song's state its main slot
+        state there, read from the records and never from the disk.
+      operationId: getPlaylist
+      parameters:
+        - name: playlist_id
+          in: path
+          required: true
+          description: The playlist's Apple Music catalog id, the id of a playlist search hit ("pl." and Apple's letters, digits and dashes).
+          schema:
+            type: string
+            pattern: '^pl\.[A-Za-z0-9._-]{1,200}$'
+        - $ref: '#/components/parameters/BrowseStorefront'
+      responses:
+        '200':
+          description: The playlist and its songs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistResponse'
+        '400':
+          description: invalid_request; the playlist id is not a catalog playlist id, or storefront is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: catalog_not_found; Apple answered 404 for the playlist id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: upstream_error; the catalog read failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: upstream_timeout; the catalog did not answer within 15 seconds.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/library/summary:
     get:
       tags: [Library]
@@ -4955,6 +5011,60 @@ components:
           items:
             $ref: '#/components/schemas/AlbumTrack'
           description: The album's songs, sorted by disc_number, then track_number; empty when it has none.
+    PlaylistResponse:
+      type: object
+      required: [storefront, id, url, title, track_count, tracks]
+      description: >-
+        A playlist's metadata and its songs, in the fields of AlbumResponse:
+        artist_name is the curator, and the album-only fields (artist_url,
+        release_date, genre, content_rating, apple_digital_master, the motion
+        artwork) are absent. Each field is absent when the catalog has no value.
+      properties:
+        storefront:
+          type: string
+          description: The storefront read, lowercase.
+        id:
+          type: string
+          description: Apple Music catalog playlist id.
+        url:
+          type: string
+          description: >-
+            A music.apple.com link that downloads the whole playlist when
+            submitted: Apple's page without its query, or one built from the id.
+        title:
+          type: string
+        artist_name:
+          type: string
+          description: The playlist's curator.
+        artwork_url:
+          type: string
+          description: Artwork URL template with {w}x{h} placeholders, as on Job.
+        artwork_bg_color:
+          type: string
+          description: Background color of that artwork, hex without "#".
+        artwork_text_color1: {type: string}
+        artwork_text_color2: {type: string}
+        artwork_text_color3: {type: string}
+        artwork_text_color4: {type: string}
+        track_count:
+          type: integer
+          description: The number of entries in tracks.
+        disc_count:
+          type: integer
+          description: 1 when the playlist has songs; absent when it has none.
+        audio_traits:
+          $ref: '#/components/schemas/AudioTraits'
+        resource:
+          $ref: '#/components/schemas/ResourceMark'
+          description: The playlist's record; absent when amdl has none.
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlbumTrack'
+          description: >-
+            The playlist's songs in its own order, each with disc_number 1 and
+            track_number its place in the list from 1; state is its main slot
+            state in the playlist's record. Empty when it has none.
     AlbumTrack:
       type: object
       required: [id, url, disc_number, track_number, name]

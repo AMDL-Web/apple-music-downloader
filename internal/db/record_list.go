@@ -398,7 +398,13 @@ func (s *Store) SongMarks(ctx context.Context, songIDs []string) (map[string]dom
 // AlbumTrackStates returns the main slot state of each track of an album
 // record, keyed by song id.
 func (s *Store) AlbumTrackStates(ctx context.Context, albumID string) (map[string]domain.AudioState, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT song_id, audio_state FROM files WHERE owner_kind = 'album' AND owner_id = ? AND slot = 'main'`, albumID)
+	return s.RecordTrackStates(ctx, domain.ResourceAlbum, albumID)
+}
+
+// RecordTrackStates returns the main slot state of each track of a record
+// of kind, keyed by song id.
+func (s *Store) RecordTrackStates(ctx context.Context, kind domain.ResourceKind, id string) (map[string]domain.AudioState, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT song_id, audio_state FROM files WHERE owner_kind = ? AND owner_id = ? AND slot = 'main'`, string(kind), id)
 	if err != nil {
 		return nil, err
 	}
