@@ -608,7 +608,9 @@ given-up and missing slots and answers `202 {status: "queued", job}`, `200 {stat
 "already_downloaded"}` when every wanted track is done, or `200 {status: "waiting"}` when
 slots are left that no run takes now (a full queue, which the scheduler fills later, or a
 record gone from the catalog).
-For a station it queues the same link again, and a full queue is `503 queue_full`. A record
+A run of no record is retried as an add of its link: an album, song or catalog playlist
+link (the 1.x history among them) becomes a record or joins its record, answering as a record's
+run does, and a station queues the same link again; a full queue is `503 queue_full`. A record
 or link that already has a queued or running job is `409 duplicate_active`.
 
 ```bash

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -315,8 +316,10 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 // like DownloadRecord: with every wanted track done it queues nothing and
 // sets AlreadyDownloaded; with slots left that no run takes now (a full
 // queue, which the scheduler fills later, or a catalog miss) it returns
-// neither. For a one-off run (a station) it queues a new run of
-// the same input and overrides, or fails with ErrQueueFull.
+// neither. A run of no record is retried as an add of its link with its
+// overrides (submitOne): an album, song or catalog playlist link becomes a
+// record or joins its record, a station queues a new one-off run; a full
+// queue fails with ErrQueueFull.
 // ErrJobNotRetryable refuses a queued, running or completed run;
 // db.ErrDuplicateActive a record or input with an active run.
 func (m *Manager) RetryRun(ctx context.Context, jobID string) (RecordDownloadResult, error) {
@@ -368,24 +371,42 @@ func (m *Manager) RetryRun(ctx context.Context, jobID string) (RecordDownloadRes
 	} else if found {
 		return RecordDownloadResult{}, db.ErrDuplicateActive
 	}
-	typ, id := job.Type, ""
-	if t, _, parsedID, ok := ParseCanonicalKey(job.CanonicalKey); ok {
-		typ, id = t, parsedID
+	// A run of no record (a 1.x import, a station) is retried as its link
+	// would be added now: an album, a song or a catalog playlist becomes a
+	// record, or joins the one it has, so what it downloads counts as
+	// downloaded; a station is a one-off run again.
+	valid := ValidationResult{Type: job.Type, Storefront: job.Storefront}
+	key := job.CanonicalKey
+	if t, sf, id, ok := ParseCanonicalKey(job.CanonicalKey); ok {
+		valid = ValidationResult{Type: t, Storefront: sf, ID: id}
+	} else {
+		v, err := m.processor.ValidateRequest(ctx, job.Input)
+		if err != nil {
+			return RecordDownloadResult{}, err
+		}
+		valid, key = v, canonicalKey(v.Type, v.Storefront, v.ID)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	run, result, admitted := m.admitLocked(ctx, job.Input, ValidationResult{Type: typ, Storefront: job.Storefront, ID: id}, job.CanonicalKey, job.Overrides, now)
-	if !admitted {
-		if result.Status == domain.SubmitQueueFull {
-			return RecordDownloadResult{}, ErrQueueFull
+	result := m.submitOne(ctx, job.Input, key, valid, job.Overrides, SubmitOptions{ArtistInclude: "all"}, now, false)
+	switch result.Status {
+	case domain.SubmitAccepted:
+		if result.Job == nil {
+			return RecordDownloadResult{}, nil
 		}
-		if result.Status == domain.SubmitDuplicateActive {
-			return RecordDownloadResult{}, db.ErrDuplicateActive
-		}
+		logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", result.Job.ID, "retried_job_id", jobID)
+		return RecordDownloadResult{Job: result.Job}, nil
+	case domain.SubmitPending:
+		return RecordDownloadResult{}, nil
+	case domain.SubmitAlreadyDownloaded:
+		return RecordDownloadResult{AlreadyDownloaded: true}, nil
+	case domain.SubmitQueueFull:
+		return RecordDownloadResult{}, ErrQueueFull
+	case domain.SubmitDuplicateActive:
+		return RecordDownloadResult{}, db.ErrDuplicateActive
+	}
+	if result.Error != nil {
 		return RecordDownloadResult{}, errors.New(result.Error.Message)
 	}
-	logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", run.ID, "retried_job_id", jobID)
-	return RecordDownloadResult{Job: &run}, nil
+	return RecordDownloadResult{}, fmt.Errorf("retry %s: %s", jobID, result.Status)
 }
 
 // validationFailure is the result for a URL the processor refused. A

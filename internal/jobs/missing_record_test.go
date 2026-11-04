@@ -48,8 +48,8 @@ func openAtSchema7(t *testing.T, build func(*db.Store)) *db.Store {
 
 // After migration 8 a stopped imported run still ends up in the record its
 // paused pending add resolves into, while a finished run whose record was
-// never made is a run of no record: a retry queues its input again instead
-// of failing on the missing record.
+// never made is a run of no record: a retry adds its link, which makes the
+// record, instead of failing on the missing one.
 func TestMigratedRunsOfMissingRecords(t *testing.T) {
 	ctx := context.Background()
 	stamp := time.Date(2024, 7, 10, 12, 0, 0, 0, time.UTC)
@@ -87,7 +87,7 @@ func TestMigratedRunsOfMissingRecords(t *testing.T) {
 		t.Fatalf("j-done = %+v (%v), want no record", done, err)
 	}
 	res, err := m.RetryRun(ctx, "j-done")
-	if err != nil || res.Job == nil || res.Job.Input != "album|us|1" || res.Job.ResourceID != "" {
-		t.Fatalf("retry of j-done = %+v (%v), want a queued run of its input", res, err)
+	if err != nil || res.Job == nil || res.Job.ResourceKind != domain.ResourceAlbum || res.Job.ResourceID != "1" {
+		t.Fatalf("retry of j-done = %+v (%v), want a run of album record 1", res.Job, err)
 	}
 }

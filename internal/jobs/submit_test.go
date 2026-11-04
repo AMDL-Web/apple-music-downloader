@@ -267,6 +267,35 @@ func TestRetryRefusesActiveCompletedMissingAndDuplicateJobs(t *testing.T) {
 	}
 }
 
+// A run of no record whose link names an album, as the 1.x history the
+// upgrade imports, is retried as an add of that link: the album becomes a
+// record and the new run is its run, so what it downloads counts.
+func TestRetryOfARunOfNoRecordAddsItsRecord(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
+	old := domain.Job{ID: "job-1x", Input: "https://music.apple.com/cn/album/x/555", Type: "album", CanonicalKey: "album:cn:555",
+		Status: domain.JobCancelled, Trigger: domain.TriggerImport1x, CreatedAt: now, UpdatedAt: now}
+	if err := store.CreateJob(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	res, err := manager.RetryRun(ctx, old.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Job == nil || res.Job.ResourceKind != domain.ResourceAlbum || res.Job.ResourceID != "555" {
+		t.Fatalf("retry = %+v, want a run of album record 555", res.Job)
+	}
+	if _, err := store.GetAlbum(ctx, "555"); err != nil {
+		t.Fatalf("album record 555 after the retry: %v", err)
+	}
+}
+
 // holdProcessor reports every ProcessJob entry and blocks it until release is
 // closed, so a test can see whether a second worker also entered the job.
 type holdProcessor struct {
