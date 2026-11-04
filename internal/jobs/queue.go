@@ -78,9 +78,13 @@ func (s *signal) broadcast() {
 	}
 }
 
+// unreadableOverridesError is the error of a run RecoverUnfinished fails
+// because its stored overrides do not decode.
+const unreadableOverridesError = "the run's stored download overrides do not decode"
+
 // RecoverUnfinished sets the slots a previous process left running back to
-// pending, then requeues the jobs it left queued or running and records
-// job_recovered for each. Interrupted running jobs go to
+// pending, fails the runs whose stored overrides do not decode, then requeues
+// the jobs it left queued or running and records job_recovered for each. Interrupted running jobs go to
 // the front of the run order, in the order they had, because they were ahead
 // of every queued job when they started; queued jobs keep their place. Call it
 // before Start.
@@ -92,6 +96,17 @@ func (m *Manager) RecoverUnfinished(ctx context.Context) (int, error) {
 		return 0, err
 	} else if released > 0 {
 		m.logger.Info("slots left running by the previous process are pending again", "slots", released)
+	}
+	// Such a run cannot run, and ListRecoverableJobs refuses it: left queued,
+	// it would stop this recovery and the backend with it.
+	failed, events, err := m.store.FailUnreadableJobs(ctx, unreadableOverridesError, time.Now().UTC())
+	if err != nil {
+		return 0, err
+	}
+	for i, job := range failed {
+		m.hub.Publish(events[i])
+		m.logger.Warn("job failed: its stored overrides do not decode", "job_id", job.ID)
+		m.dispatchHooks(ctx, job)
 	}
 	jobs, err := m.store.ListRecoverableJobs(ctx)
 	if err != nil {

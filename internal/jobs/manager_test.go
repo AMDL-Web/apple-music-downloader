@@ -99,6 +99,66 @@ func TestRecoverUnfinishedRequeuesQueuedAndRunningJobs(t *testing.T) {
 	}
 }
 
+// A run left queued or running whose stored overrides do not decode cannot
+// run: recovery fails it, with its overrides column kept, and requeues the
+// others, so the backend still starts.
+func TestRecoveryFailsARunWhoseOverridesDoNotDecode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "amdl.db")
+	store, err := db.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	good := domain.Job{ID: "job-good", Input: "https://music.apple.com/cn/song/good/1", Type: "song", Storefront: "cn", CanonicalKey: "song:cn:1", Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now}
+	bad := domain.Job{ID: "job-bad", Input: "https://music.apple.com/cn/song/bad/2", Type: "song", Storefront: "cn", CanonicalKey: "song:cn:2", Status: domain.JobRunning, StartedAt: &now, CreatedAt: now, UpdatedAt: now}
+	for _, job := range []domain.Job{good, bad} {
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.CreateItem(ctx, domain.JobItem{ID: "item-bad", JobID: bad.ID, AdamID: "2", Kind: "song", Index: 1, Status: domain.ItemDownloading, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.Exec(`UPDATE runs SET overrides='{broken' WHERE id=?`, bad.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
+	if recovered, err := manager.RecoverUnfinished(ctx); err != nil || recovered != 1 {
+		t.Fatalf("RecoverUnfinished = %d, %v; want the readable run requeued", recovered, err)
+	}
+	if order, err := store.QueuedJobIDs(ctx); err != nil || len(order) != 1 || order[0] != good.ID {
+		t.Fatalf("queued after recovery = %v, %v; want only %s", order, err, good.ID)
+	}
+	listed, _, err := store.ListJobs(ctx, db.JobListFilter{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, j := range listed {
+		if j.ID == bad.ID && (j.Status != domain.JobFailed || j.Error == "" || j.FinishedAt == nil || j.CancelledItems != 1) {
+			t.Fatalf("unreadable run after recovery = %+v, want failed with a reason and its item ended", j)
+		}
+	}
+	var stored string
+	if err := raw.QueryRow(`SELECT overrides FROM runs WHERE id=?`, bad.ID).Scan(&stored); err != nil || stored != "{broken" {
+		t.Fatalf("overrides column = %q, %v; want it kept as stored", stored, err)
+	}
+	evs, err := store.ListEventsAfterLimit(ctx, bad.ID, 0, 0)
+	if err != nil || len(evs) != 1 || evs[0].Type != domain.EventJobFailed {
+		t.Fatalf("events of the unreadable run = %+v, %v; want one job_failed", evs, err)
+	}
+	if _, err := manager.RecoverUnfinished(ctx); err != nil {
+		t.Fatalf("a second recovery = %v", err)
+	}
+}
+
 // A row stored before the overrides shrank keeps keys that are no longer
 // fields (the token, a hook selection, a downloads directory) and a
 // four-segment canonical key. No migration rewrites it: after a restart it
