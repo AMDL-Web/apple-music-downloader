@@ -297,6 +297,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 			return "earlier"
 		}).TrackScroll(st)
 		a.fadeEdges(list, st)
+		a.noteView(list)
 		// The next page is read as the end of the list comes near.
 		if more && l.More == store.PageIdle && st.MaxY-st.Y < loadAhead {
 			s.MoreQueue(tab)

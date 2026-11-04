@@ -87,6 +87,7 @@ func (a *App) appleSongs(c *ui.Context, k *Tokens, items []domain.AppleLibraryIt
 			a.appleRow(c, k, items[i])
 		}).Absolute().Top(0).Left(0).Right(0).Bottom(0).ItemKey(func(i int) any { return items[i].ID }).TrackScroll(st)
 		a.fadeEdges(list, st)
+		a.noteView(list)
 	})
 }
 
@@ -139,6 +140,7 @@ func (a *App) appleGrid(c *ui.Context, k *Tokens, items []domain.AppleLibraryIte
 			return items[places[i].row*cols].ID
 		}).TrackScroll(st)
 		a.fadeEdges(list, st)
+		a.noteView(list)
 	})
 }
 

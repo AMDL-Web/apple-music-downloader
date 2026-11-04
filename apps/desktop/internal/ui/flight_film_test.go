@@ -506,3 +506,133 @@ func TestTheSongsNeverShowOverTheResults(t *testing.T) {
 		}
 	}
 }
+
+// flightFrames counts the frames of a flight, from the next frame on.
+func flightFrames(a *App, tt *ui.Tester) int {
+	n := 0
+	for range 150 {
+		tt.Advance(filmFrame)
+		n++
+		if !a.fly.moving {
+			break
+		}
+	}
+	return n
+}
+
+// The way out takes about as long as the way in, within a third: a page
+// that leaves at half the time it came in does not look like the same
+// motion run back.
+func TestTheWayOutTakesAboutAsLongAsTheWayIn(t *testing.T) {
+	a, albums := searchApp(t)
+	a.PageMotion, a.Theme = true, "light"
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	tt.Frame()
+	if err := tt.Click(albums[0].Name); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	in := flightFrames(a, tt)
+	a.Back()
+	tt.Frame()
+	out := flightFrames(a, tt)
+	if r := float64(max(in, out)) / float64(min(in, out)); r > 1.3 {
+		t.Errorf("the way in took %d frames and the way out %d: %.2f times", in, out, r)
+	}
+}
+
+// A tile the screen under the page cuts off at the top of its list is cut
+// the same way by the cover that lands on it: the frame the flight ends
+// changes the tile's place no more than the frames before, rather than the
+// cover flying over the bar above the list and vanishing.
+func TestTheCoverLandsCutAsItsTileIs(t *testing.T) {
+	a, albums := searchApp(t)
+	for i := len(albums); i < 60; i++ {
+		albums = append(albums, client.SearchHit{Type: "album", ID: fmt.Sprint(100 + i), Name: fmt.Sprintf("Album %d", i), ArtistName: "Yorushika", TrackCount: 3,
+			URL: fmt.Sprintf("https://music.apple.com/cn/album/x/%d", 100+i)})
+	}
+	albums[1].ArtworkBgColor = "203040"
+	a.Store.Search.Result.Albums.Items = albums
+	a.Store.FocusGroup("albums")
+	a.PageMotion, a.Theme = true, "light"
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	tt.Frame()
+	tt.Advance(time.Second)
+	st := a.scrolls["home-body"]
+	if st == nil || st.MaxY < 300 {
+		t.Fatalf("the results do not scroll: %+v", st)
+	}
+	// The first row's covers have their top 60 DIPs under the bar above the
+	// list.
+	cover, ok := tt.Find(albums[1].Name)
+	if !ok {
+		t.Fatalf("no tile: %q", tt.Texts())
+	}
+	st.Y = cover.Y - (124 - 60)
+	tt.Frame()
+	tt.Advance(time.Second)
+	if r, ok := tt.Find(albums[1].Name); !ok || r.H > 150 {
+		t.Fatalf("the first row's cover shows %v after scrolling to %v, not cut", r, st.Y)
+	}
+	if err := tt.Click(albums[1].Name); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	for range 150 {
+		tt.Advance(filmFrame)
+		if !a.fly.moving {
+			break
+		}
+	}
+	a.Back()
+	tt.Frame()
+	var frames []*image.RGBA
+	var box ui.Rect
+	var clipped float32
+	for range 150 {
+		tt.Advance(filmFrame)
+		frames = append(frames, cloneImage(tt.Image()))
+		if src := a.fly.src[partCover]; src.ok {
+			box = src.box
+			clipped, _ = a.fly.flightClip(box)
+		}
+		if !a.fly.moving {
+			break
+		}
+	}
+	if clipped < 20 {
+		t.Logf("cover %v, scrolled %v of %v, box %v, views %v", cover, st.Y, st.MaxY, box, a.fly.viewsPrev)
+		t.Fatalf("the tile is cut %.0f DIPs at the top of its list, not enough to show", clipped)
+	}
+	region := image.Rect(int(box.X)-10, int(box.Y)-10, int(box.X+box.W)+10, int(box.Y+box.H)+10).Intersect(frames[0].Rect)
+	step := func(i int) float64 { return meanAbsDiff(frames[i-1], frames[i], region) }
+	end := len(frames) - 1
+	var before float64
+	for i := end - 5; i < end; i++ {
+		before = max(before, step(i))
+	}
+	if at := step(end); at > max(1.5*before, 1) {
+		t.Errorf("the frame the flight ends changes the tile's place by %.2f levels, against at most %.2f in the five before: the cover does not land cut as its tile is", at, before)
+	}
+}
+
+// meanAbsDiff is the mean change of the color channels over r between two
+// frames, in levels.
+func meanAbsDiff(a, b *image.RGBA, r image.Rectangle) float64 {
+	s, n := 0.0, 0.0
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			i := a.PixOffset(x, y)
+			for k := range 3 {
+				s += math.Abs(float64(a.Pix[i+k]) - float64(b.Pix[i+k]))
+			}
+			n += 3
+		}
+	}
+	if n == 0 {
+		return 0
+	}
+	return s / n
+}

@@ -85,6 +85,9 @@ func (a *App) scrollArea(c *ui.Context, key string, gutter float32, children fun
 	area.Children(func() {
 		sc := ui.Scroll(c.Key(key)).Absolute().Top(0).Left(0).Right(0).Bottom(0).TrackScroll(st)
 		a.fadeEdges(sc, st)
+		if key != "album" && key != "activity" {
+			a.noteView(sc)
+		}
 		sc.Children(func() {
 			ui.Column(c).FillWidth().Padding(0, gutter, 0, 0).Children(children)
 		})
@@ -111,6 +114,12 @@ func (a *App) fadeEdges(sc ui.Element, st *ui.ScrollState) {
 		v := edgeFade.NewValues().Float(edgeFadeTop, top).Float(edgeFadeBottom, bottom)
 		sc.Effect(edgeFade.Effect(shader.Options{Values: v}))
 	}
+}
+
+// noteView notes sc, a scroll container of a screen the album page flies
+// from or to, for flightClip: the page's own containers are not noted.
+func (a *App) noteView(sc ui.Element) {
+	a.fly.views = append(a.fly.views, sc.Bounds())
 }
 
 // scrollbars colors the thumbs as the frame ends: always where the desktop

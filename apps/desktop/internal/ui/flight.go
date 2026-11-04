@@ -27,11 +27,11 @@ import (
 // within a thousandth of the way, under half a DIP of the longest flight.
 var flightSpring = ui.Animation{Spring: ui.SpringOptions{Duration: 380 * time.Millisecond}}
 
-// flightBack is how q goes out: quicker than it comes in, and aimed
-// flightPast below 0, so that the flight ends as q gets to 0, where the
-// cover lands, in about 0.28 s, still moving under 1% of its way a frame
-// rather than over the spring's slow tail.
-var flightBack = ui.Animation{Spring: ui.SpringOptions{Duration: 320 * time.Millisecond}}
+// flightBack is how q goes out: about as long as it comes in (within a
+// third of it), and aimed flightPast below 0, so that the flight ends as q
+// gets to 0, where the cover lands, in about 0.47 s, still moving under 1%
+// of its way a frame rather than over the spring's slow tail.
+var flightBack = ui.Animation{Spring: ui.SpringOptions{Duration: 540 * time.Millisecond}}
 
 const (
 	// flightFade is how long q takes while the desktop asks for less
@@ -169,7 +169,7 @@ type flight struct {
 	q             float32
 	moving, still bool
 	// out is set while the page goes out with motion, which crosses the
-	// screens and ends sooner than it comes in (fade).
+	// screens (fade).
 	out bool
 	// instant is set by a change of screen that does not fly: q goes to
 	// its end at once.
@@ -210,6 +210,10 @@ type flight struct {
 	// frame builds it, when edgeOK: the lower panel's top flies from it.
 	edge   float32
 	edgeOK bool
+	// views are the boxes of the scroll containers this frame builds
+	// (fadeEdges), and viewsPrev the frame before's, which tell how the
+	// screen under the page clips its tile (flightClip).
+	views, viewsPrev []ui.Rect
 }
 
 // openingFrom names the element the next OpenAlbum or OpenJob opens from,
@@ -232,6 +236,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	f.out = target == 0 && !f.still && a.PageMotion
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
 	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
+	f.viewsPrev, f.views = f.views, f.viewsPrev[:0]
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.
 	f.next = ""
@@ -449,6 +454,7 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	el.TransformOrigin(0, 0).Scale(s, s).Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y)
 	if part == partCover && s > 0 {
 		el.Radius(lerp(src.size, size, t) / s)
+		f.clipCover(el, src.box, t, s)
 	}
 	if p == crosses {
 		f.fade(el, unit((f.q-f.partsFrom())/0.45))
