@@ -55,12 +55,14 @@ export const QUEUE_SCENARIOS = [
     worldOpts: { queued: 8 },
     path: '#/queue?tab=all',
     transitions: [
-      { id: 'job-finishes', title: 'a running job finishes: it slides past the queue', run: finish },
-      { id: 'job-starts', title: 'the queue head starts: no other row moves', run: (ctx) => ctx.control.tick(1) },
+      // The finished job moves on purpose: it slides past the queue, up to its place among the done.
+      { id: 'job-finishes', title: 'a running job finishes: it slides past the queue', allowMove: ['ul.job-list > li.job-item'], run: finish },
+      { id: 'job-starts', title: 'the queue head starts: no other row moves', allowMove: ['span.badge > span.pulse'], run: (ctx) => ctx.control.tick(1) },
     ],
   },
   { id: 'queue/order-active', world: 'active', worldOpts: { queued: 8 }, path: '#/queue?tab=active' },
-  { id: 'queue/order-dragging', world: 'active', worldOpts: { queued: 8 }, path: '#/queue?tab=active', setup: hold(5, -200) },
+  // A touch screen has no grip: reordering there goes through the row menu (queue/order-menu).
+  { id: 'queue/order-dragging', world: 'active', worldOpts: { queued: 8 }, widths: [1440, 1280, 768], path: '#/queue?tab=active', setup: hold(5, -200) },
   { id: 'queue/order-menu', world: 'active', worldOpts: { queued: 8 }, path: '#/queue?tab=active', setup: menu(2) },
   {
     id: 'queue/order-refused',
@@ -85,6 +87,6 @@ export const QUEUE_SCENARIOS = [
     world: 'active',
     worldOpts: { queued: 8 },
     path: '#/queue?tab=active',
-    transitions: [{ id: 'job-starts', title: 'the queue head starts: no other row moves', run: (ctx) => ctx.control.tick(1) }],
+    transitions: [{ id: 'job-starts', title: 'the queue head starts: no other row moves', allowMove: ['span.badge > span.pulse'], run: (ctx) => ctx.control.tick(1) }],
   },
 ];

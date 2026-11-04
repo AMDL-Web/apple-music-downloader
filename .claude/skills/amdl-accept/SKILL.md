@@ -57,7 +57,7 @@ A reported motion bug is reproduced in such a film before it is patched.
 ### Web UI (console, site)
 
 [ui-audit](../../../apps/console/tools/ui-audit/README.md) over every page and state,
-widths 1440 to 320, both skins, light and dark. The verifier opens and looks at the
+widths 1440 to 320, light and dark. The verifier opens and looks at the
 screenshots; a finding counts only when its screenshot was looked at. One flaw on one
 screen means checking the same flaw on every screen. Order: layout that jumps during
 an action, misalignment, then polish.

@@ -28,7 +28,9 @@ export function mergeResults(results) {
  */
 export function summarize(rep, { maxHigh = 0, artifact = '', retention = 0 } = {}) {
   const high = rep.findings.filter((f) => f.severity === 'high');
-  const warn = high.length > maxHigh || rep.stepErrors.length > 0 || rep.errors.length > 0;
+  // A failed request is what the mock's fault scenarios cause on purpose; a script error is not.
+  const pageErrors = rep.errors.filter((e) => !/^Failed to load resource/.test(e.error));
+  const warn = high.length > maxHigh || rep.stepErrors.length > 0 || pageErrors.length > 0;
   const lines = [];
   lines.push(`## Console ui-audit: ${rep.findings.length} findings, ${high.length} high`);
   lines.push('');
@@ -49,10 +51,10 @@ export function summarize(rep, { maxHigh = 0, artifact = '', retention = 0 } = {
     for (const c of shifts.slice(0, 15)) lines.push(`- ${c.scenario} ${c.variant} ${c.what}: ${c.cls}`);
   }
   if (rep.stepErrors.length) lines.push('', '### Steps that failed', '', ...rep.stepErrors.slice(0, 15).map((s) => `- ${s}`));
-  if (rep.errors.length) lines.push('', '### Page errors', '', ...rep.errors.slice(0, 10).map((e) => `- ${e.error} (${e.runs} runs)`));
+  if (pageErrors.length) lines.push('', '### Page errors', '', ...pageErrors.slice(0, 10).map((e) => `- ${e.error} (${e.runs} runs)`));
   const annotations = [];
   if (high.length > maxHigh) annotations.push(`::warning title=ui-audit::${high.length} high findings (limit ${maxHigh}); see the job summary and the artifact`);
   if (rep.stepErrors.length) annotations.push(`::warning title=ui-audit::${rep.stepErrors.length} audit steps failed; see the job summary`);
-  if (rep.errors.length) annotations.push(`::warning title=ui-audit::${rep.errors.length} distinct page errors; see the job summary`);
+  if (pageErrors.length) annotations.push(`::warning title=ui-audit::${pageErrors.length} distinct page errors; see the job summary`);
   return { warn, markdown: `${lines.join('\n')}\n`, annotations };
 }

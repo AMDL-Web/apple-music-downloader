@@ -41,7 +41,7 @@ Then open `/tmp/ui-audit/index.html`. Useful flags:
 `merge <shard-dir>... --out <dir>` joins the output directories of several `--widths` or `--themes` runs
 into one report (the consistency and rhythm checks compare across runs, so they run on the merged result);
 `summary <report.json>` prints a markdown summary and a GitHub `::warning` line when there are more than
-`--max-high` high findings (default 0), a failed step or a page error. `report <result.json> --out <dir>` rebuilds the page from a saved run;
+`--max-high` high findings (default 0), a failed step or a page error (a failed request is not one: the mock's fault scenarios cause those). `report <result.json> --out <dir>` rebuilds the page from a saved run;
 `diff <before/report.json> <after/report.json>` prints per-check counts
 before → after and which findings went away or appeared.
 
@@ -144,7 +144,7 @@ A config module's default export:
 | `start()` | starts the app and returns `{baseUrl, control, stop}`; `control.prepare(scenario, variant)` puts the backend in the scenario's state |
 | `scenarios` | `{id, path, require?, setup?(ctx), transitions?, widths?, themes?, engines?, storage?, noStates?}`; a transition is `{id, run(ctx), before?, after?, expectScroll?, expectThemeChange?, expectContent?, ignoreFocus?, allowMove?, hold?}` (`expectContent`: the transition is meant to change content, so what moves below the change and its CLS count low); `ctx` has `page`, `control`, `settle()`, `hash()`, `wait()` |
 | `variants` | `widths`, `themes`, `stateWidths` (where the state pass runs), `phoneBelow`, viewport `heights` |
-| `selectors` | `interactive`, `container`, `row`, `icon`, `badge`, `nav`, `region`, `skeleton`, `modal`, `ignore` |
+| `selectors` | `interactive`, `container`, `row`, `icon`, `badge`, `nav`, `region`, `skeleton`, `modal`, `ignore`, `autofocus` (controls the app focuses itself, whose ring a pointer-opened surface hides by design) |
 | `components` | kind → selector, for the consistency check |
 | `rhythm` | `{name, selector, measure: padding \| gapToNext \| edges \| firstTextLeft, within?}` |
 | `allow` | selectors exempt from `noise`, `prose`, `duplicate` and `contrast`, for what the design intends |

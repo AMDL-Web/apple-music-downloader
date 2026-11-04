@@ -209,6 +209,14 @@ function scopeRoot(cfg) {
   return modals.length ? modals[modals.length - 1] : document.body;
 }
 
+/** The open modal when it covers the whole viewport (a phone's drawer): the page under it is not seen. */
+function coveringModal(cfg) {
+  const m = scopeRoot(cfg);
+  if (m === document.body) return null;
+  const r = m.getBoundingClientRect();
+  return r.left <= 0 && r.top <= 0 && r.right >= innerWidth && r.bottom >= innerHeight ? m : null;
+}
+
 /** Elements on different layers (the page, a fixed bar, a dialog) may overlap by design. */
 function layerOf(el) {
   for (let cur = el; cur && cur.nodeType === 1; cur = cur.parentElement) {
@@ -715,6 +723,8 @@ uia.stateCheck = function stateCheck(i, state, restChain, cfg) {
   if (!layers.length) {
     // Already focused at rest (autofocus): its focus style is what rest shows.
     if (state === 'focus-visible' && el === document.activeElement) return out;
+    // A control the app focuses itself keeps no ring after a pointer opened its surface, by design.
+    if (state === 'focus-visible' && cfg.selectors.autofocus && el.matches(cfg.selectors.autofocus)) return out;
     if (state === 'focus-visible') {
       const wrapper = chain.slice(1).some((a, k) => restChain[k + 1] && changed(paintOf(a).el, restChain[k + 1].el));
       if (!wrapper) add('no visible focus indicator', {}, 'high');
@@ -885,9 +895,11 @@ uia.shiftStop = function shiftStop(cfg) {
   const st = uia._shift;
   if (!st) return null;
   st.po.disconnect();
+  const cover = coveringModal(cfg);
+  const hidden = (el) => !el.isConnected || !visible(el) || (cover && !cover.contains(el));
   const moved = [];
   for (const [el, { r }] of st.boxes) {
-    if (!el.isConnected || !visible(el)) continue;
+    if (hidden(el)) continue;
     const n = contentRect(el);
     const dy = edgeShift(n.top - r.top, n.bottom - r.bottom);
     const dx = edgeShift(n.left - r.left, n.right - r.right);
@@ -899,7 +911,7 @@ uia.shiftStop = function shiftStop(cfg) {
   const roots = moved.filter((m) => !moved.some((o) => o !== m && o.el.contains(m.el) && Math.abs(o.dy - m.dy) < 1 && Math.abs(o.dx - m.dx) < 1));
   const resized = [];
   for (const [el, { r }] of st.boxes) {
-    if (!el.isConnected || !visible(el)) continue;
+    if (hidden(el)) continue;
     const n = contentRect(el);
     if (Math.abs(n.height - r.height) > 1 || Math.abs(n.width - r.width) > 1) resized.push({ el, dh: n.height - r.height, dw: n.width - r.width, top: r.top });
   }

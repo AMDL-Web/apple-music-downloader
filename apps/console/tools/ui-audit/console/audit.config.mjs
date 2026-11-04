@@ -37,6 +37,10 @@ const palette = async (ctx) => {
   await ctx.page.waitForSelector('[role=dialog] [role=combobox], .palette input', { timeout: 3000 });
 };
 
+// A status badge changes its own text and dot as a job starts or finishes; what the audit
+// still counts is every other element that moves.
+const BADGE = ['span.badge > span.pulse'];
+
 const live = (n, gap = 250) => async (ctx) => {
   for (let i = 0; i < n; i++) {
     ctx.control.tick();
@@ -70,7 +74,7 @@ const SCENARIOS = [
     world: 'active',
     path: '#/',
     transitions: [
-      { id: 'live-progress', title: 'live progress for 3 s', run: live(12) },
+      { id: 'live-progress', title: 'live progress for 3 s', allowMove: BADGE, run: live(12) },
       { id: 'job-finishes', title: 'a job finishes', run: live(30, 120), hold: 300 },
       nav('#/queue'),
       { id: 'theme-toggle', title: 'theme toggle', expectThemeChange: true, ignoreFocus: true, run: (ctx) => ctx.page.locator('.theme button, button.theme-cycle').first().click() },
@@ -97,8 +101,9 @@ const SCENARIOS = [
     path: '#/queue?tab=failed',
     setup: async (ctx) => {
       await ctx.page.locator('.queue-select').first().click();
-      await ctx.page.locator('.job-check-input').nth(1).check({ force: true });
-      await ctx.page.locator('.job-check-input').nth(2).check({ force: true });
+      // The first two rows: the bulk bar covers the ones below them on a phone.
+      await ctx.page.locator('.job-check-input').nth(0).check();
+      await ctx.page.locator('.job-check-input').nth(1).check();
     },
   },
   {
@@ -131,7 +136,7 @@ const SCENARIOS = [
   // ---- Job drawer
   { id: 'drawer/queued', ...drawer(JOB_KEYS.queued) },
   { id: 'drawer/resolving', ...drawer(JOB_KEYS.resolving) },
-  { id: 'drawer/running', ...drawer(JOB_KEYS.running22), transitions: [{ id: 'live', title: 'live progress for 4 s', run: live(16) }, { id: 'to-end', title: 'running to completion', run: live(60, 80), hold: 400 }] },
+  { id: 'drawer/running', ...drawer(JOB_KEYS.running22), transitions: [{ id: 'live', title: 'live progress for 4 s', allowMove: BADGE, run: live(16) }, { id: 'to-end', title: 'running to completion', allowMove: BADGE, run: live(60, 80), hold: 400 }] },
   { id: 'drawer/done-1', ...drawer(JOB_KEYS.done1) },
   { id: 'drawer/done-5', ...drawer(JOB_KEYS.done5) },
   { id: 'drawer/done-22', ...drawer(JOB_KEYS.done22) },
@@ -165,11 +170,8 @@ const SCENARIOS = [
       { id: 'job-to-job', title: 'switch to another job', ignoreFocus: true, run: (ctx) => ctx.hash(`#/queue/${jobId(JOB_KEYS.done5)}`) },
       { id: 'job-to-failed', title: 'switch to a failed job', ignoreFocus: true, run: (ctx) => ctx.hash(`#/queue/${jobId(JOB_KEYS.failed)}`) },
       { id: 'details', title: 'open Details', expectContent: true, run: (ctx) => ctx.page.locator('.drawer-details > summary').first().click() },
-      { id: 'cancel-running', title: 'cancel a running job', ignoreFocus: true, before: (ctx) => ctx.hash(`#/queue/${jobId(JOB_KEYS.running22)}`), run: async (ctx) => {
-        await ctx.page.locator('.drawer button:has-text("Cancel")').first().click();
-        await ctx.wait(150);
-        await ctx.page.locator('.drawer button:has-text("Cancel")').last().click();
-      } },
+      // A record's run pauses in one click (a job without a record asks "Cancel job" first).
+      { id: 'pause-running', title: 'pause a running record', ignoreFocus: true, before: (ctx) => ctx.hash(`#/queue/${jobId(JOB_KEYS.running22)}`), run: (ctx) => ctx.page.locator('.drawer button:has-text("Pause")').first().click() },
     ],
   },
 
@@ -199,11 +201,12 @@ const SCENARIOS = [
   {
     id: 'new/ask',
     world: 'active',
-    path: `#/new?url=${encodeURIComponent(albumUrl(7))}`,
+    // The quality question comes from a search hit with lossless and Atmos, while Settings lists ALAC and Dolby.
+    mutate: (w) => (w.config.download.quality_priority = ['alac', 'ec3']),
+    path: '#/new?q=yorushika',
     setup: async (ctx) => {
       await ctx.settle();
-      await ctx.page.locator('.new-link-pick input:not([disabled])').first().check({ timeout: 4000 });
-      await ctx.page.locator('.new-dock-go').first().click();
+      await ctx.page.locator('.new-tile[data-kind=album] button[data-hit-primary]').first().click({ timeout: 4000 });
       await ctx.page.waitForSelector('.ask', { timeout: 4000 });
     },
   },
@@ -381,6 +384,7 @@ export default {
     skeleton: '.skel, .is-skel, [class*="skel-"]',
     ignore: 'svg.sprite, .sr-only, .boot',
     modal: '[aria-modal=true]',
+    autofocus: '[data-autofocus]',
   },
   components: {
     button: '.btn',

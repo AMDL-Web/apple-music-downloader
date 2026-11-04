@@ -132,4 +132,7 @@ test('the summary warns only past the threshold, on failed steps or on page erro
   assert.equal(summarize(bad, { maxHigh: 1 }).warn, false);
   const stepFail = aggregate({ ...mergeResults([shard([1440], 'light', false)]), runs: [{ ...shard([1440], 'light', false).runs[0], setupError: 'no button' }] });
   assert.equal(summarize(stepFail).warn, true);
+  const requestOnly = { ...clean, errors: [{ error: 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)', runs: 3 }] };
+  assert.equal(summarize(requestOnly).warn, false);
+  assert.equal(summarize({ ...clean, errors: [{ error: 'x is not a function', runs: 1 }] }).warn, true);
 });

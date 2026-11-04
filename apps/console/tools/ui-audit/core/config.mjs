@@ -24,6 +24,7 @@ export const DEFAULTS = {
     scroller: null,
     skeleton: '[aria-busy=true]',
     ignore: null,
+    autofocus: null,
   },
   components: {},
   rhythm: [],
