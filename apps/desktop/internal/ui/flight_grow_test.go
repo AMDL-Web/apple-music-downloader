@@ -5,8 +5,11 @@ package ui
 import (
 	"image"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"amdl/apps/desktop/internal/store"
 )
 
 // growFrame is a frame of a page growing from its search tile: the window
@@ -103,6 +106,73 @@ func TestAGrowingPageShowsNoBoxBesideItsCover(t *testing.T) {
 			}
 			if d := box(after, last.img); d > 3 {
 				t.Errorf("%s: the last frame of the way back (q %.3f) changed the screen beside the cover at %v by %.1f levels more than beside another tile: a box of the page's ground", theme, last.q, r, d)
+			}
+		}
+	}
+}
+
+// Going back, the screen under the page is clear by the time the page has
+// gone into its tile, not sharpening on its own over the frames after: in
+// the demo's search for "glass weather", every frame of the way back in
+// which the page is all but gone beside its cover shows the song rows as
+// they are at rest.
+func TestTheScreenUnderIsClearOnceThePageIsInItsTile(t *testing.T) {
+	for _, theme := range []string{"dark", "light"} {
+		a, run := demoApp(t)
+		a.PageMotion, a.Theme = true, theme
+		s := a.Store
+		run(func() bool { return s.Loaded })
+		a.Go(ScreenHome)
+		tt := ui.NewTester(a.View, 1280, 800)
+		tt.SetScale(1)
+		tt.Type("glass weather")
+		run(func() bool {
+			tt.Advance(filmFrame)
+			return s.Search.Status == store.SearchReady && s.Search.Result != nil
+		})
+		for range 20 {
+			run(func() bool { return true })
+			tt.Advance(50 * time.Millisecond)
+		}
+		row, ok := tt.Find("Paper Satellites")
+		if !ok {
+			t.Fatal("no song row")
+		}
+		rows := image.Rect(int(row.X)-60, int(row.Y)-10, int(row.X+row.W)+40, int(row.Y+row.H)+20)
+		if err := tt.Click("Glass Weather"); err != nil {
+			t.Fatal(err)
+		}
+		var cover ui.Rect
+		for range 90 {
+			tt.Advance(filmFrame)
+			if src := a.fly.src[partCover]; src.ok && cover.W == 0 {
+				cover = src.box
+			}
+			if !a.fly.moving {
+				break
+			}
+		}
+		if a.Screen != ScreenAlbum || !a.fly.grow || cover.W == 0 {
+			t.Fatalf("%s: the page did not grow from its tile", theme)
+		}
+		a.Back()
+		tt.Frame()
+		var out []growFrame
+		for range 90 {
+			tt.Advance(filmFrame)
+			if !a.fly.moving {
+				break
+			}
+			out = append(out, growFrame{img: cloneImage(tt.Image()), q: a.fly.q})
+		}
+		for range 10 {
+			tt.Advance(filmFrame)
+		}
+		after := cloneImage(tt.Image())
+		for i, f := range out {
+			page, under := meanAbsDiff(after, f.img, beside(cover)[0]), meanAbsDiff(after, f.img, rows)
+			if page <= 2 && under > 0.25 {
+				t.Errorf("%s: frame %d of the way back (q %.3f): the page is all but gone beside its cover (%.2f levels) while the song rows are still %.2f levels from rest", theme, i, f.q, page, under)
 			}
 		}
 	}

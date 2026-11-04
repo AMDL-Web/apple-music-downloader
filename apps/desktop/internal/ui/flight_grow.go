@@ -126,22 +126,28 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 	})
 }
 
+// underGone is how far the screen under the growing page has gone back,
+// blurred and dimmed: as far as the page has come, and only as far as its
+// ground shows (groundGrown), so that going back the screen under is clear
+// as the page goes into its cover rather than over q's last frames after.
+func (a *App) underGone() float32 { return unit(a.fly.q) * a.groundGrown() }
+
 // growUnder shows the content column under the growing page, el, blurred
-// and dimmed as far as the page has come.
+// as far as it has gone back (underGone).
 func (a *App) growUnder(el ui.Element) {
 	if !a.fly.growing() {
 		return
 	}
-	if t := unit(a.fly.q); a.tune.Blur > 0 && t > 0 {
+	if t := a.underGone(); a.tune.Blur > 0 && t > 0 {
 		el.Blur(a.tune.Blur * t)
 	}
 }
 
-// growDim dims the screen under the growing page.
+// growDim dims the screen under the growing page (underGone).
 func (a *App) growDim(c *ui.Context) {
 	if f := &a.fly; f.growing() {
 		ui.Box(c.Key("grow-dim")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().
-			Background(ui.RGBA(0, 0, 0, a.tune.Dim*unit(f.q)))
+			Background(ui.RGBA(0, 0, 0, a.tune.Dim*a.underGone()))
 	}
 }
 
