@@ -401,7 +401,7 @@ func (a *App) removeDialog(c *ui.Context, k *Tokens) {
 		back.Background(ui.RGBA(0, 0, 0, 0.45))
 		panel.Width(440).Padding(padCard).Gap(12).Radius(radiusCard).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
 		ui.Text(c, "Remove “"+clip(recordName(*r), 48)+"” from amdl?").FontSize(15).FontWeight(650).MaxLines(2).Ellipsis("…")
-		ui.Text(c, "The files stay. Adding it again downloads it again over them.").FontSize(12.5).TextColor(k.Muted).LineHeight(1.5)
+		ui.Text(c, "The files stay.").FontSize(12.5).TextColor(k.Muted).LineHeight(1.5)
 		ui.Row(c).Gap(8).Justify(ui.End).Padding(6, 0, 0, 0).Children(func() {
 			if button(c, k, buttonPlain, "Cancel", nil).Clicked() {
 				a.removeOpen = false

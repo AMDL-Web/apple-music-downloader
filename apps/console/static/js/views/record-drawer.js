@@ -257,7 +257,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
           busy=${busy === 'delete'}
           onConfirm=${remove}
           onCancel=${() => setAsk(null)}
-        >The files stay. Adding it again picks them up.</${ConfirmDialog}>`
+        >The files stay.</${ConfirmDialog}>`
       : null}
     ${ask && (ask.what === 'audio' || ask.what === 'all')
       ? html`<${ConfirmDialog}

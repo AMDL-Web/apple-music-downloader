@@ -89,7 +89,7 @@ export function RecordMenu({ row, href, onLeaving, place, onMove }) {
           busy=${busy}
           onConfirm=${confirm}
           onCancel=${() => setAsk('')}
-        >The files stay. Adding it again picks them up.</${ConfirmDialog}>`
+        >The files stay.</${ConfirmDialog}>`
       : null,
     ask === 'again'
       ? html`<${ConfirmDialog}
