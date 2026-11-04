@@ -181,6 +181,9 @@ type App struct {
 	groupsShown, groupsLast string
 	groupsFrame             time.Time
 	groupsMoved             bool
+	// groupsMoreAt is when each group shown alone began to read its next
+	// page (groupMore).
+	groupsMoreAt map[string]time.Time
 	// viewArtist is the artist whose albums the search shows, "" for the
 	// results, since viewAt; viewScroll waits for the view going out to
 	// fade before the search scrolls (followView).

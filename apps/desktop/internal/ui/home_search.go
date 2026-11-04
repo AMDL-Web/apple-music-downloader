@@ -296,10 +296,27 @@ func (a *App) groupMore(c *ui.Context, k *Tokens, g string) {
 	s := a.Store
 	q := &s.Search
 	more := ui.Row(c.Key("more")).Height(groupRow).Gap(10).Justify(ui.Center).AlignItems(ui.Center)
-	more.Transition(a.titleMotion(c, more)).Children(func() {
+	t := a.titleMotion(c, more)
+	if !a.tabLeaving() {
+		// The page it waited for takes its place at once: fading, it would
+		// show over the first of the page's rows.
+		t.Exit = nil
+	}
+	// It says the next page loads only once that is slow, as every wait.
+	if q.More[g] != store.PageLoading {
+		delete(a.groupsMoreAt, g)
+	} else if _, ok := a.groupsMoreAt[g]; !ok {
+		if a.groupsMoreAt == nil {
+			a.groupsMoreAt = map[string]time.Time{}
+		}
+		a.groupsMoreAt[g] = c.Now()
+	}
+	more.Transition(t).Children(func() {
 		switch q.More[g] {
 		case store.PageLoading:
-			ui.Text(c, "Loading more…").FontSize(12).TextColor(k.Muted)
+			if waited(c, true, a.groupsMoreAt[g]) {
+				ui.Text(c, "Loading more…").FontSize(12).TextColor(k.Muted)
+			}
 		case store.PageFailed:
 			ui.Text(c, "Could not load more.").FontSize(12).TextColor(k.Bad)
 			if button(c, k, buttonGhost, "Try again", nil).Clicked() {

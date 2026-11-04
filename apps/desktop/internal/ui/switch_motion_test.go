@@ -351,3 +351,91 @@ func TestEverySwitchMovesAlike(t *testing.T) {
 		}
 	}
 }
+
+// glassWeatherAlbums is home on the demo's answer to "glass weather" in its
+// Albums tab, settled, in the dark theme, its covers read.
+func glassWeatherAlbums(t *testing.T) (*App, *ui.Tester, func(func() bool)) {
+	t.Helper()
+	a, run := demoApp(t)
+	a.Screen, a.PageMotion, a.Theme = ScreenHome, true, "dark"
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	s := a.Store
+	s.SetOmniText("glass weather")
+	tt.Frame()
+	run(func() bool { tt.Frame(); return s.Search.Status == store.SearchReady })
+	run(func() bool {
+		tt.Advance(50 * time.Millisecond)
+		return a.Art.Get(s.Search.ShownHits()[0].ArtworkURL, 512) != nil
+	})
+	if err := tt.Click("Albums"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	return a, tt, run
+}
+
+// The line that says a tab's next page loads is a wait: it shows only once
+// the page is slow, and the page's rows take its place at once, never
+// with it fading over them.
+func TestALoadingLineNeverShowsOverTheRows(t *testing.T) {
+	songsRead := func(a *App, first int) func() bool {
+		return func() bool {
+			q := &a.Store.Search
+			return q.More["songs"] == store.PageIdle && len(q.Result.Songs.Items) > first
+		}
+	}
+	t.Run("a quick page", func(t *testing.T) {
+		a, tt, run := glassWeatherAlbums(t)
+		first := len(a.Store.Search.Result.Songs.Items)
+		if err := tt.Click("Songs"); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 30 {
+			if i == 3 {
+				run(songsRead(a, first))
+			}
+			tt.Advance(filmFrame)
+			tt.Frame()
+			if tt.HasText("Loading more…") {
+				t.Fatalf("frame %d says the next page loads, read within 50 ms", i)
+			}
+		}
+	})
+	t.Run("a slow page", func(t *testing.T) {
+		a, tt, run := glassWeatherAlbums(t)
+		first := len(a.Store.Search.Result.Songs.Items)
+		if err := tt.Click("Songs"); err != nil {
+			t.Fatal(err)
+		}
+		for range 20 {
+			tt.Advance(filmFrame)
+			tt.Frame()
+		}
+		r, ok := tt.Find("Loading more…")
+		if !ok {
+			t.Fatalf("333 ms into the read, nothing says the next page loads: %q", tt.Texts())
+		}
+		line := image.Rect(int(r.X)-8, int(r.Y)-4, int(r.X+r.W)+8, int(r.Y+r.H)+4)
+		run(songsRead(a, first))
+		var film [][]float32
+		for range 20 {
+			tt.Advance(filmFrame)
+			tt.Frame()
+			film = append(film, areaLuma(tt.Image(), line))
+		}
+		tt.Advance(time.Second)
+		final := areaLuma(tt.Image(), line)
+		for i, v := range film {
+			over := 0
+			for p := range v {
+				if v[p]-final[p] > 12 {
+					over++
+				}
+			}
+			if over > 20 {
+				t.Fatalf("frame %d after the page came, %d pixels where the loading line was are brighter than the rows that took its place", i, over)
+			}
+		}
+	})
+}
