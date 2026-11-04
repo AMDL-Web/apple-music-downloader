@@ -21,6 +21,16 @@ against `.claude/rules/go.md`:
 git diff -U0 origin/dev -- '*.go' | rg '^\+.*//'
 ```
 
+A change to records, runs, the queue or the overview feed also runs the
+consistency test, which acts on a backend with simulated downloads and checks
+that queue counts, records, marks and the feed agree after each action. A
+known defect is skipped there with its checklist item; its fix removes the
+skip, and a new action or surface gets a step or a check there:
+
+```bash
+go test -race -run TestRecordActionsKeepSurfacesConsistent ./internal/api/
+```
+
 ## Revert proof
 
 When a commit fixes a bug and adds or changes a regression test, prove after
