@@ -160,14 +160,19 @@ func (a *App) appleTile(c *ui.Context, k *Tokens, kind string, it domain.AppleLi
 		hover := art.Hovered()
 		art.Children(func() {
 			open := tileOpen(c, size, radiusCover, it.Name)
+			from := a.appleFrom(kind, it)
 			if act := a.appleOpen(kind, it); act != nil {
 				if open.Clicked() {
+					// The page grows out of this cover (flight_grow.go); a
+					// playlist's tracks open in place and fly nothing.
+					a.openingFrom(from)
 					act()
 				}
 				open.Cursor(ui.CursorPointer)
 			}
 			open.Children(func() {
-				widgets.Cover{Image: a.Art.Get(it.ArtworkURL, int(2*size)), Placeholder: k.Track, Size: size, Radius: radiusCover, Color: 1}.Show(c)
+				cover := widgets.Cover{Image: a.Art.Get(it.ArtworkURL, int(2*size)), Placeholder: k.Track, Size: size, Radius: radiusCover, Color: 1}.Show(c)
+				a.flySource(cover, from, partCover, "", radiusCover)
 				if it.ArtworkURL == "" {
 					ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Center().PassThrough().Children(func() {
 						ui.Icon(c, icNote).FontSize(size / 4).TextColor(k.Faint)
@@ -184,14 +189,23 @@ func (a *App) appleTile(c *ui.Context, k *Tokens, kind string, it domain.AppleLi
 }
 
 // appleOpen is what a click on an Apple tile's cover does: an album's opens
-// its page, a library-only playlist's shows or hides its tracks; nil for a
-// cover that opens nothing.
+// its page, a library-only playlist's shows or hides its tracks, a catalog
+// playlist with a download opens that download's page; nil for a cover
+// that opens nothing.
 func (a *App) appleOpen(kind string, it domain.AppleLibraryItem) func() {
 	switch {
 	case kind == "albums" && it.CatalogID != "":
 		return func() { a.openAppleAlbum(it) }
 	case appleLibraryOnly(kind, it):
 		return func() { a.toggleAppleTracks(it.ID) }
+	case kind == "playlists":
+		h, ok := a.appleHit(kind, it)
+		if !ok {
+			return nil
+		}
+		if _, job := a.Store.HitMark(h); a.Store.Job(job) != nil {
+			return func() { a.OpenJob(job) }
+		}
 	}
 	return nil
 }
@@ -209,6 +223,16 @@ func (a *App) appleHit(kind string, it domain.AppleLibraryItem) (client.SearchHi
 	}
 	return client.SearchHit{Type: typ, ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL, URL: it.URL,
 		TrackCount: it.TrackCount, Resource: a.Store.Library.Mark(rk, it.CatalogID)}, true
+}
+
+// appleFrom is the name a flight from an Apple tile's cover goes by: its
+// hit's, as a search tile's, so that its mark's clicks (tileControl) open
+// from it too, else its own.
+func (a *App) appleFrom(kind string, it domain.AppleLibraryItem) string {
+	if h, ok := a.appleHit(kind, it); ok {
+		return a.hitFrom(h)
+	}
+	return "lib:" + it.ID
 }
 
 func (a *App) openAppleAlbum(it domain.AppleLibraryItem) {
@@ -246,6 +270,7 @@ func (a *App) appleControl(c *ui.Context, k *Tokens, kind string, it domain.Appl
 		if kind == "albums" {
 			b.Label("In Library: open it").Cursor(ui.CursorPointer)
 			if b.Clicked() {
+				a.openingFrom(a.appleFrom(kind, it))
 				a.openAppleAlbum(it)
 			}
 		} else {
@@ -284,6 +309,7 @@ func (a *App) appleControl(c *ui.Context, k *Tokens, kind string, it domain.Appl
 		if kind == "albums" && it.CatalogID != "" {
 			b.Cursor(ui.CursorPointer)
 			if b.Clicked() {
+				a.openingFrom(a.appleFrom(kind, it))
 				a.openAppleAlbum(it)
 			}
 		}
