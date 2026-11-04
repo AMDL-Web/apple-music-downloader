@@ -39,14 +39,18 @@ export function OverviewPage() {
     return () => clearTimeout(t);
   }, []);
   const held = late ? undefined : !stripKnown ? 'strip' : attentionKnown ? undefined : '';
+  // data-pending: the live queue or the recent wall has not answered yet, so
+  // a page change keeps the last page drawn meanwhile (lib/page-swap.js).
+  const [loaded, setLoaded] = useState({ live: false, recent: false });
+  const onLoaded = (key) => () => setLoaded((l) => (l[key] ? l : { ...l, [key]: true }));
   // With no account logged in, the empty live queue leads to logging in.
   const account = stripKnown ? domainView('account', status, { simulate: app.simulate, conn: app.conn }) : null;
   const loggedOut = Boolean(account && account.tag && account.tag.label === 'Not logged in');
-  return html`<div class="page page-overview" data-held=${held}>
+  return html`<div class="page page-overview" data-held=${held} data-pending=${loaded.live && loaded.recent ? undefined : ''}>
     <${HealthStrip} status=${status} />
     <${Attention} onKnown=${() => setAttentionKnown(true)} />
-    <${LiveQueue} loggedOut=${loggedOut} />
-    <${RecentSection} />
+    <${LiveQueue} loggedOut=${loggedOut} onLoaded=${onLoaded('live')} />
+    <${RecentSection} onLoaded=${onLoaded('recent')} />
     <${KpiRow} />
     <${ThroughputCard} />
   </div>`;
@@ -80,9 +84,12 @@ function KpiRow() {
 const LIVE_LIMIT = 8;
 const LIVE_FILTER = { statuses: ['running', 'queued'] };
 
-function LiveQueue({ loggedOut }) {
+function LiveQueue({ loggedOut, onLoaded }) {
   const app = useApp();
   const [state, setState] = useState({ jobs: [], loading: true, error: null });
+  useEffect(() => {
+    if (!state.loading) onLoaded();
+  }, [state.loading]);
   const [stamp, setStamp] = useState(0);
   // A read that is not the latest one is dropped, so a slow older answer
   // cannot overwrite a newer list.

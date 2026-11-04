@@ -38,14 +38,28 @@ export function useClock(intervalMs) {
   return now;
 }
 
-/** A value that follows `value` after it has been stable for `ms`. */
-export function useDebounced(value, ms) {
+/**
+ * A value that follows `value` after it has been stable for `ms`, or at
+ * once for a change `atOnce(prev, next)` accepts (a paste, not typing).
+ */
+export function useDebounced(value, ms, atOnce) {
   const [v, setV] = useState(value);
+  const prev = useRef(value);
+  const now = useRef(undefined);
+  if (prev.current !== value) {
+    if (atOnce && atOnce(prev.current, value)) now.current = value;
+    prev.current = value;
+  }
+  const jumped = now.current === value;
   useEffect(() => {
+    if (jumped) {
+      setV(value);
+      return undefined;
+    }
     const t = setTimeout(() => setV(value), ms);
     return () => clearTimeout(t);
   }, [value, ms]);
-  return v;
+  return jumped ? value : v;
 }
 
 /** Whether `on` has held for `ms`: a placeholder shown only for a slow answer, never flashed for a quick one. */

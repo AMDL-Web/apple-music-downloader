@@ -43,6 +43,8 @@ import { runAgain } from './download-again.js';
 // with the same one: a PRESETS id or 'custom' with its values.
 let chosen = { preset: 'follow', custom: null };
 
+const pasted = (prev, next) => next.length - prev.length > 1;
+
 export function DownloadPage({ route }) {
   const app = useApp();
   const incoming = newDownloadUrls(route.params);
@@ -51,7 +53,9 @@ export function DownloadPage({ route }) {
   const storefront = app.defaultStorefront;
   const [text, setText] = useDraft({ app, incoming, storefront });
   const entries = useMemo(() => scanLinks(text, storefront), [text, storefront]);
-  const settled = useDebounced(text, 350);
+  // Typing settles once it pauses; a paste (more than a character at once)
+  // settles at once, so its links are looked up without waiting.
+  const settled = useDebounced(text, 350, pasted);
   // Words and no link: the box searches the catalog.
   const { term, tooLong } = searchTerm(text, entries);
   const searching = Boolean(term) || tooLong;

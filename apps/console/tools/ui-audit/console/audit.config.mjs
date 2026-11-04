@@ -263,10 +263,8 @@ const SCENARIOS = [
     noStates: true,
     transitions: [
       { id: 'type-search', title: 'typing a search term', ignoreFocus: false, expectContent: true, run: (ctx) => ctx.page.locator('#new-input').pressSequentially('yorushika', { delay: 80 }) },
-      { id: 'paste-link', title: 'pasting a link', expectContent: true, run: async (ctx) => {
-        await ctx.page.locator('#new-input').fill('');
-        await ctx.page.locator('#new-input').fill(albumUrl(12));
-      } },
+      // One edit, as a paste over the term is: fill replaces the whole text.
+      { id: 'paste-link', title: 'pasting a link', expectContent: true, run: (ctx) => ctx.page.locator('#new-input').fill(albumUrl(12)) },
       { id: 'drill-artist', title: 'opening an artist from the hits', ignoreFocus: true, expectContent: true, before: async (ctx) => {
         await ctx.page.locator('#new-input').fill('yorushika');
       }, run: (ctx) => ctx.page.locator('.new-tile[data-kind=artist] .new-tile-open').first().click({ timeout: 3000 }) },

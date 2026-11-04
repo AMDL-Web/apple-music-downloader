@@ -25,12 +25,15 @@ const TILE_GAP = 16;
 const BANNER_ART = artWidths(88, 112);
 const TILE_ART = artWidths(120, 170);
 
-export function RecentSection() {
+export function RecentSection({ onLoaded }) {
   const app = useApp();
   const ref = useRef(null);
   const cols = useColumns(ref, TILE_MIN, TILE_GAP);
   const reduced = useReducedMotion();
   const [state, setState] = useState({ jobs: [], loading: true, error: null });
+  useEffect(() => {
+    if (!state.loading) onLoaded();
+  }, [state.loading]);
   const [playing, setPlaying] = useState(null);
   const seq = useRef(0);
   const load = () => {

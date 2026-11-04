@@ -790,10 +790,10 @@ fieldset.field-control {
     display: none;
   }
 
-  /* The page head is for screen readers only in a section view; its
-     button would be a focus stop no one sees. */
+  /* In a section view the page head only keeps its place under the back
+     link; its button would be a focus stop no one sees. */
   .page-view:has(> .page-settings[data-view="section"]) > .page-head > .page-actions {
-    display: none;
+    visibility: hidden;
   }
 
   .domain-actions .btn {

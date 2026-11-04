@@ -263,6 +263,7 @@
 }
 
 .page-view {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--page-gap);
