@@ -530,18 +530,18 @@ func (a *App) flyEdge(el ui.Element) {
 
 // flyPanel shows the album page's opaque lower panel as this frame of a
 // flight has it: its top, a sharp edge, flies from the top of the list
-// under the page (flyEdge), or, with none, rises with the page; it turns
-// opaque early, over that list, before its rows show, and its ground turns
-// from the screens' to its own, so that it does not show as a layer of its
-// own while it fades.
+// under the page (flyEdge), or, with none, rises with the page; its ground
+// turns opaque early, over that list, before its rows show (flyRows), and
+// turns from the screens' to its own, so that it does not show as a layer
+// of its own while it fades.
 func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	f := &a.fly
 	if !f.moving {
 		return
 	}
-	el.Background(k.Ground.Mix(detailGround(k), f.light())).
-		BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
-	f.fade(el, f.cross())
+	shown := f.groundShown()
+	el.Background(k.Ground.Mix(detailGround(k), f.light()).Alpha(shown)).
+		BorderColor(k.Line.Alpha(shown * unit((f.q-panelLined)/(1-panelLined))))
 	if f.still {
 		return
 	}
@@ -551,6 +551,19 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 		y = lerp(f.edge, dst.Y, t) - dst.Y
 	}
 	el.Translate(0, y)
+}
+
+// groundShown is how much of the lower panel's ground shows (cross): all of
+// it once the panel is half in, as the screen under it starts to thin out.
+func (f *flight) groundShown() float32 { return unit(2 * f.cross()) }
+
+// flyRows shows el, the rows in the album page's lower panel, as this frame
+// of a flight has it: fading in over the panel's ground once that is whole
+// (groundShown), so no row is drawn over the screen under the page.
+func (a *App) flyRows(el ui.Element) {
+	if f := &a.fly; f.moving {
+		f.fade(el, unit(2*f.cross()-1))
+	}
 }
 
 // flyFade fades el in with the album page, in place, once the screen under

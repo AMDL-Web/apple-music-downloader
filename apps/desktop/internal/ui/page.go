@@ -189,9 +189,11 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	a.flyPanel(lower, k)
 	accent := hc.accent
 	lower.Children(func() {
-		// The rows come and go with the panel (flyPanel), so it never
-		// stands empty over the screen under it.
-		ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+		// The rows come and go once the panel's ground is whole
+		// (flyRows), so it never stands empty over the screen under it.
+		rows := ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Stretch)
+		a.flyRows(rows)
+		rows.Children(func() {
 			a.pageTracks(c, k, j, accent, stageWidth(page))
 			if j != nil {
 				activity := float32(280)

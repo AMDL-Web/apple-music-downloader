@@ -411,3 +411,89 @@ func TestTheScreensNeverGoBlankBetween(t *testing.T) {
 	tt.Frame()
 	film("going back")
 }
+
+// panelFilm is the album page coming in from a search tile, one image of
+// the window per frame at 60 Hz with the lower panel's box in it, the
+// page's songs named track and the other tiles of the results named other.
+func panelFilm(t *testing.T, theme, track, other string) (frames []*image.RGBA, panels []image.Rectangle) {
+	t.Helper()
+	a, albums := searchApp(t)
+	a.PageMotion, a.Theme = true, theme
+	for i := 1; i < len(albums); i++ {
+		albums[i].Name = fmt.Sprintf("%s %d", other, i)
+		a.Store.Search.Result.Albums.Items[i] = albums[i]
+	}
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	if err := tt.Click(albums[0].Name); err != nil {
+		t.Fatal(err)
+	}
+	// Read before: an album already cached shows its songs from the first
+	// frame of the flight.
+	p := &a.Store.Search.Album
+	p.Status, p.Album = store.SearchReady, client.Album{ID: albums[0].ID, Title: albums[0].Name, ArtistName: "Yorushika", Tracks: []client.AlbumTrack{
+		{ID: "t1", DiscNumber: 1, TrackNumber: 1, Name: track + " one", DurationMS: 200_000},
+		{ID: "t2", DiscNumber: 1, TrackNumber: 2, Name: track + " two", DurationMS: 180_000},
+		{ID: "t3", DiscNumber: 1, TrackNumber: 3, Name: track + " three", DurationMS: 190_000},
+	}}
+	for range 120 {
+		tt.Advance(filmFrame)
+		img := tt.Image()
+		frames = append(frames, &image.RGBA{Pix: append([]uint8(nil), img.Pix...), Stride: img.Stride, Rect: img.Rect})
+		r, _ := tt.Find("Tracks")
+		panels = append(panels, image.Rect(0, int(r.Y), 1280, min(int(r.Y+r.H), 800)))
+		if !a.fly.moving {
+			break
+		}
+	}
+	return frames, panels
+}
+
+// differs reports whether a and b differ at x, y.
+func differs(a, b *image.RGBA, x, y int) bool {
+	i := a.PixOffset(x, y)
+	d := 0
+	for k := range 3 {
+		d += max(int(a.Pix[i+k])-int(b.Pix[i+k]), int(b.Pix[i+k])-int(a.Pix[i+k]))
+	}
+	return d > 12
+}
+
+// The page's songs never show over the results: in no frame of the page
+// coming in do the songs draw within the lower panel while the results
+// behind it still show through. Songs change pixels on a film with other
+// song names, the results on one with other tiles' names, and both change
+// pixels of the panel in a frame where the songs are over the results.
+func TestTheSongsNeverShowOverTheResults(t *testing.T) {
+	for _, theme := range []string{"light", "dark"} {
+		base, panels := panelFilm(t, theme, "Alpha", "Result")
+		songs, _ := panelFilm(t, theme, "Omega", "Result")
+		tiles, _ := panelFilm(t, theme, "Alpha", "Tile")
+		if len(base) != len(songs) || len(base) != len(tiles) || len(base) < 10 {
+			t.Fatalf("%s: films of %d, %d and %d frames", theme, len(base), len(songs), len(tiles))
+		}
+		shown := 0
+		for f := range base {
+			sg, rs := 0, 0
+			for y := panels[f].Min.Y; y < panels[f].Max.Y; y++ {
+				for x := 0; x < 1280; x++ {
+					if differs(base[f], songs[f], x, y) {
+						sg++
+					}
+					if differs(base[f], tiles[f], x, y) {
+						rs++
+					}
+				}
+			}
+			if sg > 0 {
+				shown++
+			}
+			if sg > 20 && rs > 20 {
+				t.Errorf("%s: frame %d of %d draws %d pixels of the songs over %d of the results", theme, f, len(base), sg, rs)
+			}
+		}
+		if shown == 0 {
+			t.Fatalf("%s: the songs show in no frame of %d: the film measures nothing", theme, len(base))
+		}
+	}
+}
