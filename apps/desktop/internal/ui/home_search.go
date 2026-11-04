@@ -232,7 +232,9 @@ func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.S
 		if focus != "" && !alone || focus == "" && (hg == nil || len(hg.Items) == 0) {
 			continue
 		}
-		leaving := q.Focus != focus && q.Focus != "" && g != q.Focus
+		// A group goes with the tab left unless the tab chosen shows it:
+		// the overview shows no group without hits.
+		leaving := q.Focus != focus && (q.Focus != "" && g != q.Focus || q.Focus == "" && (hg == nil || len(hg.Items) == 0))
 		el := ui.Column(c.Key(g)).Gap(14).Children(func() {
 			if !alone {
 				n := overviewCount(g, width)

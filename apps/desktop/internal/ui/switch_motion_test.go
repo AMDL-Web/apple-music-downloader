@@ -17,6 +17,12 @@ import (
 // text and covers on the dark theme's ground (ink), after the frame before
 // the click.
 func switchFilm(t *testing.T, tt *ui.Tester, click string, area image.Rectangle, frames int) (before int, film []int) {
+	before, film, _ = switchFilmWatch(t, tt, click, area, image.Rectangle{}, frames)
+	return before, film
+}
+
+// switchFilmWatch is switchFilm that also films how much of watch shows.
+func switchFilmWatch(t *testing.T, tt *ui.Tester, click string, area, watch image.Rectangle, frames int) (before int, film, watched []int) {
 	t.Helper()
 	tt.Frame()
 	before = ink(tt.Image(), area)
@@ -27,8 +33,9 @@ func switchFilm(t *testing.T, tt *ui.Tester, click string, area image.Rectangle,
 		tt.Advance(filmFrame)
 		tt.Frame()
 		film = append(film, ink(tt.Image(), area))
+		watched = append(watched, ink(tt.Image(), watch))
 	}
-	return before, film
+	return before, film, watched
 }
 
 // ink counts the bright pixels of r, text and covers over a dark ground.
@@ -106,7 +113,16 @@ func TestASearchTabSwitchShowsNoGap(t *testing.T) {
 	}
 	area := image.Rect(int(tabs.X), int(tabs.Y+tabs.H+8), 1280-24, 800-24)
 	for _, tab := range []string{"Albums", "Songs", "Playlists", "Overview"} {
-		before, film := switchFilm(t, tt, tab, area, 40)
+		// What the tab left says alone, as its "No playlists", goes as
+		// quickly as a group does, before the overview shows over it.
+		var said image.Rectangle
+		if r, ok := tt.Find("No playlists for “glass weather”"); ok {
+			said = image.Rect(int(r.X), int(r.Y), int(r.X+r.W), int(r.Y+r.H))
+		}
+		before, film, saying := switchFilmWatch(t, tt, tab, area, said, 40)
+		if !said.Empty() && saying[3] > 0 {
+			t.Errorf("to %s: “No playlists” still shows as the next tab comes in (%v)", tab, saying)
+		}
 		if n := blankRun(before, film); n > 3 {
 			t.Errorf("to %s: %d frames show neither tab (%v, before %d)", tab, n, film, before)
 		}
