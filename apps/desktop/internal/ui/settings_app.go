@@ -30,7 +30,6 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		f.wrapperBase = now
 	}
 	ui.Column(c).Gap(10).Children(func() {
-		label(c, k, "Where downloads run")
 		ui.Row(c).Gap(14).Children(func() {
 			modeCard := func(m mode.Kind, ic *ui.SVG, title string) {
 				on, off := d.Mode == m, a.Demo && m == mode.Standalone
@@ -101,7 +100,9 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 					a.runTest(*addr, c.Now())
 				}
 			})
-			ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)
+			if help != "" {
+				ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)
+			}
 		})
 		// The last results stay, dimmed, until the new ones replace them,
 		// so the card keeps its height.
@@ -114,7 +115,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		}
 	}
 	if d.Mode != mode.Standalone {
-		card(c, k).Gap(14).Children(func() { address(&d.RemoteURL, "Server address", "The web console's address.") })
+		card(c, k).Gap(14).Children(func() { address(&d.RemoteURL, "Server address", "") })
 	} else {
 		// Where the wrapper runs, as the setup screen asks it: this
 		// computer's guest shows how it runs and has no address to type;
@@ -152,14 +153,13 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		})
 	}
 	if d.Mode == mode.Standalone {
-		ui.Column(c).Gap(6).Children(func() {
+		card(c, k).Gap(6).Children(func() {
 			ui.Text(c, "ffmpeg").FontSize(12).FontWeight(600)
-			placeholder := "Not found — set a path"
+			placeholder := "Not found"
 			if p, src, err := ffmpeg.Find("", a.Dirs.Resources); err == nil {
 				placeholder = fmt.Sprintf("%s · %s", src, p)
 			}
 			field(c, k, "ffmpeg", &d.FFmpeg, placeholder, true)
-			ui.Text(c, "Leave empty to use the one found here.").FontSize(11.5).TextColor(k.Faint)
 		})
 	}
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
@@ -250,7 +250,6 @@ func (a *App) checkList(c *ui.Context, k *Tokens, checks []mode.Check) {
 
 func (a *App) appearanceSettings(c *ui.Context, k *Tokens) {
 	ui.Column(c).Gap(8).Children(func() {
-		label(c, k, "Theme")
 		theme := a.set.theme
 		// A row, so the track is as wide as its choices.
 		ui.Row(c).Children(func() { segmented(c, k, "theme", &a.set.theme, []string{"System", "Light", "Dark"}, nil) })

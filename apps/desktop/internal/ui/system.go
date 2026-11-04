@@ -197,7 +197,12 @@ func (a *App) workersCard(c *ui.Context, k *Tokens, sv *store.Server, span int) 
 		for i, v := range sv.Active {
 			vals[i] = float64(v) / float64(max(j.Workers, 1))
 		}
-		bars(c, k, vals, 12, k.Accent)
+		if busyBefore(vals) {
+			bars(c, k, vals, 12, k.Accent)
+		} else {
+			// The chart's room stays, so the card keeps its height.
+			ui.Box(c).Height(barsHeight)
+		}
 		p := sv.System.Pools
 		cardFoot(c, k, fmt.Sprintf("Pools %d download · %d decrypt · %d wrapper", p.Downloads, p.Decrypts, p.WrapperRequests))
 	})
@@ -236,16 +241,30 @@ func (a *App) downloadedCard(c *ui.Context, k *Tokens, sv *store.Server, span in
 	})
 }
 
+// barsHeight is the height of a card's column chart.
+const barsHeight = 26
+
+// busyBefore reports whether any sample but the latest is above zero: with
+// none, the chart would be a row of empty slots.
+func busyBefore(vals []float64) bool {
+	for _, v := range vals[:max(len(vals)-1, 0)] {
+		if v > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // bars is a card's small column chart of vals (0..1), oldest first, in
 // slots columns; slots without a value yet stay empty on the left.
 func bars(c *ui.Context, k *Tokens, vals []float64, slots int, col ui.Color) {
-	ui.Row(c).Height(26).Gap(3).AlignItems(ui.End).Children(func() {
+	ui.Row(c).Height(barsHeight).Gap(3).AlignItems(ui.End).Children(func() {
 		for i := range slots {
 			v, empty := 0.0, true
 			if j := i - (slots - len(vals)); j >= 0 {
 				v, empty = vals[j], false
 			}
-			b := ui.Box(c.Key(i)).Grow(1).Radius(radiusInner).Height(max(2, float32(v)*26))
+			b := ui.Box(c.Key(i)).Grow(1).Radius(radiusInner).Height(max(2, float32(v)*barsHeight))
 			if empty || v == 0 {
 				b.Background(k.Track)
 			} else {
@@ -442,15 +461,13 @@ func syncCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			if l.Enabled {
 				display(c, "On", 24)
-				ui.Spacer(c)
-				pill(c, k, pillOK, icCheck, "Watching")
 			} else {
 				display(c, "Off", 24)
-				ui.Spacer(c)
-				pill(c, k, pillWait, nil, "Off in config")
 			}
 		})
-		cardFoot(c, k, syncFoot(syncShown(l)))
+		if l.Enabled {
+			cardFoot(c, k, syncFoot(syncShown(l)))
+		}
 	})
 }
 
@@ -482,13 +499,17 @@ func hooksCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element 
 				}
 			}
 		}
-		display(c, fmt.Sprintf("%d ran", ran), 24)
+		if ran > 0 {
+			display(c, fmt.Sprintf("%d ran", ran), 24)
+		} else {
+			display(c, "Idle", 24)
+		}
 		if len(parts) == 0 {
 			names := make([]string, 0, len(h.Entries))
 			for _, e := range h.Entries {
 				names = append(names, e.Name)
 			}
-			parts = []string{strings.Join(names, " · ") + " · none ran lately"}
+			parts = []string{strings.Join(names, " · ")}
 		}
 		cardFoot(c, k, strings.Join(parts, " · "))
 	})

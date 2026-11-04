@@ -128,6 +128,8 @@ func (a *App) backLabel() string {
 		return "Home"
 	case ScreenSettings:
 		return "Settings"
+	case ScreenLibrary:
+		return "Library"
 	}
 	return "Queue"
 }

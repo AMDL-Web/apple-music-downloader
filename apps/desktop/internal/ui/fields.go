@@ -57,8 +57,7 @@ const restartHelp = "Applies after a restart."
 
 var configFields = []configField{
 	// Shown in Connection (wrapperKeyCard).
-	{key: "wrapper.token", section: "connection", kind: fieldToken, label: "Key",
-		help: "Only for a wrapper behind a gateway, such as a Cloudflare Worker."},
+	{key: "wrapper.token", section: "connection", kind: fieldToken, label: "Key"},
 	// Shown only while no account is known (fieldHidden).
 	{key: "catalog.default_storefront", section: "account", kind: fieldSelect, label: "Storefront",
 		options: []option{{"cn", "China (CN)"}, {"us", "United States (US)"}, {"jp", "Japan (JP)"}, {"gb", "United Kingdom (GB)"}, {"hk", "Hong Kong (HK)"}, {"tw", "Taiwan (TW)"}},
@@ -86,12 +85,10 @@ var configFields = []configField{
 		}},
 
 	{key: "download.downloads_dir", section: "files", kind: fieldPath, confirm: true, label: "Downloads folder"},
-	{key: "download.temp_dir", section: "files", kind: fieldPath, label: "Temporary folder",
-		help: "Fastest on the downloads folder's disk."},
+	{key: "download.temp_dir", section: "files", kind: fieldPath, label: "Temporary folder"},
 	{key: "download.overwrite_existing", section: "files", kind: fieldSwitch, label: "Overwrite existing files",
 		help: "Off keeps a file already at a track's path as its download."},
-	{key: "download.library_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Library",
-		help: "Songs, albums and artists."},
+	{key: "download.library_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Library"},
 	{key: "download.playlist_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Playlists",
 		help: "{SongNumber} is the position in the playlist."},
 	{key: "download.station_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Stations",
@@ -114,7 +111,6 @@ var configFields = []configField{
 		help: "One extra request per album; it never holds up a download."},
 	{key: "download.embed_lyrics", section: "lyrics_artwork", group: "Lyrics", kind: fieldSwitch, label: "Embed lyrics in each track"},
 	{key: "download.lyrics_files", section: "lyrics_artwork", group: "Lyrics", kind: fieldSet, label: "Lyrics files next to each track",
-		help:    "LRC suits most players; TTML keeps Apple’s word timing, translation and romanization.",
 		options: []option{{"lrc", "LRC"}, {"ttml", "TTML"}}},
 	{key: "download.lyrics_timing", section: "lyrics_artwork", group: "Lyrics", kind: fieldSelect, label: "Lyrics timing",
 		options: []option{{"line", "Line by line"}, {"word", "Word by word"}}},
