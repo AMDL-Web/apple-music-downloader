@@ -434,7 +434,8 @@ const (
 	// MarkDone: every wanted track of the record is downloaded, or a
 	// song's own track is.
 	MarkDone
-	// MarkPartial: some of the record's wanted tracks are downloaded.
+	// MarkPartial: some of the record's wanted tracks are downloaded, or
+	// all of them where the album record wants only some of its tracks.
 	MarkPartial
 	// MarkPaused: the record is paused with tracks still to download.
 	MarkPaused
@@ -457,7 +458,7 @@ func (s *Store) HitMark(h client.SearchHit) (MarkState, string) {
 			}
 		}
 	}
-	return MarkOf(s.HitRecord(h), h.Type == "song")
+	return MarkOf(s.HitRecord(h), h.Type == "song", h.TrackCount)
 }
 
 // SubmitHit downloads exactly h under overrides (nil: the backend's

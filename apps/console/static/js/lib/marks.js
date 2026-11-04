@@ -17,9 +17,13 @@ const WAITING = new Set(['pending', 'running', 'failed']);
  * 'active' while the record has a queued or running run (job {id}),
  * 'paused', 'complete' or 'partial'. A song passes `songState`, its main
  * slot in its album's record: done is complete, a waiting slot is active or
- * paused with its album, anything else marks nothing.
+ * paused with its album, anything else marks nothing. An album passes
+ * `tracks`, its track count where known: a record that wants only the
+ * songs added one by one (wanted_all false) is out of the album's
+ * available tracks then, so with all of its own done it is still partial
+ * and its Download adds the rest.
  */
-export function resourceMark(resource, songState) {
+export function resourceMark(resource, songState, tracks) {
   const r = resource && typeof resource === 'object' && resource.kind && resource.id ? resource : null;
   if (!r) return null;
   const ref = { kind: r.kind, id: r.id };
@@ -33,10 +37,13 @@ export function resourceMark(resource, songState) {
     return null;
   }
   const done = Math.max(0, Number(r.tracks_done) || 0);
-  const total = Math.max(done, Number(r.tracks_wanted) || 0);
+  const wanted = Math.max(done, Number(r.tracks_wanted) || 0);
+  const songsOnly = r.kind === 'album' && r.wanted_all === false && Number(tracks) > 0;
+  const total = songsOnly ? Math.max(wanted, Number(tracks) - withheld) : wanted;
   const base = { done, total, withheld, job, resource: ref };
   if (job) return { state: 'active', ...base };
   if (r.paused && r.state !== 'complete') return { state: 'paused', ...base };
+  if (r.state === 'complete' && done < total) return { state: 'partial', ...base };
   if (r.state === 'complete' || r.state === 'partial') return { state: r.state, ...base };
   return null;
 }
@@ -57,6 +64,7 @@ export function markFields(kind, id, record) {
     tracks_done: r.tracks_done || 0,
     tracks_wanted: r.tracks_wanted || 0,
     withheld_count: r.withheld_count || 0,
+    wanted_all: r.wanted_all !== false,
     paused: Boolean(r.paused),
     ...(r.active_job_id ? { active_job_id: r.active_job_id } : {}),
   };

@@ -26,7 +26,7 @@ func searchApp(t *testing.T) (*App, []client.SearchHit) {
 		albums = append(albums, client.SearchHit{Type: "album", ID: fmt.Sprint(100 + i), Name: fmt.Sprintf("Album %d", i), ArtistName: "Yorushika", TrackCount: 3,
 			URL: fmt.Sprintf("https://music.apple.com/cn/album/x/%d", 100+i)})
 	}
-	albums[0].Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "100", State: domain.RecordComplete}
+	albums[0].Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "100", State: domain.RecordComplete, WantedAll: true}
 
 	s.Search.Result = &client.SearchResult{Albums: &client.HitGroup{Items: albums}}
 	s.Search.Status = store.SearchReady
@@ -183,5 +183,36 @@ func TestAlbumKindAndClip(t *testing.T) {
 	}
 	if k, _ := store.AlbumKind("Elma"); k != "Album" || !strings.HasPrefix(clip("Yorushika and many friends of theirs", 10), "Yorushika") {
 		t.Error("Elma is an album, and clip keeps its start")
+	}
+}
+
+// An album whose record holds only a song added on its own is not in the
+// library: its tile offers the rest, and Download adds the whole album
+// without asking to replace anything.
+func TestAlbumOfOneDownloadedSongOffersTheRest(t *testing.T) {
+	a, albums := searchApp(t)
+	albums[1].Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "101", State: domain.RecordComplete, TracksDone: 1, TracksWanted: 1}
+	a.Store.Search.Result.Albums.Items[1] = albums[1]
+	tt := ui.NewTester(a.View, 1280, 800)
+	if mark, _ := a.Store.HitMark(albums[1]); mark != store.MarkPartial {
+		t.Fatalf("mark of the one-song album = %v, want partial", mark)
+	}
+	if _, ok := tt.Find("Album 1: 1 of 3 tracks downloaded, download the rest"); !ok {
+		t.Errorf("no partial control on the one-song album: %q", tt.Texts())
+	}
+	if _, ok := tt.Find("Album 1 is in your library: download again"); ok {
+		t.Error("the one-song album reads as in the library")
+	}
+	a.download(albums[1])
+	if a.asking != nil {
+		t.Errorf("Download asked %+v, want the album sent as it is", *a.asking)
+	}
+	if _, on := a.Store.Search.Starting[store.HitKey(albums[1])]; !on {
+		t.Error("Download did not send the album")
+	}
+	// A record of every track of the album is in the library.
+	albums[2].Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "102", State: domain.RecordComplete, TracksDone: 3, TracksWanted: 3}
+	if mark, _ := a.Store.HitMark(albums[2]); mark != store.MarkDone {
+		t.Errorf("mark of an album whose songs are all downloaded = %v, want done", mark)
 	}
 }

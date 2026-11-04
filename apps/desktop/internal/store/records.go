@@ -121,8 +121,11 @@ func (s *Store) RecordMark(kind domain.ResourceKind, id string) *domain.Resource
 // MarkOf is how a record mark reads, and the run it names while one is
 // queued or running. song reads a song's own state in its album's record:
 // done is in the library, a slot still to download is in the queue or
-// paused with its album, anything else marks nothing.
-func MarkOf(r *domain.ResourceMark, song bool) (MarkState, string) {
+// paused with its album, anything else marks nothing. tracks is the
+// album's track count where the caller knows it (a hit's), else 0: an
+// album record that wants only some of its tracks reads partial while it
+// holds fewer than the album's (MarkTotal), so its Download adds the rest.
+func MarkOf(r *domain.ResourceMark, song bool, tracks int) (MarkState, string) {
 	if r == nil {
 		return MarkNone, ""
 	}
@@ -145,12 +148,28 @@ func MarkOf(r *domain.ResourceMark, song bool) (MarkState, string) {
 		return MarkActive, r.ActiveJobID
 	case r.Paused && r.State != domain.RecordComplete:
 		return MarkPaused, ""
+	case r.State == domain.RecordComplete && r.TracksDone < MarkTotal(r, tracks):
+		return MarkPartial, ""
 	case r.State == domain.RecordComplete:
 		return MarkDone, ""
 	case r.State == domain.RecordPartial:
 		return MarkPartial, ""
 	}
 	return MarkNone, ""
+}
+
+// MarkTotal is how many tracks a record mark's done ones are out of: its
+// wanted tracks, or, for an album record that wants only the tracks added
+// one by one, the album's available ones when tracks (its track count) is
+// known.
+func MarkTotal(r *domain.ResourceMark, tracks int) int {
+	if r == nil {
+		return 0
+	}
+	if r.Kind == domain.ResourceAlbum && !r.WantedAll && tracks > 0 {
+		return max(r.TracksWanted, tracks-r.WithheldCount)
+	}
+	return r.TracksWanted
 }
 
 // HitRecord is the record a hit's mark reads, with the newest news: an

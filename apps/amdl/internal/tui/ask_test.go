@@ -209,6 +209,8 @@ func TestHitMarkFollowsTheRecord(t *testing.T) {
 	running.ActiveJobID, paused.Paused = "j", true
 	complete := domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", State: domain.RecordComplete, TracksDone: 12, TracksWanted: 12}
 	song := domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", State: domain.RecordPartial, SongState: domain.AudioDone}
+	// A record of one song of a 12-track album is complete in itself.
+	oneSong := domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", State: domain.RecordComplete, TracksDone: 1, TracksWanted: 1, WithheldCount: 1}
 	for _, tt := range []struct {
 		hit  client.SearchHit
 		want string
@@ -217,6 +219,8 @@ func TestHitMarkFollowsTheRecord(t *testing.T) {
 		{client.SearchHit{Type: "album", Resource: &paused}, "‖ paused"},
 		{client.SearchHit{Type: "album", Resource: &partial}, "9/12"},
 		{client.SearchHit{Type: "album", Resource: &complete}, "✓ in library"},
+		{client.SearchHit{Type: "album", TrackCount: 12, Resource: &oneSong}, "1/11"},
+		{client.SearchHit{Type: "album", TrackCount: 2, Resource: &oneSong}, "✓ in library"},
 		{client.SearchHit{Type: "song", Resource: &song}, "✓ in library"},
 		{client.SearchHit{Type: "album"}, ""},
 	} {

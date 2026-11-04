@@ -373,7 +373,12 @@ type ResourceMark struct {
 	TracksDone    int          `json:"tracks_done"`
 	TracksWanted  int          `json:"tracks_wanted"`
 	WithheldCount int          `json:"withheld_count"`
-	ActiveJobID   string       `json:"active_job_id,omitempty"`
-	Paused        bool         `json:"paused"`
-	SongState     AudioState   `json:"song_state,omitempty"`
+	// WantedAll is false for an album record that wants only the tracks
+	// added one by one: State and the counts cover those tracks, so a
+	// complete record of that kind may not hold the whole album. Always
+	// true for a playlist.
+	WantedAll   bool       `json:"wanted_all"`
+	ActiveJobID string     `json:"active_job_id,omitempty"`
+	Paused      bool       `json:"paused"`
+	SongState   AudioState `json:"song_state,omitempty"`
 }

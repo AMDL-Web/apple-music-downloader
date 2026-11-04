@@ -67,7 +67,7 @@ export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
     if (!hit) return null;
     const r = hit.resource || sentRes.get(hitKey(hit)) || null;
     if (!r) return null;
-    if (hit.type !== 'song') return resourceMark(withLatest(r, latest));
+    if (hit.type !== 'song') return resourceMark(withLatest(r, latest), undefined, hit.track_count);
     const sent = songs.get(hit.id);
     return resourceMark(withLatest(r, latest), sent ? sent.state : r.song_state || null);
   };

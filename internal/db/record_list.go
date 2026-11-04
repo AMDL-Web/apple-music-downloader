@@ -303,15 +303,15 @@ func (s *Store) RecordMarks(ctx context.Context, kind domain.ResourceKind, ids [
 	if err != nil {
 		return nil, err
 	}
-	withheld := `0`
+	withheld, wantedAll := `0`, `1`
 	if kind == domain.ResourceAlbum {
-		withheld = `r.withheld_count`
+		withheld, wantedAll = `r.withheld_count`, `r.wanted_all`
 	}
 	args := make([]any, 0, len(ids))
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.state, r.tracks_done, r.tracks_wanted, `+withheld+`, r.paused,
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.state, r.tracks_done, r.tracks_wanted, `+withheld+`, `+wantedAll+`, r.paused,
 		COALESCE((SELECT j.id FROM runs j WHERE j.resource_kind = '`+string(kind)+`' AND j.resource_id = r.id AND j.status IN ('queued','running') LIMIT 1), '')
 		FROM `+table+` r WHERE r.id IN (`+placeholders(len(ids))+`)`, args...)
 	if err != nil {
@@ -321,7 +321,7 @@ func (s *Store) RecordMarks(ctx context.Context, kind domain.ResourceKind, ids [
 	for rows.Next() {
 		m := domain.ResourceMark{Kind: kind}
 		var state string
-		if err := rows.Scan(&m.ID, &state, &m.TracksDone, &m.TracksWanted, &m.WithheldCount, &m.Paused, &m.ActiveJobID); err != nil {
+		if err := rows.Scan(&m.ID, &state, &m.TracksDone, &m.TracksWanted, &m.WithheldCount, &m.WantedAll, &m.Paused, &m.ActiveJobID); err != nil {
 			return nil, err
 		}
 		m.State = domain.RecordState(state)

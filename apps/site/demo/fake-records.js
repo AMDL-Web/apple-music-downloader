@@ -130,7 +130,7 @@ export function createRecordStore({ jobs, items, now }) {
     const r = ref && records.get(keyOf(ref));
     if (!r) return null;
     const full = record(r);
-    const out = { kind: r.kind, id: r.id, state: full.state, tracks_done: full.tracks_done, tracks_wanted: full.tracks_wanted, withheld_count: 0, paused: r.paused };
+    const out = { kind: r.kind, id: r.id, state: full.state, tracks_done: full.tracks_done, tracks_wanted: full.tracks_wanted, withheld_count: 0, wanted_all: r.kind === 'playlist' || r.wanted === 'all', paused: r.paused };
     if (full.active_job_id) out.active_job_id = full.active_job_id;
     if (songId) {
       const s = trackStates(r).get(songId);

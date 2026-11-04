@@ -45,7 +45,8 @@ type choicesMsg struct {
 }
 
 // inLibrary is a hit amdl has downloaded: an album or playlist whose record
-// is complete, a song whose slot is done. Downloading it again is a reset.
+// is complete and holds all of it (markTotal), a song whose slot is done.
+// Downloading it again is a reset.
 func inLibrary(h client.SearchHit) bool {
 	r := h.Resource
 	if r == nil {
@@ -54,7 +55,18 @@ func inLibrary(h client.SearchHit) bool {
 	if h.Type == "song" {
 		return r.SongState == domain.AudioDone
 	}
-	return r.State == domain.RecordComplete
+	return r.State == domain.RecordComplete && r.TracksDone >= markTotal(h)
+}
+
+// markTotal is how many tracks a hit's record's done ones are out of: its
+// wanted tracks, or the album's available ones when the album record wants
+// only the songs added one by one and the hit knows the album's size.
+func markTotal(h client.SearchHit) int {
+	r := h.Resource
+	if h.Type == "album" && !r.WantedAll && h.TrackCount > 0 {
+		return max(r.TracksWanted, h.TrackCount-r.WithheldCount)
+	}
+	return r.TracksWanted
 }
 
 // hitMark is a result row's state from its record: a run queued or running
@@ -70,8 +82,8 @@ func hitMark(h client.SearchHit) string {
 		return "‖ paused"
 	case inLibrary(h):
 		return "✓ in library"
-	case h.Type != "song" && r.State == domain.RecordPartial:
-		return fmt.Sprintf("%d/%d", r.TracksDone, r.TracksWanted)
+	case h.Type != "song" && (r.State == domain.RecordPartial || r.State == domain.RecordComplete):
+		return fmt.Sprintf("%d/%d", r.TracksDone, markTotal(h))
 	}
 	return ""
 }

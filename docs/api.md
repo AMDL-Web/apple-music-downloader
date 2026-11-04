@@ -706,7 +706,7 @@ curl -X POST http://localhost:18080/api/v1/lookup \
  "genre":"Hip-Hop/Rap","track_count":12,"content_rating":"explicit","apple_digital_master":true,
  "audio_traits":["lossless","lossy-stereo"],
  "resource":{"kind":"album","id":"1463409338","state":"partial","tracks_done":9,"tracks_wanted":12,
-   "withheld_count":0,"paused":false}}
+   "withheld_count":0,"wanted_all":true,"paused":false}}
 ```
 
 Previews one link without creating a job, so a client can show the cover, title and artist
@@ -761,7 +761,7 @@ curl 'http://localhost:18080/api/v1/search?term=Taylor+Swift&storefront=us&limit
    "artist_name":"Taylor Swift","release_date":"2026-09-24","track_count":16,
    "content_rating":"explicit",
    "resource":{"kind":"album","id":"6814997249","state":"complete","tracks_done":16,
-     "tracks_wanted":16,"withheld_count":0,"paused":false}, …}, …],"next_offset":2},
+     "tracks_wanted":16,"withheld_count":0,"wanted_all":true,"paused":false}, …}, …],"next_offset":2},
  "playlists":{"items":[{"id":"pl.2553030a768547e9ab3e91230de8439f","type":"playlist",
    "name":"Lo-fi beats to study, work, sleep and relax to",
    "url":"https://music.apple.com/us/playlist/lo-fi-beats-to-study-work-sleep-and-relax-to/pl.2553030a768547e9ab3e91230de8439f",
@@ -836,7 +836,7 @@ curl 'http://localhost:18080/api/v1/albums/1783644603?storefront=cn'
  "genre":"动画","track_count":13,"disc_count":1,"apple_digital_master":true,
  "audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
  "resource":{"kind":"album","id":"1783644603","state":"partial","tracks_done":1,"tracks_wanted":13,
-   "withheld_count":0,"paused":false},
+   "withheld_count":0,"wanted_all":true,"paused":false},
  "tracks":[{"id":"1783644604","url":"https://music.apple.com/cn/song/%E8%BF%B7%E6%98%9F%E5%8F%AB/1783644604",
    "disc_number":1,"track_number":1,"name":"迷星叫","artist_name":"MyGO!!!!!","duration_ms":211373,
    "apple_digital_master":true,"audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
@@ -866,8 +866,8 @@ there; both are absent when amdl has no record of the album.
 ### Record marks
 
 `resource` on a search hit, a lookup and the album page is `{kind, id, state, tracks_done,
-tracks_wanted, withheld_count, active_job_id?, paused, song_state?}`, read from the
-[records](#library) and never from the disk: a file moved away still counts until a disk
+tracks_wanted, withheld_count, wanted_all, active_job_id?, paused, song_state?}`, read from
+the [records](#library) and never from the disk: a file moved away still counts until a disk
 check marks it missing. A song is marked with the album record that holds it and its main
 slot's state as `song_state`. An object amdl has no record of has no `resource`.
 
@@ -875,6 +875,11 @@ slot's state as `song_state`. An object amdl has no record of has no `resource`.
 | --- | --- |
 | An album id that is not digits, a bad `storefront` | `400 invalid_request` |
 | Apple answers 404 (an unknown album id, or one the storefront does not have) | `404 catalog_not_found` |
+`wanted_all` is false for an album record of songs added one by one: its `state` and counts
+cover those songs, so a `complete` one holds the whole album only when `tracks_done`
+reaches the album's track count less `withheld_count`. The console, the desktop app and the
+TUI show it as partly downloaded otherwise, and their Download adds the whole album, which
+queues a run for the tracks it lacks.
 | The catalog read fails otherwise | `502 upstream_error` |
 | No answer within 15 seconds | `504 upstream_timeout` |
 

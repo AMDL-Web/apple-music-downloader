@@ -39,7 +39,8 @@ func (b *Backend) albumMark(a *album) (*domain.ResourceMark, []domain.AudioState
 			states[i] = domain.AudioPending
 		}
 	}
-	m := &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: a.id, TracksDone: done, TracksWanted: len(a.tracks), State: domain.RecordPartial}
+	// The demo's records always want the whole album.
+	m := &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: a.id, TracksDone: done, TracksWanted: len(a.tracks), WantedAll: true, State: domain.RecordPartial}
 	switch {
 	case done == len(a.tracks):
 		m.State = domain.RecordComplete

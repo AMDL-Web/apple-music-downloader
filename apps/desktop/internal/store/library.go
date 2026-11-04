@@ -41,9 +41,23 @@ type Record struct {
 	ActiveJobID string
 	domain.Rollup
 	WithheldCount int
+	// WantedAll is false for an album record that wants only the tracks
+	// added one by one; ReleaseTrackCount is the album's track count, 0
+	// until it is read.
+	WantedAll         bool
+	ReleaseTrackCount int
 	// ActivityAt is when one of its runs last changed, or when it was
 	// added.
 	ActivityAt time.Time
+}
+
+// TrackCount is the album's track count where the record knows it, else
+// its wanted tracks.
+func (r Record) TrackCount() int {
+	if r.ReleaseTrackCount > 0 {
+		return r.ReleaseTrackCount
+	}
+	return r.TracksWanted
 }
 
 // Link is the record's Apple Music link.
@@ -58,7 +72,7 @@ func (r Record) Link() string {
 // Mark is the record as a search hit's mark reads it.
 func (r Record) Mark() *domain.ResourceMark {
 	return &domain.ResourceMark{Kind: r.Ref.Kind, ID: r.Ref.ID, State: r.State, TracksDone: r.TracksDone, TracksWanted: r.TracksWanted,
-		WithheldCount: r.WithheldCount, ActiveJobID: r.ActiveJobID, Paused: r.Paused}
+		WithheldCount: r.WithheldCount, WantedAll: r.WantedAll, ActiveJobID: r.ActiveJobID, Paused: r.Paused}
 }
 
 // Library is the Library screen: the Apple Music account library the
@@ -238,13 +252,13 @@ func readRecords(ctx context.Context, c *client.Client, kind domain.ResourceKind
 func albumRecord(a client.AlbumRecord) Record {
 	return Record{Ref: domain.ResourceRef{Kind: domain.ResourceAlbum, ID: a.ID}, Name: a.Name, By: a.ArtistName, Artwork: a.Artwork,
 		Storefront: a.PinnedStorefront, ResolvedAt: a.ResolvedAt != nil, Catalog: a.CatalogState, Paused: a.Paused, ActiveJobID: a.ActiveJobID,
-		Rollup: a.Rollup, WithheldCount: a.WithheldCount, ActivityAt: a.ActivityAt}
+		Rollup: a.Rollup, WithheldCount: a.WithheldCount, WantedAll: a.WantedAll, ReleaseTrackCount: a.ReleaseTrackCount, ActivityAt: a.ActivityAt}
 }
 
 func playlistRecord(p client.PlaylistRecord) Record {
 	return Record{Ref: domain.ResourceRef{Kind: domain.ResourcePlaylist, ID: p.ID}, Name: p.Name, By: p.CuratorName, Artwork: p.Artwork,
 		Storefront: p.PinnedStorefront, ResolvedAt: p.ResolvedAt != nil, Catalog: p.CatalogState, Paused: p.Paused, ActiveJobID: p.ActiveJobID,
-		Rollup: p.Rollup, ActivityAt: p.ActivityAt}
+		Rollup: p.Rollup, WantedAll: true, ActivityAt: p.ActivityAt}
 }
 
 // readApple reads the Apple tab's list, its sync status and the ids of

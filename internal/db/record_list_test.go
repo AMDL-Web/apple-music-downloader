@@ -59,8 +59,20 @@ func TestRecordListsFilterAndMarksAgree(t *testing.T) {
 
 	marks, err := store.RecordMarks(ctx, domain.ResourceAlbum, []string{"1", "2", "9"})
 	must(t, err)
-	if m := marks["1"]; m.State != domain.RecordComplete || m.TracksDone != 2 || m.TracksWanted != 2 {
+	if m := marks["1"]; m.State != domain.RecordComplete || m.TracksDone != 2 || m.TracksWanted != 2 || !m.WantedAll {
 		t.Errorf("mark 1 = %+v", m)
+	}
+	// A record of one song is complete in itself; its mark says it wants
+	// only that song, so a client does not read the album as downloaded.
+	_, err = store.AddAlbum(ctx, AlbumAdd{ID: "4", SongIDs: []string{"41"}, Source: domain.SourceManual, Now: now})
+	must(t, err)
+	must(t, store.ApplyAlbumRead(ctx, albumRead("4", now, "41", "42")))
+	k41 := mainSlot(domain.ResourceAlbum, "4", "41")
+	must(t, store.MarkFileDone(ctx, k41, FileOutcome{Path: "/music/A/4/41.m4a", Codec: "alac", RunID: "run-4", Now: now}))
+	songOnly, err := store.RecordMarks(ctx, domain.ResourceAlbum, []string{"4"})
+	must(t, err)
+	if m := songOnly["4"]; m.State != domain.RecordComplete || m.WantedAll || m.TracksWanted != 1 || m.WithheldCount != 1 {
+		t.Errorf("mark of a one-song record = %+v, want complete, wanted_all false", m)
 	}
 	if _, ok := marks["9"]; ok || len(marks) != 2 {
 		t.Errorf("an id without a record is marked: %+v", marks)

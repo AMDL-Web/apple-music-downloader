@@ -31,17 +31,21 @@ type downloadAsk struct {
 // download starts h, after a sheet when there is something to ask: the
 // quality where the hit offers both lossless and Dolby and the server would
 // take either, and whether to download again what is already downloaded.
-// A paused hit resumes.
+// A paused hit resumes. An album whose record wants only the songs added
+// one by one asks nothing about the library: its Download adds the whole
+// album, and the tracks already downloaded stay.
 func (a *App) download(h client.SearchHit) {
 	s := a.Store
 	mark, _ := s.HitMark(h)
-	if r := s.HitRecord(h); mark == store.MarkPaused && r != nil {
+	r := s.HitRecord(h)
+	if mark == store.MarkPaused && r != nil {
 		s.Resume(domain.ResourceRef{Kind: r.Kind, ID: r.ID})
 		return
 	}
 	priority := strs(s.Config.Value("download.quality_priority"))
 	ask := downloadAsk{hit: h, priority: priority, codecs: format.QualityChoices(h.AudioTraits, priority)}
-	if mark == store.MarkDone || mark == store.MarkPartial {
+	songsOnly := h.Type == "album" && r != nil && r.Kind == domain.ResourceAlbum && !r.WantedAll
+	if mark == store.MarkDone || (mark == store.MarkPartial && !songsOnly) {
 		ask.again = mark
 	}
 	if ask.codecs == nil && ask.again == store.MarkNone {

@@ -161,7 +161,7 @@ describe('fake API', () => {
     assert.deepEqual(first.results[0].resource, { kind: 'album', id: album.id });
     settle(api);
     const after = await (await call(api, 'POST', '../api/v1/lookup', { url: album.url })).json();
-    assert.deepEqual(after.resource, { kind: 'album', id: album.id, state: 'complete', tracks_done: album.track_count, tracks_wanted: album.track_count, withheld_count: 0, paused: false });
+    assert.deepEqual(after.resource, { kind: 'album', id: album.id, state: 'complete', tracks_done: album.track_count, tracks_wanted: album.track_count, withheld_count: 0, wanted_all: true, paused: false });
     const again = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url] })).json();
     assert.equal(again.results[0].status, 'already_downloaded');
     const reset = await call(api, 'POST', `../api/v1/library/albums/${album.id}/reset`, { what: 'audio' });

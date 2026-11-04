@@ -204,9 +204,10 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 		look = markLook{bg: k.Raise2, fg: k.Fg, ic: icPause, interactive: true}
 	case mark == store.MarkPartial:
 		r := s.HitRecord(h)
-		b.Label(fmt.Sprintf("%s: %d of %d tracks downloaded, download the rest", h.Name, r.TracksDone, r.TracksWanted))
+		total := store.MarkTotal(r, h.TrackCount)
+		b.Label(fmt.Sprintf("%s: %d of %d tracks downloaded, download the rest", h.Name, r.TracksDone, total))
 		if pointed {
-			b.Tooltip(fmt.Sprintf("%d of %d downloaded", r.TracksDone, r.TracksWanted))
+			b.Tooltip(fmt.Sprintf("%d of %d downloaded", r.TracksDone, total))
 		}
 		look.interactive = true
 	case mark == store.MarkDone:

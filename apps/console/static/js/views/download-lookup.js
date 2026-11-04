@@ -153,7 +153,7 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
     if (!r) return null;
     const song = s.state === 'ready' && s.data && s.data.type === 'song';
     const songState = !song ? undefined : SENT.has(url) ? 'pending' : r.song_state || null;
-    return resourceMark(withLatest(r, LATEST), songState);
+    return resourceMark(withLatest(r, LATEST), songState, song ? undefined : s.data && s.data.track_count);
   };
   /** Takes the records a submit named into the marks at once, before the feed says so. */
   const noteSubmitted = (pairs) => {

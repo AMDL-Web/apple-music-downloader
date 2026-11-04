@@ -4985,7 +4985,7 @@ components:
         disk check did not find.
     ResourceMark:
       type: object
-      required: [kind, id, state, tracks_done, tracks_wanted, withheld_count, paused]
+      required: [kind, id, state, tracks_done, tracks_wanted, withheld_count, wanted_all, paused]
       description: >-
         The record holding a catalog object, as search hits, lookups and the
         album page mark it; read from the records, never from the disk.
@@ -5005,6 +5005,14 @@ components:
           type: string
           description: The record's queued or running run; absent without one.
         paused: {type: boolean}
+        wanted_all:
+          type: boolean
+          description: >-
+            True for a whole album and for a playlist; false for an album
+            record of tracks added one by one, whose state and counts cover
+            only those tracks: complete then means they are done, not the
+            album. Clients compare tracks_done with the album's track count
+            less withheld_count to tell.
         song_state:
           $ref: '#/components/schemas/AudioState'
           description: For a song, its main slot state in this album record.

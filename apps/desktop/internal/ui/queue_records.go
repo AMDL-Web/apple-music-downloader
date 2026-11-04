@@ -254,7 +254,7 @@ func recordHit(r store.Record) client.SearchHit {
 	c := r.Artwork.Colors
 	return client.SearchHit{Type: "album", ID: r.Ref.ID, Name: r.Name, ArtistName: r.By, ArtworkURL: r.Artwork.URL,
 		ArtworkBgColor: c.Bg, ArtworkTextColor1: c.Text1, ArtworkTextColor2: c.Text2, ArtworkTextColor3: c.Text3, ArtworkTextColor4: c.Text4,
-		TrackCount: r.TracksWanted, Resource: r.Mark()}
+		TrackCount: r.TrackCount(), Resource: r.Mark()}
 }
 
 // showDetails opens what shows a row: an album record's page, else the
@@ -291,7 +291,7 @@ func (a *App) rowRecord(j *store.Job) *store.Record {
 	r.Artwork.URL = j.ArtworkURL
 	if m := a.Store.RecordMark(ref.Kind, ref.ID); m != nil {
 		r.Rollup = domain.Rollup{State: m.State, TracksDone: m.TracksDone, TracksWanted: m.TracksWanted}
-		r.Paused = m.Paused
+		r.Paused, r.WithheldCount, r.WantedAll = m.Paused, m.WithheldCount, m.WantedAll
 	}
 	return r
 }
