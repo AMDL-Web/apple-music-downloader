@@ -186,7 +186,9 @@ func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBacke
 	// finalizeToOutput), so handleExistingOutput's "bare existence = done"
 	// adoption stays correct even if the process dies mid-move. A file already
 	// at outPath is replaced in the same rename.
-	size, err := backend.commit(out.staged, out.outPath)
+	staged := out.staged
+	staged.codec = out.codec
+	size, err := backend.commit(staged, out.outPath)
 	if err != nil {
 		return fmt.Errorf("%s: %w", out.labels.commitErr, err)
 	}

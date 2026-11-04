@@ -173,6 +173,9 @@ type stagedFile struct {
 	path string
 	// size is the simulated file size; the real backend stats the result.
 	size int64
+	// codec is the track's codec, which a simulated commit records for its
+	// file (simulatedMedia.outputEntry).
+	codec string
 }
 
 type decryptRequest struct {

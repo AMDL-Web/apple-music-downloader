@@ -75,11 +75,11 @@ func (m simulatedMedia) statOutput(outPath string) (int64, bool) {
 	return statDiskOutput(outPath)
 }
 
-// outputEntry reads a real file; a simulated commit holds no boxes, so its
-// quality stays unknown.
+// outputEntry is the entry type of a simulated commit's codec, as its file
+// would carry, else a real file's.
 func (m simulatedMedia) outputEntry(outPath string) string {
-	if _, ok := m.outputs.stat(outPath); ok {
-		return ""
+	if f, ok := m.outputs.lookup(outPath); ok {
+		return sampleEntryKinds[f.codec]
 	}
 	return realMedia{}.outputEntry(outPath)
 }
@@ -148,7 +148,7 @@ func (simulatedMedia) tag(ctx context.Context, _ stagedFile, _ applemusic.Song, 
 }
 
 func (m simulatedMedia) commit(staged stagedFile, outPath string) (int64, error) {
-	m.outputs.add(outPath, staged.size)
+	m.outputs.add(outPath, staged.size, staged.codec)
 	return staged.size, nil
 }
 

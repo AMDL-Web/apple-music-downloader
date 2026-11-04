@@ -467,6 +467,41 @@ func TestRecordRunRecordsTheCodecOfAnAdoptedFile(t *testing.T) {
 	}
 }
 
+// Simulate mode adopts what it committed itself as a real run adopts a file:
+// an album removed and added again takes its tracks as already downloaded,
+// with the quality the first run recorded.
+func TestASimulatedAlbumAddedAgainKeepsItsQuality(t *testing.T) {
+	cfg := recordTestConfig(t)
+	catalog := newRecordCatalog()
+	catalog.addAlbum("100", "Album", "Artist", 2, 2, 1000, "")
+	h := newRecordHarness(t, cfg, nil, catalog)
+	h.start()
+	h.submit("https://music.apple.com/cn/album/album/100")
+	h.waitFor("the album", h.albumComplete("100"))
+	h.waitFor("the run to end", h.idle())
+	first := h.files(domain.ResourceAlbum, "100")
+	if len(first) != 2 || first[0].Codec == "" {
+		t.Fatalf("first run's slots = %+v, want two with a codec", first)
+	}
+
+	// The run ends in the store a moment after the manager goes idle.
+	h.waitFor("the record removed", func() bool {
+		return h.m.DeleteRecord(context.Background(), domain.ResourceAlbum, "100") == nil
+	})
+	h.submit("https://music.apple.com/cn/album/album/100")
+	h.waitFor("the album again", h.albumComplete("100"))
+	h.waitFor("the second run to end", h.idle())
+	if got := h.itemStatuses(domain.ResourceAlbum, "100"); got["1001"] != domain.ItemSkipped || got["1002"] != domain.ItemSkipped {
+		t.Fatalf("second run's items = %v, want both adopted", got)
+	}
+	again := h.files(domain.ResourceAlbum, "100")
+	for i, f := range again {
+		if f.AudioState != domain.AudioDone || f.Codec != first[i].Codec || f.QualityLabel != first[i].QualityLabel {
+			t.Errorf("adopted slot %s = %s %q %q, want done %q %q as the first run", f.SongID, f.AudioState, f.Codec, f.QualityLabel, first[i].Codec, first[i].QualityLabel)
+		}
+	}
+}
+
 // Two editions whose template gives one path: the second fails with
 // path_taken before it downloads and is given up at once, and the first
 // edition's file is untouched.
