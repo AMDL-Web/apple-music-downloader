@@ -47,19 +47,10 @@ func (a *App) flyEdge(el ui.Element) {
 // under the page (flyEdge), or, with none, rises with the page; its ground
 // turns opaque early, over that list, before its rows show (flyRows), and
 // turns from the screens' to its own, so that it does not show as a layer
-// of its own while it fades. On a growing page it comes in with the
-// surface's ground.
+// of its own while it fades.
 func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	f := &a.fly
-	if f.growing() {
-		// On a growing page it is a part of the surface's ground
-		// (groundGrown).
-		if g := a.groundGrown(); g < 1 {
-			el.Background(detailGround(k).Alpha(g)).BorderColor(k.Line.Alpha(g))
-		}
-		return
-	}
-	if !f.moving {
+	if !f.moving || f.growing() {
 		return
 	}
 	shown := f.groundShown()

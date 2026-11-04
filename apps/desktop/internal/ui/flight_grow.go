@@ -8,15 +8,17 @@ import (
 )
 
 // An album page opened from a cover other than the queue hero's (a search
-// tile, a row, the wall, a song) grows out of that cover: it is a surface
-// whose rounded box goes from the cover's box to the main column's,
-// with the page, title bar included, laid out at its full size from the
-// box's top-left corner, so what is on the page moves with it. The screen
-// under it stays whole, blurred and dimmed (motionTune), and nothing of the
-// two washes out over the other. The cover flies on q like the box, so it
-// stays inside it all the way; the page's ground, its light and its other
-// parts come in late and together, in place on the surface (lateShown),
-// and turn it opaque. Going out runs the same way back. The hero's page morphs
+// tile, a row, the wall, a song) grows out of that cover: it is an opaque
+// surface whose rounded box is the flying cover's own until the page's
+// parts start to show, then opens from it to the main column's as they
+// fade in (opened), with the page, title bar included, laid out at its
+// full size from the box's top-left corner, so what is on the page moves
+// with it. Nothing of the page lies beyond what has grown, and nothing
+// under it shows through it. The screen under it stays whole, blurred and
+// dimmed as far as the surface has opened (motionTune). The cover flies on
+// q, inside the box all the way; the page's light comes in from the plain
+// ground; its other parts fade in late, in place on the surface
+// (lateShown). Going out runs the same way back. The hero's page morphs
 // into place instead (flight.go).
 
 // growLand is the q at which a page going back into its cover has landed.
@@ -35,15 +37,13 @@ func (a *App) lateShown() float32 {
 	return smoothstep(from, min(1, from+0.35), a.fly.q)
 }
 
-// groundGrown is how much of the growing page's ground shows: as much as
-// its parts (lateShown). The box is larger than the cover from the first
-// frame, so a ground ahead of the parts would lead the cover as an empty
-// box over the screen under it.
-func (a *App) groundGrown() float32 {
-	if !a.fly.growing() {
-		return 1
-	}
-	return a.lateShown()
+// opened is how far the growing surface has opened from the flying cover
+// to the main column: not at all until the page's parts start to show
+// (lateShown), all of it as the page lands, so that it opens with them
+// while the cover still flies and ends with q. An opaque box wider than
+// the cover before the parts show would lead it as an empty box.
+func (a *App) opened() float32 {
+	return smoothstep(a.tune.Text, 1, a.fly.q)
 }
 
 func smoothstep(a, b, x float32) float32 {
@@ -59,9 +59,10 @@ func smoothstep(a, b, x float32) float32 {
 
 // growBox is the surface's box in this frame, in the main column's
 // coordinates, main being the main column's box in the window, and its
-// corner radius: from the cover the page opened from (the last box it was
-// seen at) to the whole column, on q.
-func (f *flight) growBox(main ui.Rect) (ui.Rect, float32) {
+// corner radius: the flying cover's box and corners, which go on q from
+// the cover the page opened from (the last box it was seen at) to the
+// page's, opened that far (opened) to the whole column.
+func (f *flight) growBox(main ui.Rect, open float32) (ui.Rect, float32) {
 	full := ui.Rect{W: main.W, H: main.H}
 	if !f.growing() {
 		return full, 0
@@ -80,10 +81,15 @@ func (f *flight) growBox(main ui.Rect) (ui.Rect, float32) {
 		// Nothing seen to grow from: the middle of the column.
 		from = ui.Rect{X: main.X + main.W/2, Y: main.Y + main.H/2}
 	}
-	from.X, from.Y = from.X-main.X, from.Y-main.Y
 	q := f.q
-	r := ui.Rect{X: lerp(from.X, 0, q), Y: lerp(from.Y, 0, q), W: lerp(from.W, full.W, q), H: lerp(from.H, full.H, q)}
-	return r, lerp(f.growRadius, 0, unit(q))
+	cover, radius := from, f.growRadius
+	if to := f.growTo; to.W > 0 {
+		cover = ui.Rect{X: lerp(from.X, to.X, q), Y: lerp(from.Y, to.Y, q), W: lerp(from.W, to.W, q), H: lerp(from.H, to.H, q)}
+		radius = lerp(f.growRadius, f.growToRadius, unit(q))
+	}
+	cover.X, cover.Y = cover.X-main.X, cover.Y-main.Y
+	r := ui.Rect{X: lerp(cover.X, 0, open), Y: lerp(cover.Y, 0, open), W: lerp(cover.W, full.W, open), H: lerp(cover.H, full.H, open)}
+	return r, lerp(radius, 0, open)
 }
 
 // growSurface builds the album page as the surface it grows on: over the
@@ -92,13 +98,12 @@ func (f *flight) growBox(main ui.Rect) (ui.Rect, float32) {
 func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) {
 	f := &a.fly
 	main := f.main
-	box, radius := f.growBox(main)
+	box, radius := f.growBox(main, a.opened())
 	f.ridePrev, f.ride = f.ride, ui.Point{X: box.X, Y: box.Y}
 	f.surface = ui.Rect{X: main.X + box.X, Y: main.Y + box.Y, W: box.W, H: box.H}
 	t := unit(f.q)
-	ground := a.groundGrown()
-	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground.Alpha(ground))
-	if lift := 4 * t * (1 - t) * ground; f.growing() && lift > 0.01 {
+	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground)
+	if lift := 4 * t * (1 - t); f.growing() && lift > 0.01 {
 		s.Shadow(0, 10*lift, 24*lift, 0, ui.RGBA(0, 0, 0, 0.18*lift))
 	}
 	if !f.ready {
@@ -116,13 +121,7 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 				plain := paletteBackdrop(k, Palette{}, false)
 				b.From, b.Mix = &plain, t
 			}
-			// The light draws the ground under it too, so it comes in with
-			// the surface's.
-			light := ui.Box(c.Key("light")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough()
-			if ground < 1 {
-				light.Opacity(ground)
-			}
-			light.Children(func() { b.Show(c) })
+			b.Show(c)
 			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
 				a.titleBar(c, k, sidebar, true)
 				ui.Box(c).Grow(1).MinHeight(0).Children(func() {
@@ -198,10 +197,10 @@ func (a *App) growEdges(el ui.Element) {
 }
 
 // underGone is how far the screen under the growing page has gone back,
-// blurred and dimmed: as far as the page has come, and only as far as its
-// ground shows (groundGrown), so that going back the screen under is clear
-// as the page goes into its cover rather than over q's last frames after.
-func (a *App) underGone() float32 { return unit(a.fly.q) * a.groundGrown() }
+// blurred and dimmed: as far as the surface has opened over it (opened),
+// so that going back the screen under is clear as the page goes into its
+// cover rather than over q's last frames after.
+func (a *App) underGone() float32 { return a.opened() }
 
 // growUnder shows the content column under the growing page, el, blurred
 // as far as it has gone back (underGone).
@@ -229,7 +228,7 @@ func (a *App) growDim(c *ui.Context) {
 // it now (ride).
 func (f *flight) growCover(el ui.Element, src flightSrc, dst ui.Rect, size float32) {
 	at := ui.Rect{X: dst.X - f.ridePrev.X, Y: dst.Y - f.ridePrev.Y, W: dst.W, H: dst.H}
-	f.cover = at
+	f.cover, f.growTo, f.growToRadius = at, at, size
 	t := f.lead()
 	s := lerp(src.box.W, dst.W, t) / dst.W
 	el.TransformOrigin(0, 0).Scale(s, s).

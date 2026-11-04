@@ -69,7 +69,7 @@ func (a *App) openPage(album domain.ResourceRef, job string) {
 		// Setup leaves the window to the page at once.
 		f.under, f.instant = a.Screen, a.Screen == ScreenSetup
 		f.grow = growsFrom(f.from) && a.PageMotion && !f.still && !f.instant
-		f.growFrom, f.growRadius = ui.Rect{}, 0
+		f.growFrom, f.growRadius, f.growTo, f.growToRadius = ui.Rect{}, 0, ui.Rect{}, 0
 	}
 	if key := album.ID + "\x00" + job; key != a.pageKey {
 		a.pageKey = key
