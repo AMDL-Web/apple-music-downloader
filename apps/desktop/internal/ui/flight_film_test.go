@@ -412,10 +412,11 @@ func TestTheScreensNeverGoBlankBetween(t *testing.T) {
 	film("going back")
 }
 
-// panelFilm is the album page coming in from a search tile, one image of
-// the window per frame at 60 Hz with the lower panel's box in it, the
-// page's songs named track and the other tiles of the results named other.
-func panelFilm(t *testing.T, theme, track, other string) (frames []*image.RGBA, panels []image.Rectangle) {
+// panelFilm is the album page coming in from a search tile, or going back
+// to it when out, one image of the window per frame at 60 Hz with the lower
+// panel's box in it, the page's songs named track and the other tiles of
+// the results named other.
+func panelFilm(t *testing.T, theme, track, other string, out bool) (frames []*image.RGBA, panels []image.Rectangle) {
 	t.Helper()
 	a, albums := searchApp(t)
 	a.PageMotion, a.Theme = true, theme
@@ -436,6 +437,11 @@ func panelFilm(t *testing.T, theme, track, other string) (frames []*image.RGBA, 
 		{ID: "t2", DiscNumber: 1, TrackNumber: 2, Name: track + " two", DurationMS: 180_000},
 		{ID: "t3", DiscNumber: 1, TrackNumber: 3, Name: track + " three", DurationMS: 190_000},
 	}}
+	if out {
+		flyFrames(a, tt, 120)
+		a.Back()
+		tt.Frame()
+	}
 	for range 120 {
 		tt.Advance(filmFrame)
 		img := tt.Image()
@@ -460,40 +466,43 @@ func differs(a, b *image.RGBA, x, y int) bool {
 }
 
 // The page's songs never show over the results: in no frame of the page
-// coming in do the songs draw within the lower panel while the results
-// behind it still show through. Songs change pixels on a film with other
+// coming in or going out do the songs draw within the lower panel while the
+// results behind it show through. Songs change pixels on a film with other
 // song names, the results on one with other tiles' names, and both change
 // pixels of the panel in a frame where the songs are over the results.
 func TestTheSongsNeverShowOverTheResults(t *testing.T) {
 	for _, theme := range []string{"light", "dark"} {
-		base, panels := panelFilm(t, theme, "Alpha", "Result")
-		songs, _ := panelFilm(t, theme, "Omega", "Result")
-		tiles, _ := panelFilm(t, theme, "Alpha", "Tile")
-		if len(base) != len(songs) || len(base) != len(tiles) || len(base) < 10 {
-			t.Fatalf("%s: films of %d, %d and %d frames", theme, len(base), len(songs), len(tiles))
-		}
-		shown := 0
-		for f := range base {
-			sg, rs := 0, 0
-			for y := panels[f].Min.Y; y < panels[f].Max.Y; y++ {
-				for x := 0; x < 1280; x++ {
-					if differs(base[f], songs[f], x, y) {
-						sg++
-					}
-					if differs(base[f], tiles[f], x, y) {
-						rs++
+		for _, out := range []bool{false, true} {
+			way := map[bool]string{false: "in", true: "out"}[out]
+			base, panels := panelFilm(t, theme, "Alpha", "Result", out)
+			songs, _ := panelFilm(t, theme, "Omega", "Result", out)
+			tiles, _ := panelFilm(t, theme, "Alpha", "Tile", out)
+			if len(base) != len(songs) || len(base) != len(tiles) || len(base) < 8 {
+				t.Fatalf("%s %s: films of %d, %d and %d frames", theme, way, len(base), len(songs), len(tiles))
+			}
+			shown := 0
+			for f := range base {
+				sg, rs := 0, 0
+				for y := panels[f].Min.Y; y < panels[f].Max.Y; y++ {
+					for x := 0; x < 1280; x++ {
+						if differs(base[f], songs[f], x, y) {
+							sg++
+						}
+						if differs(base[f], tiles[f], x, y) {
+							rs++
+						}
 					}
 				}
+				if sg > 0 {
+					shown++
+				}
+				if sg > 20 && rs > 20 {
+					t.Errorf("%s %s: frame %d of %d draws %d pixels of the songs over %d of the results", theme, way, f, len(base), sg, rs)
+				}
 			}
-			if sg > 0 {
-				shown++
+			if shown == 0 {
+				t.Fatalf("%s %s: the songs show in no frame of %d: the film measures nothing", theme, way, len(base))
 			}
-			if sg > 20 && rs > 20 {
-				t.Errorf("%s: frame %d of %d draws %d pixels of the songs over %d of the results", theme, f, len(base), sg, rs)
-			}
-		}
-		if shown == 0 {
-			t.Fatalf("%s: the songs show in no frame of %d: the film measures nothing", theme, len(base))
 		}
 	}
 }
