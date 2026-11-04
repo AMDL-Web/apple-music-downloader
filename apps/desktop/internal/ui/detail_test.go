@@ -228,3 +228,36 @@ func TestARunPagesDeleteRemovesItsRecord(t *testing.T) {
 		}
 	}
 }
+
+// An album downloaded in part opens on the album's page, with its record's
+// share and the rest to download, not on the page of the run that holds
+// only the songs added by hand ("1 / 1 finished"); a whole album opens on
+// its run as before.
+func TestAPartAlbumOpensItsRecordsPageNotItsRun(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		name string
+		mark domain.ResourceMark
+		part bool
+	}{
+		{"part", domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "7", State: domain.RecordComplete, TracksDone: 1, TracksWanted: 1}, true},
+		{"whole", domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "7", State: domain.RecordComplete, TracksDone: 6, TracksWanted: 6, WantedAll: true}, false},
+	} {
+		a, _ := newTestApp(remoteSettings())
+		a.Store.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "r", Type: "album", Status: domain.JobCompleted, Title: "Glass Weather",
+			ResourceKind: domain.ResourceAlbum, ResourceID: "7", TotalItems: 1, CreatedAt: now, FinishedAt: &now}}})
+		mark := tc.mark
+		a.OpenAlbum(client.SearchHit{Type: "album", ID: "7", Name: "Glass Weather", URL: "https://music.apple.com/us/album/x/7", TrackCount: 6, Resource: &mark})
+		tt := ui.NewTester(a.View, 1280, 800)
+		tt.Frame()
+		if got := tt.HasText("Delete this download"); got == tc.part {
+			t.Errorf("%s: the run's page shows %v, want %v: %q", tc.name, got, !tc.part, tt.Texts())
+		}
+		if got := tt.HasText("1 of 6 downloaded"); got != tc.part {
+			t.Errorf("%s: the share shows %v: %q", tc.name, got, tt.Texts())
+		}
+		if _, ok := tt.Find("Download the rest of Glass Weather"); ok != tc.part {
+			t.Errorf("%s: the rest's button shows %v: %q", tc.name, ok, tt.Texts())
+		}
+	}
+}

@@ -21,6 +21,14 @@ import (
 func (a *App) OpenAlbum(h client.SearchHit) {
 	s := a.Store
 	job := s.AlbumJob(h.ID)
+	// A finished run is the page only of an album it left whole: of one
+	// downloaded in part, the run holds just the songs added by hand (1 of 1
+	// finished), so the page shows the album and its record's share.
+	if j := s.Job(job); j != nil && j.Status == domain.JobCompleted {
+		if mark, _ := s.HitMark(h); mark == store.MarkPartial {
+			job = ""
+		}
+	}
 	a.openPage(h.ID, job)
 	s.OpenAlbum(h)
 	if job != "" {
@@ -255,12 +263,15 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 		h.quality, h.hi, hints = hints[0], hints[0] == "Hi-Res Lossless", hints[1:]
 	}
 	// A download the feed no longer holds put it in the library.
-	inLibrary := false
+	inLibrary, share := false, ""
 	if album && j == nil {
 		mark, _ := s.HitMark(p.Hit)
 		inLibrary = mark == store.MarkDone
+		if r := s.HitRecord(p.Hit); mark == store.MarkPartial && r != nil {
+			share = fmt.Sprintf("%d of %d downloaded", r.TracksDone, store.MarkTotal(r, max(f.tracks, p.Hit.TrackCount)))
+		}
 	}
-	if len(hints) > 0 || f.explicit || inLibrary {
+	if len(hints) > 0 || f.explicit || inLibrary || share != "" {
 		h.tags = func() {
 			for _, q := range hints {
 				tag(c, k, q, q == "Hi-Res Lossless", hc.meta)
@@ -270,6 +281,9 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 			}
 			if inLibrary {
 				pill(c, k, pillOK, icCheck, "In your library")
+			}
+			if share != "" {
+				pill(c, k, pillWait, nil, share)
 			}
 		}
 	}
@@ -368,6 +382,10 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 		switch mark, _ := s.HitMark(h); {
 		case mark == store.MarkDone:
 			again()
+		case mark == store.MarkPartial:
+			if clicked(artButton(c, "Download the rest", hc.title, hc.ink).Label("Download the rest of "+h.Name)) && !starting {
+				a.download(h)
+			}
 		case mark == store.MarkActive:
 			// A download the feed does not hold, past the newest it lists.
 			pill(c, k, pillRun, icDown, "In the queue")
