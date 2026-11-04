@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
+  FEED_TYPES,
   applyFeedMessage,
   jobMatches,
   upsertJob,
@@ -192,4 +194,12 @@ test('appendLogs drops replayed sequences and caps the buffer', () => {
   assert.deepEqual(s.entries.map((x) => x.sequence), [4, 5, 6]);
   assert.equal(s.dropped, 3);
   assert.equal(appendLogs(s, [e(6)]), s, 'nothing new leaves the state as it was');
+});
+
+test("the feed passes on every message type the API's overview stream sends", () => {
+  const spec = readFileSync(new URL('../../../internal/api/openapi.yaml', import.meta.url), 'utf8');
+  const schema = spec.slice(spec.indexOf('    DownloadFeedMessage:'));
+  const types = schema.match(/enum: \[([^\]]+)\]/)[1].split(',').map((t) => t.trim());
+  assert.ok(types.includes('resource_deleted'), 'the spec names the types');
+  assert.deepEqual([...FEED_TYPES].sort(), types.sort(), 'a type the feed drops never reaches the pages that read it');
 });

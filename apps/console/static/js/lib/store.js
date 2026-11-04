@@ -7,6 +7,13 @@ import { isNewerCursor } from './stream.js';
 export const EMPTY_COUNTS = Object.freeze({ queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0, total: 0 });
 
 /**
+ * The overview feed's message types (DownloadFeedMessage in the API spec):
+ * jobs, and the records and the disk check their runs change. The feed
+ * passes these on to the pages, which pick the types they read.
+ */
+export const FEED_TYPES = new Set(['download_upserted', 'download_deleted', 'resource_updated', 'resource_deleted', 'check_updated']);
+
+/**
  * Applies one DownloadFeedMessage to the global feed state
  * {counts, cursor}. status_counts on the feed are always global.
  */

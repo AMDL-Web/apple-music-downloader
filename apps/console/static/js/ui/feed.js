@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from './preact.js';
 import { listDownloads, feedStreamUrl, parseData } from '../api.js';
-import { applyFeedMessage, EMPTY_COUNTS } from '../lib/store.js';
+import { applyFeedMessage, EMPTY_COUNTS, FEED_TYPES } from '../lib/store.js';
 import { StreamClient, createCoalescer, backoffDelay, isOlderCursor, EPOCH_AFTER_MS } from '../lib/stream.js';
 import { jobTitle, typeLabel, isUnresolved } from '../lib/format.js';
 import { rowView } from '../lib/jobview.js';
@@ -12,10 +12,6 @@ import { isTerminal } from '../lib/status.js';
 import { BURST_MS, endsWatch, addEnded, finishedToast } from '../lib/watch.js';
 
 const ANNOUNCE_GAP_MS = 5000;
-
-// The overview feed's messages: jobs, and the records and the disk check
-// their runs change (subscribers pick the types they read).
-const FEED_TYPES = new Set(['download_upserted', 'download_deleted', 'resource_updated', 'check_updated']);
 
 /**
  * Downloads feed, connection state and live announcements for App():
