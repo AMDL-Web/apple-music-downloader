@@ -200,11 +200,18 @@ func (m *Manager) pendingResult(ctx context.Context, url string, p domain.Pendin
 
 // addPlaylist stores a catalog playlist add and queues its run when needed.
 func (m *Manager) addPlaylist(ctx context.Context, add db.PlaylistAdd) (AddOutcome, domain.Job, error) {
+	changed := false
+	defer func() {
+		if changed {
+			m.recordChanged(ctx, domain.ResourcePlaylist, add.ID)
+		}
+	}()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, err := m.store.AddPlaylist(ctx, add); err != nil {
 		return "", domain.Job{}, err
 	}
+	changed = true
 	if err := m.rearmLocked(ctx, domain.ResourcePlaylist, add.ID, nil, add.Now); err != nil {
 		return "", domain.Job{}, err
 	}

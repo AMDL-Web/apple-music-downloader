@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from '../ui/preact.js';
 import { searchCatalog, getArtistAlbums } from '../api.js';
 import { buildHash } from '../lib/route.js';
 import { createSearcher, createArtistPages, searchGroup, hitKey, hitPreview } from '../lib/search.js';
-import { resourceMark, applyResourceFeed, applySentSongs, withLatest, submitMark, resourceKey, markedFiles } from '../lib/marks.js';
+import { resourceMark, applyResourceFeed, applySentSongs, withLatest, submitMark, withSubmitted, markedFiles } from '../lib/marks.js';
 
 // Answers outlive the page for the life of the tab, like link previews.
 const SEARCHES = new Map();
@@ -88,7 +88,7 @@ export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
       const m = submitMark(result);
       if (!m) return;
       setSentRes((x) => new Map(x).set(hitKey(hit), { kind: m.kind, id: m.id }));
-      setLatest((x) => new Map(x).set(resourceKey(m), { ...(x.get(resourceKey(m)) || {}), ...m }));
+      setLatest((x) => withSubmitted(x, m));
       if (hit.type === 'song') setSongs((x) => new Map(x).set(hit.id, { jobId: m.active_job_id, state: 'pending' }));
     },
   };

@@ -241,7 +241,7 @@ const MENU = {
  * A record row's menu: Show details; for its queued run Run next and Run
  * last (`place` {first, last}, when known, leaves out the one that would not
  * move it); Pause while it runs or has something to download, else Resume
- * when paused; Retry while tracks failed, were given up or are missing, and
+ * when paused and not complete; Retry while tracks failed, were given up or are missing, and
  * Download again… once tracks are downloaded (neither while a run is under
  * way); Copy link; and Remove from amdl… (not while a run is
  * under way) after a separator. `run` is its live run, if any; `link` its
@@ -254,7 +254,8 @@ export function recordMenu(r, run = null, place = {}, link = '') {
     if (!place.first) ids.push('top');
     if (!place.last) ids.push('bottom');
   }
-  if (r && r.paused && !active) ids.push('resume');
+  // A complete record reads Downloaded however its paused flag stands, as its pill does.
+  if (r && r.paused && r.state !== 'complete' && !active) ids.push('resume');
   else if (active || (r && r.state !== 'complete')) ids.push('pause');
   if (!active && r && (r.tracks_failed || r.tracks_given_up || r.tracks_missing)) ids.push('retry');
   if (!active && r && r.tracks_done) ids.push('again');

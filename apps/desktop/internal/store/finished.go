@@ -8,8 +8,8 @@ import (
 )
 
 // Finished returns the feed's completed downloads, the one that finished
-// last first: the queue shows it large while nothing downloads, and the
-// ones before it as a row of covers.
+// last first, each record once by its latest run: the queue shows it large
+// while nothing downloads, and the ones before it as a row of covers.
 func (s *Store) Finished() []*Job {
 	var out []*Job
 	for _, j := range s.Jobs {
@@ -20,7 +20,24 @@ func (s *Store) Finished() []*Job {
 	// The feed lists jobs by creation, so a job retried long after it was
 	// added would otherwise sit far down.
 	sort.SliceStable(out, func(a, b int) bool { return finishedAt(out[a]).After(finishedAt(out[b])) })
-	return out
+	seen := map[string]bool{}
+	kept := out[:0]
+	for _, j := range out {
+		if t := runTarget(j); !seen[t] {
+			seen[t] = true
+			kept = append(kept, j)
+		}
+	}
+	return kept
+}
+
+// runTarget is what a run downloads: its record, or a station run itself,
+// so the runs of one record count once.
+func runTarget(j *Job) string {
+	if j.ResourceID != "" {
+		return string(j.ResourceKind) + ":" + j.ResourceID
+	}
+	return "run:" + j.ID
 }
 
 func finishedAt(j *Job) time.Time {

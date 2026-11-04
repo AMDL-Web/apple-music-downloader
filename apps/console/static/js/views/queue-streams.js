@@ -119,6 +119,7 @@ export function useQueueStreams(app, filters, listKey, key) {
       const news = batch.some(
         (m) =>
           m.type === 'resource_updated' ||
+          m.type === 'resource_deleted' ||
           (m.type === 'check_updated' && m.check && m.check.finished_at) ||
           (m.type === 'download_upserted' && m.job && !m.job.resource && !['queued', 'running'].includes(m.job.status)),
       );
@@ -134,6 +135,11 @@ export function useQueueStreams(app, filters, listKey, key) {
             if (!reads.has('stations') || filters.q) continue;
             const next = patchStream('stations', streams.stations, m.job, stationOnTab(m.job, tab));
             if (next !== streams.stations) streams = { ...streams, stations: next };
+          } else if (m.type === 'resource_deleted') {
+            const name = m.resource_kind === 'playlist' ? 'playlists' : 'albums';
+            if (!reads.has(name)) continue;
+            const next = dropFromStream(streams[name], m.resource_id);
+            if (next !== streams[name]) streams = { ...streams, [name]: next };
           } else if (m.type === 'download_deleted' && reads.has('stations')) {
             const next = dropFromStream(streams.stations, m.job_id);
             if (next !== streams.stations) streams = { ...streams, stations: next };

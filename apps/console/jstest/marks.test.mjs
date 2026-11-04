@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { resourceMark, markFraction, markedFiles, applyResourceFeed, withLatest, submitMark, applySentSongs, kindPath } from '../static/js/lib/marks.js';
+import { resourceMark, markFraction, markedFiles, applyResourceFeed, withLatest, submitMark, withSubmitted, applySentSongs, kindPath } from '../static/js/lib/marks.js';
 
 const album = (fields = {}) => ({ kind: 'album', id: '1', state: 'none', tracks_done: 0, tracks_wanted: 9, withheld_count: 1, paused: false, ...fields });
 
@@ -58,6 +58,16 @@ test('the feed replaces a record mark; the newest fields win over an answer', ()
   assert.equal(merged.song_state, 'running', "the answer's song state stays");
   assert.equal(resourceMark(merged).state, 'complete');
   assert.equal(withLatest(answer, new Map()), answer);
+});
+
+test('a record removed elsewhere marks nothing until it is added again', () => {
+  const answer = album({ state: 'complete', tracks_done: 9 });
+  const gone = applyResourceFeed(new Map(), [{ type: 'resource_deleted', resource_kind: 'album', resource_id: '1' }]);
+  assert.equal(withLatest(answer, gone), null, "the answer's mark of a removed record is stale");
+  const added = withSubmitted(gone, submitMark({ status: 'accepted', resource: { kind: 'album', id: '1' }, job: { id: 'j' } }));
+  assert.equal(withLatest(answer, added).active_job_id, 'j', 'a new add brings it back with its run');
+  const back = applyResourceFeed(gone, [{ type: 'resource_updated', resource_kind: 'album', resource_id: '1', resource: { state: 'none', tracks_wanted: 9 } }]);
+  assert.equal(withLatest(answer, back).state, 'none');
 });
 
 test('a submit result names its record and run', () => {

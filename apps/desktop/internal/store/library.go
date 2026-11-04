@@ -400,11 +400,7 @@ func (s *Store) RemoveRecord(ref domain.ResourceRef, name string) {
 	s.recordAction(ref, func(c *client.Client) error {
 		err := c.DeleteRecord(s.ctx, ref.Kind, ref.ID)
 		if err == nil {
-			s.post(func() {
-				delete(s.Records.marks, ref)
-				delete(s.Library.Kept, ref.ID)
-				s.Queue.dropRecord(ref)
-			})
+			s.post(func() { s.forgetRecord(ref) })
 		}
 		return err
 	}, "Removed "+name)

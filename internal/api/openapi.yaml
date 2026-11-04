@@ -2176,9 +2176,13 @@ paths:
           progress as each song finishes, terminal state); data.job is the job's
           latest snapshot (item counters derived from its items);
         - download_deleted: a job was deleted; data.job_id is the deleted job's id;
-        - resource_updated: after a download_upserted of a record's run, the
-          record's latest state; data.resource is the record (AlbumResource
-          or PlaylistResource), data.resource_kind and data.resource_id name it;
+        - resource_updated: after a download_upserted of a record's run, or
+          when the record changed outside its runs (paused, resumed, reset,
+          added to, asked for again, files found missing), the record's
+          latest state; data.resource is the record (AlbumResource or
+          PlaylistResource), data.resource_kind and data.resource_id name it;
+        - resource_deleted: the record named by data.resource_kind and
+          data.resource_id was deleted;
         - check_updated: a disk check started, moved on or ended; data.check
           is the CheckRun. It is no event: it carries the event_id already
           reached, and a client that reconnects reads GET /library/check.
@@ -5985,14 +5989,16 @@ components:
       properties:
         type:
           type: string
-          enum: [download_upserted, download_deleted, resource_updated, check_updated]
+          enum: [download_upserted, download_deleted, resource_updated, resource_deleted, check_updated]
           description: >-
             download_upserted: a job was created or changed, and job is its latest
             snapshot; download_deleted: a job was deleted, and job_id is the
             deleted job's id; resource_updated: right after the download_upserted
-            of a record's run, resource is the record (AlbumResource or
-            PlaylistResource); check_updated: check is the disk check that
-            started, moved on or ended.
+            of a record's run, or after the record changed outside its runs,
+            resource is the record (AlbumResource or PlaylistResource);
+            resource_deleted: the record named by resource_kind and resource_id
+            was deleted; check_updated: check is the disk check that started,
+            moved on or ended.
         job:
           $ref: '#/components/schemas/Job'
         job_id:
@@ -6001,10 +6007,10 @@ components:
         resource_kind:
           type: string
           enum: [album, playlist]
-          description: Present only for resource_updated.
+          description: Present only for resource_updated and resource_deleted.
         resource_id:
           type: string
-          description: Present only for resource_updated.
+          description: Present only for resource_updated and resource_deleted.
         resource:
           description: Present only for resource_updated.
           oneOf:
@@ -6070,7 +6076,11 @@ components:
         as phase. Only job_queued, job_recovered, job_started, job_moved,
         resolved_input, motion_artwork_resolved, item_completed, item_skipped,
         item_unavailable, lyrics_refreshed, item_failed, job_finished,
-        job_failed, job_cancelled and job_deleted reach the overview feed.
+        job_failed, job_cancelled, job_deleted and record_changed reach the
+        overview feed. record_changed belongs to no job (job_id is empty): a
+        record was paused, resumed, reset, added to, asked for again, deleted
+        or had files found missing; its payload is {resource_kind,
+        resource_id}, and a record keeps only its latest one.
         job_moved records a queued job's new queue_order (its payload is the
         Job). item_unavailable ends an item whose slot the track does not offer
         (the codec, or the account storefront); lyrics_refreshed ends an item
@@ -6087,6 +6097,7 @@ components:
         - job_cancelled
         - job_moved
         - job_deleted
+        - record_changed
         - resolved_input
         - motion_artwork_resolved
         - standalone_cover_failed

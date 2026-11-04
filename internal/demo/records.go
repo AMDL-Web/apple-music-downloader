@@ -234,6 +234,15 @@ func (b *Backend) resetRecord(w http.ResponseWriter, r *http.Request, a *album, 
 		writeError(w, http.StatusConflict, "run_active", a.title+" has a queued or running run; pause it first")
 		return
 	}
+	if req.What == "all" {
+		delete(b.paused, a.id)
+	}
+	if b.paused[a.id] {
+		// A paused record keeps its reset for its resume, as the backend's.
+		b.feedRecord(a)
+		writeJSON(w, http.StatusOK, map[string]any{"slots": len(a.tracks), "job": nil})
+		return
+	}
 	var one *song
 	if len(req.Songs) == 1 {
 		for i := range a.tracks {
@@ -257,6 +266,9 @@ func (b *Backend) pauseRecord(paused bool) func(http.ResponseWriter, *http.Reque
 			}
 		} else {
 			delete(b.paused, a.id)
+			if m, _ := b.albumMark(a); m != nil && m.State != domain.RecordComplete && b.activeRun(a) == nil {
+				b.feed(b.newJob(a, nil, now))
+			}
 		}
 		b.feedRecord(a)
 		rec, _ := b.albumRecord(a)
@@ -276,6 +288,8 @@ func (b *Backend) removeRecord(w http.ResponseWriter, r *http.Request, a *album,
 			b.drop(j)
 		}
 	}
+	b.send(domain.DownloadFeedMessage{Type: "resource_deleted", ResourceKind: domain.ResourceAlbum, ResourceID: a.id,
+		EventID: b.seq, StatusCounts: b.counts()})
 	w.WriteHeader(http.StatusNoContent)
 }
 

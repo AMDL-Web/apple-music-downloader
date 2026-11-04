@@ -7,9 +7,8 @@
 // moving the others, then Remove from amdl), each track with its state (each
 // quality's own state once it has more than one), and its last runs, newest
 // first, a run of another quality naming it. Kept fresh by the feed's
-// resource_updated and check_updated; what it changes it tells the app
-// (recordsChanged), since a pause, resume or removal with no run sends no
-// resource_updated.
+// resource_updated, resource_deleted and check_updated; what it changes it
+// tells the app at once (recordsChanged), ahead of the feed.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { getRecord, pauseRecord, resumeRecord, resetRecord, deleteRecord, downloadRecord, listDownloads } from '../api.js';
@@ -63,7 +62,7 @@ function useRecord(app, kind, id) {
     const off = app.subscribeFeed((batch) => {
       const mine = batch.some(
         (m) =>
-          (m.type === 'resource_updated' && m.resource_kind === res && m.resource_id === id) ||
+          ((m.type === 'resource_updated' || m.type === 'resource_deleted') && m.resource_kind === res && m.resource_id === id) ||
           (m.type === 'check_updated' && m.check && m.check.finished_at) ||
           (m.type === 'download_upserted' && m.job && m.job.resource && m.job.resource.id === id),
       );
@@ -217,7 +216,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
           items=${slotChoices([]).map((c) => ({ id: c, label: CHOICE_LABEL[c] || c }))}
           onChoose=${addQuality}
         />
-        ${record.paused
+        ${record.paused && record.state !== 'complete'
           ? html`<${Button} variant="primary" icon="play" disabled=${Boolean(busy)} onClick=${() => act('resume', () => resumeRecord(kind, record.id), 'Resumed')}>Resume</${Button}>`
           : recordHasWork(record)
             ? html`<${Button} icon="pause" disabled=${Boolean(busy)} onClick=${() => act('pause', () => pauseRecord(kind, record.id), 'Paused')}>Pause</${Button}>`

@@ -644,9 +644,11 @@ milestones that change how a job appears in the list, so a client can render the
 downloads page without subscribing to each job. Messages are named `download_upserted`
 (data: `{type, job, event_id, status_counts}`, the job's current snapshot),
 `download_deleted` (`{type, job_id, event_id, status_counts}`), `resource_updated`
-(`{type, resource_kind, resource_id, resource, event_id, status_counts}`, sent right after
-the `download_upserted` of a record's run with the record as `GET /library/albums` lists
-it) and `check_updated` (`{type, check, event_id, status_counts}`, a disk check that
+(`{type, resource_kind, resource_id, resource, event_id, status_counts}`, the record as
+`GET /library/albums` lists it, sent right after the `download_upserted` of a record's run
+and after a `record_changed`), `resource_deleted` (`{type, resource_kind, resource_id,
+event_id, status_counts}`, after a `record_changed` of a record that is gone) and
+`check_updated` (`{type, check, event_id, status_counts}`, a disk check that
 started, moved on or ended; no event, so it carries the `event_id` already reached);
 `status_counts` is global.
 `event_id` is also the SSE id and only moves forward; a resent message is idempotent.
@@ -673,6 +675,7 @@ Event types (the `EventType` enum in the spec; Go constants in `internal/domain`
 | Item progress | `item_progress` (its `phase` is the item status), `item_completed`, `item_failed`, `item_skipped`, `item_unavailable` (the slot is not offered), `lyrics_refreshed` (a lyrics reset wrote the lyrics) |
 | Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired`, `integrity_overruled` |
 | Hooks | `hook_started`, `hook_succeeded`, `hook_failed` |
+| Records | `record_changed`: a record changed outside its runs (paused, resumed, reset, added to, asked for again, deleted, files found missing); its `job_id` is empty, its payload is `{resource_kind, resource_id}`, and a record keeps only its latest one |
 | Other | `standalone_cover_failed` |
 | Not emitted since 2.0 | `job_retried`, `item_overwrite`: a retry is a new job; they stay so 1.x history decodes |
 
@@ -680,7 +683,7 @@ A retry inside a codec attempt is an `operation_*` event whose `phase` is the co
 `job_deleted` and `motion_artwork_resolved` have no payload. Only the list-level
 milestones reach the overview feed: the job lifecycle types, `resolved_input`,
 `motion_artwork_resolved`, `item_completed`, `item_skipped`, `item_unavailable`,
-`lyrics_refreshed` and `item_failed`.
+`lyrics_refreshed`, `item_failed` and `record_changed`.
 `item_progress` events are kept while a job runs and deleted when it finishes; the
 item rows keep their final state.
 

@@ -90,6 +90,19 @@ const (
 	EventOperationRecovered EventType = "operation_recovered"
 )
 
+// EventRecordChanged says a record changed outside its runs: it was paused,
+// resumed, reset, added to, asked for again, deleted or had files found
+// missing. It belongs to no job (job_id is empty); its payload is
+// RecordChange. A record keeps only its latest one, so the overview feed
+// sends a record's state once per change instead of replaying its history.
+const EventRecordChanged EventType = "record_changed"
+
+// RecordChange is the payload of record_changed: the record it names.
+type RecordChange struct {
+	ResourceKind ResourceKind `json:"resource_kind"`
+	ResourceID   string       `json:"resource_id"`
+}
+
 // Hook events, recorded by the hook dispatcher; phase is the hook name.
 const (
 	EventHookStarted   EventType = "hook_started"
@@ -108,6 +121,7 @@ var EventTypes = []EventType{
 	EventCodecSelected, EventCodecFallback, EventCodecFailed, EventALACRepaired, EventIntegrityOverruled,
 	EventOperationRetry, EventOperationExhausted, EventOperationRecovered,
 	EventHookStarted, EventHookSucceeded, EventHookFailed,
+	EventRecordChanged,
 }
 
 // HookEventTypes are the events the hook dispatcher records for one hook
@@ -237,6 +251,7 @@ var OverviewMilestones = []EventType{
 	EventJobFailed,
 	EventJobCancelled,
 	EventJobDeleted,
+	EventRecordChanged,
 }
 
 var overviewMilestones = func() map[EventType]struct{} {
@@ -256,8 +271,10 @@ func IsOverviewMilestone(eventType EventType) bool {
 }
 
 // DownloadFeedMessage is one push on the overview (GET /downloads) feed. Type
-// is download_upserted (Job carries the affected job's latest snapshot) or
-// download_deleted (only JobID is set). StatusCounts is the current global
+// is download_upserted (Job carries the affected job's latest snapshot),
+// download_deleted (only JobID is set), resource_updated (Resource is the
+// record), resource_deleted (the record named by ResourceKind and
+// ResourceID is gone) or check_updated. StatusCounts is the current global
 // summary after the change. EventID is the persisted-event cursor a client
 // hands back to resume.
 type DownloadFeedMessage struct {
@@ -265,7 +282,9 @@ type DownloadFeedMessage struct {
 	Job   *Job   `json:"job,omitempty"`
 	JobID string `json:"job_id,omitempty"`
 	// ResourceKind, ResourceID and Resource are set on resource_updated:
-	// the record (an AlbumResource or PlaylistResource) a run downloads for.
+	// the record (an AlbumResource or PlaylistResource) a run downloads
+	// for, or one that changed outside its runs. resource_deleted sets only
+	// ResourceKind and ResourceID.
 	ResourceKind ResourceKind `json:"resource_kind,omitempty"`
 	ResourceID   string       `json:"resource_id,omitempty"`
 	Resource     any          `json:"resource,omitempty"`

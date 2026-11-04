@@ -52,7 +52,7 @@ function useRecordIds(app) {
   const timer = useRef(null);
   useEffect(() => {
     const off = app.subscribeFeed((batch) => {
-      if (!batch.some((m) => m.type === 'resource_updated')) return;
+      if (!batch.some((m) => m.type === 'resource_updated' || m.type === 'resource_deleted')) return;
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setStamp((n) => n + 1), REFRESH_MS);
     });

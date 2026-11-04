@@ -156,8 +156,8 @@ func (c *Client) DownloadRecord(ctx context.Context, kind domain.ResourceKind, i
 }
 
 // PauseRecord cancels a record's run and keeps the scheduler from queuing
-// it until ResumeRecord. It returns the record's mark as the answer has it:
-// the feed sends none when no run moved.
+// it until ResumeRecord. It returns the record's mark as the answer has it,
+// ahead of the feed's resource_updated.
 func (c *Client) PauseRecord(ctx context.Context, kind domain.ResourceKind, id string) (domain.ResourceMark, error) {
 	return c.recordMark(ctx, kind, id, "/pause")
 }

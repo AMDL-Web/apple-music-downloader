@@ -220,3 +220,27 @@ func TestHitMarkReadsTheRecordWithTheNewestNews(t *testing.T) {
 		t.Errorf("deleted job: mark %v", m)
 	}
 }
+
+// A record removed elsewhere (the CLI, another window) is no longer shown:
+// the feed's resource_deleted drops its mark, and a hit read before it
+// marks nothing until the record comes back.
+func TestHitMarkForgetsARecordRemovedElsewhere(t *testing.T) {
+	s, _ := newTestStore(t)
+	h := hit("album", "1")
+	h.Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", State: domain.RecordComplete, TracksDone: 2, TracksWanted: 2}
+	if m, _ := s.HitMark(h); m != MarkDone {
+		t.Fatalf("before: mark %v", m)
+	}
+	s.applyMessage(domain.DownloadFeedMessage{Type: "resource_deleted", ResourceKind: domain.ResourceAlbum, ResourceID: "1"})
+	if m, _ := s.HitMark(h); m != MarkNone {
+		t.Errorf("record removed: mark %v, want none", m)
+	}
+	if r := s.RecordMark(domain.ResourceAlbum, "1"); r != nil {
+		t.Errorf("record removed: the store keeps %+v", r)
+	}
+	s.applyMessage(domain.DownloadFeedMessage{Type: "resource_updated", ResourceKind: domain.ResourceAlbum, ResourceID: "1",
+		Resource: map[string]any{"state": "none", "tracks_done": 0, "tracks_wanted": 2, "paused": true}})
+	if m, _ := s.HitMark(h); m != MarkPaused {
+		t.Errorf("record added again: mark %v, want the feed's", m)
+	}
+}

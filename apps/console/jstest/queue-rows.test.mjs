@@ -106,6 +106,7 @@ test('a record menu offers what its state allows', () => {
   assert.deepEqual(menu(rec('a', 1)), ['details', 'again', '-', 'copy', '-', 'remove']);
   assert.deepEqual(menu(rec('a', 1, { state: 'partial', tracks_failed: 2 })), ['details', 'pause', 'retry', 'again', '-', 'copy', '-', 'remove']);
   assert.deepEqual(menu(rec('a', 1, { state: 'partial', paused: true })), ['details', 'resume', 'again', '-', 'copy', '-', 'remove']);
+  assert.deepEqual(menu(rec('a', 1, { paused: true })), ['details', 'again', '-', 'copy', '-', 'remove'], 'a paused complete record reads Downloaded, without Resume');
   const run = { id: 'j', status: 'queued' };
   assert.deepEqual(menu(rec('a', 1, { active_job_id: 'j' }), run, { first: true }), ['details', 'bottom', 'pause', '-', 'copy'], 'no reset or removal while a run is under way');
   assert.deepEqual(menu({ ...rec('a', 1), url: undefined }), ['details', 'again', '-', 'remove'], 'no link, no Copy link');

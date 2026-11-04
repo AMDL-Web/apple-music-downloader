@@ -409,3 +409,71 @@ func mustStarted(t *testing.T, c *client.Client, id string) *time.Time {
 	}
 	return d.Job.StartedAt
 }
+
+// Pause, resume, reset and remove leave a record as the backend's do: a
+// pause stops its run as paused, a resume queues the rest, a reset of a
+// paused record waits for its resume unless it resets everything, and a
+// removal tells the feed.
+func TestRecordActionsMatchTheBackend(t *testing.T) {
+	b, c, clk := newDemo(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	msgs := make(chan domain.DownloadFeedMessage, 4096)
+	live := make(chan bool, 1)
+	go c.FollowFeed(ctx, client.FeedHandlers{
+		Message: func(m domain.DownloadFeedMessage) { msgs <- m },
+		State: func(s client.ConnState) {
+			if s.Phase == client.Live {
+				live <- true
+			}
+		},
+	})
+	select {
+	case <-live:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the feed never went live")
+	}
+	l, _ := c.Downloads(ctx, client.ListQuery{})
+	var run0 domain.Job
+	for _, j := range l.Downloads {
+		if j.Status == domain.JobRunning {
+			run0 = j
+			break
+		}
+	}
+	album := run0.ResourceID
+	if m, err := c.PauseRecord(ctx, domain.ResourceAlbum, album); err != nil || !m.Paused || m.ActiveJobID != "" {
+		t.Fatalf("pause: %+v, %v", m, err)
+	}
+	if d, _ := c.Download(ctx, run0.ID); d.Job.Status != domain.JobCancelled || d.Job.Error != "paused" {
+		t.Errorf("the paused record's run: %s %q, want cancelled as paused", d.Job.Status, d.Job.Error)
+	}
+	if job, err := c.ResetRecord(ctx, domain.ResourceAlbum, album, client.RecordReset{What: "audio"}); err != nil || job != nil {
+		t.Errorf("audio reset of a paused record: %+v, %v, want no run until its resume", job, err)
+	}
+	m, err := c.ResumeRecord(ctx, domain.ResourceAlbum, album)
+	if err != nil || m.Paused || m.ActiveJobID == "" {
+		t.Fatalf("resume: %+v, %v, want a run for the rest", m, err)
+	}
+	run(b, clk, 6*time.Minute)
+	if m, err := c.PauseRecord(ctx, domain.ResourceAlbum, album); err != nil || !m.Paused || m.State != domain.RecordComplete {
+		t.Fatalf("pause of the complete record: %+v, %v", m, err)
+	}
+	if m, err := c.ResumeRecord(ctx, domain.ResourceAlbum, album); err != nil || m.ActiveJobID != "" {
+		t.Errorf("resume of the complete record: %+v, %v, want no run", m, err)
+	}
+	if err := c.DeleteRecord(ctx, domain.ResourceAlbum, album); err != nil {
+		t.Fatal(err)
+	}
+	wait := time.After(5 * time.Second)
+	for {
+		select {
+		case m := <-msgs:
+			if m.Type == "resource_deleted" && m.ResourceKind == domain.ResourceAlbum && m.ResourceID == album {
+				return
+			}
+		case <-wait:
+			t.Fatal("the feed did not say the record was removed")
+		}
+	}
+}

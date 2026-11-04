@@ -132,12 +132,19 @@ func (m *Manager) runCheck(run domain.CheckRun, req CheckRequest) {
 		return
 	}
 	now := time.Now().UTC()
+	changed := map[domain.ResourceRef]bool{}
+	defer func() {
+		for ref := range changed {
+			m.recordChanged(ctx, ref.Kind, ref.ID)
+		}
+	}()
 	for _, key := range missing {
 		if _, err := m.store.MarkFileMissing(ctx, key, now); err != nil {
 			m.logger.Error("mark a missing file", "check_id", run.ID, "song_id", key.SongID, "error", err)
 			finish(domain.CheckAbortedFailed)
 			return
 		}
+		changed[domain.ResourceRef{Kind: key.OwnerKind, ID: key.OwnerID}] = true
 	}
 	finish("")
 }

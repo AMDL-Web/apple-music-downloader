@@ -334,6 +334,10 @@ func (s *Store) applyMessage(m domain.DownloadFeedMessage) {
 		s.remove(m.JobID)
 	case "resource_updated":
 		s.applyResource(m)
+	case "resource_deleted":
+		if m.ResourceKind != "" && m.ResourceID != "" {
+			s.forgetRecord(domain.ResourceRef{Kind: m.ResourceKind, ID: m.ResourceID})
+		}
 	}
 }
 
@@ -573,10 +577,11 @@ type Summary struct {
 	TracksDone, TracksTotal int
 	// Progress is the weighted progress of the running jobs' tracks.
 	Progress float64
-	// FailedToday counts jobs that failed since local midnight.
-	FailedToday int
-	// CompletedToday counts jobs that completed since local midnight, and
-	// TracksToday the tracks they wrote.
+	// FailedToday and CompletedToday count the records (and station runs)
+	// whose latest run since local midnight failed or completed, and
+	// TracksToday the tracks those completed runs wrote: a record
+	// downloaded again counts once.
+	FailedToday                 int
 	CompletedToday, TracksToday int
 	// Now is the job the "downloading now" card shows, or nil.
 	Now *Job
@@ -588,6 +593,7 @@ func (s *Store) Summary() Summary {
 	now := s.now()
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	weighted := 0.0
+	today := map[string]*Job{}
 	for _, j := range s.Jobs {
 		switch j.Status {
 		case domain.JobRunning:
@@ -597,15 +603,21 @@ func (s *Store) Summary() Summary {
 			weighted += j.Progress * float64(max(j.TotalItems, 1))
 		case domain.JobQueued:
 			sum.Queued++
-		case domain.JobFailed:
-			if j.FinishedAt != nil && !j.FinishedAt.Before(midnight) {
-				sum.FailedToday++
+		case domain.JobFailed, domain.JobCompleted:
+			if j.FinishedAt == nil || j.FinishedAt.Before(midnight) {
+				continue
 			}
-		case domain.JobCompleted:
-			if j.FinishedAt != nil && !j.FinishedAt.Before(midnight) {
-				sum.CompletedToday++
-				sum.TracksToday += j.CompletedItems
+			if t := runTarget(j); today[t] == nil || j.FinishedAt.After(*today[t].FinishedAt) {
+				today[t] = j
 			}
+		}
+	}
+	for _, j := range today {
+		if j.Status == domain.JobFailed {
+			sum.FailedToday++
+		} else {
+			sum.CompletedToday++
+			sum.TracksToday += j.CompletedItems
 		}
 	}
 	if sum.TracksTotal > 0 {

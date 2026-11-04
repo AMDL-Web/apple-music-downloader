@@ -466,7 +466,8 @@ func (b *Backend) cancel(j *job, now time.Time) {
 			j.items[i].Status, j.items[i].UpdatedAt = domain.ItemCancelled, now
 		}
 	}
-	j.Status, j.Error, j.FinishedAt, j.UpdatedAt = domain.JobCancelled, "cancelled", ptr(now), now
+	// Every demo run is a record's, and a record's run stops by its pause.
+	j.Status, j.Error, j.FinishedAt, j.UpdatedAt = domain.JobCancelled, "paused", ptr(now), now
 	b.emit(j, domain.EventJobCancelled, "", j.snapshot(), now)
 	b.feed(j)
 }

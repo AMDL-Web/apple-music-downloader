@@ -165,12 +165,35 @@ describe('fake API', () => {
     const again = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url] })).json();
     assert.equal(again.results[0].status, 'already_downloaded');
     const reset = await call(api, 'POST', `../api/v1/library/albums/${album.id}/reset`, { what: 'audio' });
-    assert.equal(reset.status, 202);
+    assert.equal(reset.status, 200);
     assert.notEqual((await reset.json()).job.id, first.results[0].job.id, 'a reset is a new run');
     const hits = await (await call(api, 'GET', `../api/v1/search?term=${encodeURIComponent(album.name)}&types=albums`)).json();
     assert.ok(hits.albums.items.some((h) => h.resource && h.resource.id === album.id));
     const rec = await (await call(api, 'GET', `../api/v1/library/albums/${album.id}`)).json();
     assert.equal(rec.tracks.length, album.track_count);
+  });
+
+  test('record actions leave the record as the backend does and tell the feed', async () => {
+    const api = fresh();
+    const album = unseeded(api)[0];
+    const add = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url] })).json();
+    const run = api.jobs.get(add.results[0].job.id);
+    const feed = await call(api, 'GET', '../api/v1/downloads/events');
+    const path = `../api/v1/library/albums/${album.id}`;
+    assert.equal((await (await call(api, 'POST', `${path}/pause`)).json()).paused, true);
+    assert.equal(run.status, 'cancelled');
+    assert.equal(run.error, 'paused', "a record's run stops as paused");
+    const waiting = await (await call(api, 'POST', `${path}/reset`, { what: 'audio' })).json();
+    assert.equal(waiting.job, null, 'a paused record keeps an audio reset for its resume');
+    const resumed = await (await call(api, 'POST', `${path}/resume`)).json();
+    assert.ok(resumed.active_job_id, 'a resume queues the rest');
+    settle(api);
+    assert.equal((await (await call(api, 'POST', `${path}/download`)).json()).status, 'already_downloaded');
+    assert.equal((await call(api, 'DELETE', path)).status, 204);
+    const events = await readEvents(feed, (ev) => ev.some((e) => e.event === 'resource_deleted'));
+    const news = events.filter((e) => e.data.resource_id === album.id).map((e) => e.event);
+    assert.ok(news.filter((t) => t === 'resource_updated').length >= 4, `pause, reset, resume and download each send the record: ${news}`);
+    assert.equal(news.at(-1), 'resource_deleted');
   });
 
   test('retry runs a failed job again as a new job', async () => {

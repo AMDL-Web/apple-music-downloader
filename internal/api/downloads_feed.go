@@ -81,17 +81,29 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 			type pendingMessage struct {
 				eventID int64
 				deleted bool
+				// record is set for a record_changed event, keyed by its
+				// record instead of a job.
+				record *domain.RecordChange
 			}
-			// One upsert per job in this bounded page, carrying that job's own
-			// highest milestone id rather than a page-wide cursor.
+			// One upsert per job (or record) in this bounded page, carrying
+			// its own highest milestone id rather than a page-wide cursor.
 			latest := map[string]pendingMessage{}
 			var order []string
 			for _, ev := range events {
-				if _, seen := latest[ev.JobID]; !seen {
-					order = append(order, ev.JobID)
+				key, msg := ev.JobID, pendingMessage{eventID: ev.ID, deleted: ev.Type == domain.EventJobDeleted}
+				if ev.Type == domain.EventRecordChanged {
+					var change domain.RecordChange
+					if json.Unmarshal(ev.Payload, &change) != nil || change.ResourceID == "" ||
+						(change.ResourceKind != domain.ResourceAlbum && change.ResourceKind != domain.ResourcePlaylist) {
+						continue
+					}
+					key, msg.record = "\x00"+string(change.ResourceKind)+"\x00"+change.ResourceID, &change
 				}
-				if ev.ID > latest[ev.JobID].eventID {
-					latest[ev.JobID] = pendingMessage{eventID: ev.ID, deleted: ev.Type == domain.EventJobDeleted}
+				if _, seen := latest[key]; !seen {
+					order = append(order, key)
+				}
+				if ev.ID > latest[key].eventID {
+					latest[key] = msg
 				}
 			}
 			// Send in ascending per-job cursor order so Last-Event-ID only moves
@@ -99,6 +111,17 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 			sort.Slice(order, func(i, j int) bool { return latest[order[i]].eventID < latest[order[j]].eventID })
 			for _, jobID := range order {
 				pending := latest[jobID]
+				if pending.record != nil {
+					msg, err := s.recordMessage(ctx, pending.record.ResourceKind, pending.record.ResourceID, pending.eventID, statusCounts)
+					if err != nil {
+						return nil // as for a job snapshot: retry this page on the next wake
+					}
+					if err := write(msg); err != nil {
+						return err
+					}
+					lastID = pending.eventID
+					continue
+				}
 				if pending.deleted {
 					if err := write(domain.DownloadFeedMessage{Type: "download_deleted", JobID: jobID, EventID: pending.eventID, StatusCounts: statusCounts}); err != nil {
 						return err
@@ -242,30 +265,55 @@ func (s *Server) resourceMessage(ctx context.Context, job *domain.Job, eventID i
 	if job == nil || job.ResourceID == "" {
 		return domain.DownloadFeedMessage{}, false
 	}
-	msg := domain.DownloadFeedMessage{Type: "resource_updated", ResourceKind: job.ResourceKind, ResourceID: job.ResourceID, EventID: eventID, StatusCounts: counts}
-	active, _, err := s.store.ActiveRunID(ctx, job.ResourceKind, job.ResourceID)
-	if err != nil {
-		return msg, false
-	}
-	activity, err := s.store.RecordActivity(ctx, job.ResourceKind, job.ResourceID)
-	if err != nil {
-		return msg, false
-	}
-	switch job.ResourceKind {
-	case domain.ResourceAlbum:
-		a, err := s.store.GetAlbum(ctx, job.ResourceID)
-		if err != nil {
-			return msg, false
-		}
-		msg.Resource = albumResource{Album: a, ActiveJobID: active, ActivityAt: activity}
-	case domain.ResourcePlaylist:
-		p, err := s.store.GetPlaylist(ctx, job.ResourceID)
-		if err != nil {
-			return msg, false
-		}
-		msg.Resource = playlistResource{Playlist: p, ActiveJobID: active, ActivityAt: activity}
-	default:
+	msg, err := s.recordMessage(ctx, job.ResourceKind, job.ResourceID, eventID, counts)
+	if err != nil || msg.Type != "resource_updated" {
 		return msg, false
 	}
 	return msg, true
+}
+
+// recordMessage is the message for a record's record_changed: resource_updated
+// with the record as GET /library/{kind} lists it, or resource_deleted when
+// it is gone.
+func (s *Server) recordMessage(ctx context.Context, kind domain.ResourceKind, id string, eventID int64, counts domain.JobStatusCounts) (domain.DownloadFeedMessage, error) {
+	msg := domain.DownloadFeedMessage{Type: "resource_updated", ResourceKind: kind, ResourceID: id, EventID: eventID, StatusCounts: counts}
+	var err error
+	switch kind {
+	case domain.ResourceAlbum:
+		var a domain.Album
+		if a, err = s.store.GetAlbum(ctx, id); err == nil {
+			msg.Resource = albumResource{Album: a}
+		}
+	case domain.ResourcePlaylist:
+		var p domain.Playlist
+		if p, err = s.store.GetPlaylist(ctx, id); err == nil {
+			msg.Resource = playlistResource{Playlist: p}
+		}
+	default:
+		return msg, fmt.Errorf("unknown record kind %q", kind)
+	}
+	if errors.Is(err, db.ErrRecordNotFound) {
+		msg.Type = "resource_deleted"
+		return msg, nil
+	}
+	if err != nil {
+		return msg, err
+	}
+	active, _, err := s.store.ActiveRunID(ctx, kind, id)
+	if err != nil {
+		return msg, err
+	}
+	activity, err := s.store.RecordActivity(ctx, kind, id)
+	if err != nil {
+		return msg, err
+	}
+	switch r := msg.Resource.(type) {
+	case albumResource:
+		r.ActiveJobID, r.ActivityAt = active, activity
+		msg.Resource = r
+	case playlistResource:
+		r.ActiveJobID, r.ActivityAt = active, activity
+		msg.Resource = r
+	}
+	return msg, nil
 }

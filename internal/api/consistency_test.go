@@ -397,10 +397,6 @@ func (r *rig) waitStarted() string {
 	}
 }
 
-// feedKeepsRecords: the feed sends resource_updated only after a run's
-// milestone, so a record paused or deleted without one keeps its old mark.
-var feedKeepsRecords = knownDefects{"feed records": "i15 #7"}
-
 // TestRecordActionsKeepSurfacesConsistent walks the actions lyjw named for
 // checklist i19 (delete, download again, a song then its album, an album
 // then one song, pause and resume, the overwrite setting) and checks every
@@ -471,7 +467,7 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 	for _, overwrite := range []bool{false, true} {
 		step := fmt.Sprintf("overwrite %v", overwrite)
 		r.call(http.MethodDelete, "/library/albums/100", "", http.StatusNoContent, nil)
-		s = r.check(step+": record deleted", feedKeepsRecords)
+		s = r.check(step+": record deleted")
 		if _, ok := s.albums["100"]; ok || s.pageMarks["100"] != nil || s.hitMarks["100"] != nil {
 			t.Fatalf("%s: album 100 still shows after its delete", step)
 		}
@@ -509,7 +505,7 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 	}
 
 	r.call(http.MethodPost, "/library/albums/300/pause", "", http.StatusOK, nil)
-	s = r.check("complete record paused", feedKeepsRecords)
+	s = r.check("complete record paused")
 	if a := s.albums["300"]; !a.Paused || a.State != domain.RecordComplete {
 		t.Fatalf("album 300 = %+v, want paused and complete", a)
 	}
@@ -527,9 +523,9 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 		}
 	})
 	release()
-	r.check("deleted after pause", feedKeepsRecords)
+	r.check("deleted after pause")
 	if r.status(http.MethodGet, "/library/albums/400", "") == http.StatusOK {
 		r.call(http.MethodDelete, "/library/albums/400", "", http.StatusNoContent, nil)
 	}
-	r.check("record deleted", feedKeepsRecords)
+	r.check("record deleted")
 }

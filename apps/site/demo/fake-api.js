@@ -220,6 +220,15 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     return e;
   }
 
+  /** Tells the feeds a record changed outside its runs, as the backend's record_changed does. */
+  function recordNews(rec, gone = false) {
+    const e = { id: nextEvent++, created_at: iso(Date.now()), job_id: '', type: 'record_changed', payload: { resource_kind: rec.kind, resource_id: rec.id } };
+    events.push(e);
+    const base = { resource_kind: rec.kind, resource_id: rec.id, event_id: e.id, status_counts: statusCounts() };
+    const msg = gone ? { type: 'resource_deleted', ...base } : { type: 'resource_updated', ...base, resource: records.record(rec) };
+    for (const send of feeds) send(e.id, msg.type, msg);
+  }
+
   function addLog(level, message, attributes, at = Date.now()) {
     const l = { sequence: nextLog++, time: iso(at), level, message, attributes };
     logs.push(l);
@@ -616,7 +625,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       // Cancel on a record's run pauses the record.
       const rec = job.resource ? records.get(job.resource.kind, job.resource.id) : null;
       if (rec) rec.paused = true;
-      Object.assign(job, { status: 'cancelled', finished_at: iso(Date.now()), updated_at: iso(Date.now()) });
+      Object.assign(job, { status: 'cancelled', error: rec ? 'paused' : 'cancelled', finished_at: iso(Date.now()), updated_at: iso(Date.now()) });
       delete job.queue_order;
       for (const it of list) if (!DONE.has(it.status)) Object.assign(it, stageFields('cancelled', 0));
       recount(job);
@@ -708,25 +717,40 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         items.delete(jid);
         addEvent({ job_id: jid, type: 'job_deleted', message: 'job deleted' });
       }
+      recordNews(rec, true);
       return new Response(null, { status: 204 });
     }
     if (action === 'pause' && method === 'POST') {
       rec.paused = true;
       if (run) jobRoute('POST', run.id, 'cancel');
+      recordNews(rec);
       return json(200, records.record(rec));
     }
     if (action === 'resume' && method === 'POST') {
       rec.paused = false;
       const x = records.record(rec);
-      if (x.state !== 'complete' && !x.active_job_id && src) queueRun(src, src.url, undefined, 'retry');
+      if (x.state !== 'complete' && !x.active_job_id && src) queueRun(src, src.url, undefined, 'manual');
+      recordNews(rec);
       return json(200, records.record(rec));
     }
-    if ((action === 'reset' || action === 'download') && method === 'POST') {
-      if (run) return apiError(409, 'run_active', 'the record has a queued or running run; pause it first');
-      if (!src) return json(200, { status: 'already_downloaded' });
+    if (action === 'download' && method === 'POST') {
       rec.paused = false;
-      const job = queueRun(src, src.url, undefined, action === 'reset' ? 'reset' : 'manual');
-      return json(202, action === 'reset' ? { slots: records.tracksOf(rec).length, job: withProgress(job) } : { status: 'queued', job: withProgress(job) });
+      if (run) return json(202, { status: 'queued', job: withProgress(run) });
+      if (!src || records.record(rec).state === 'complete') {
+        recordNews(rec);
+        return json(200, { status: 'already_downloaded' });
+      }
+      const job = queueRun(src, src.url, undefined, 'manual');
+      recordNews(rec);
+      return json(202, { status: 'queued', job: withProgress(job) });
+    }
+    // A reset of everything resumes the record; any other reset of a paused one waits for its resume.
+    if (action === 'reset' && method === 'POST') {
+      if (run) return apiError(409, 'run_active', 'the record has a queued or running run; pause it first');
+      if (body && body.what === 'all') rec.paused = false;
+      const job = src && !rec.paused ? queueRun(src, src.url, undefined, 'reset') : null;
+      recordNews(rec);
+      return json(200, { slots: records.tracksOf(rec).length, job: job ? withProgress(job) : null });
     }
     return apiError(405, 'method_not_allowed', 'method not allowed');
   }
@@ -1044,7 +1068,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
           const flags = (body.filter && body.filter.flag) || [];
           if (flags.length && !(flags.includes('failed') && x.tracks_failed) && !(flags.includes('paused') && rec.paused)) continue;
           if (x.active_job_id) skipped++;
-          else if (recordRoute('POST', `${rec.kind}s`, rec.id, 'reset').status === 202) reset++;
+          else if (recordRoute('POST', `${rec.kind}s`, rec.id, 'reset', body).status === 200) reset++;
         }
         return json(200, { reset, skipped_active: skipped });
       }

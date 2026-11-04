@@ -206,6 +206,12 @@ func (m *Manager) addAlbum(ctx context.Context, add db.AlbumAdd, trigger domain.
 	if add.Now.IsZero() {
 		add.Now = time.Now().UTC()
 	}
+	changed := false
+	defer func() {
+		if changed {
+			m.recordChanged(ctx, domain.ResourceAlbum, add.ID)
+		}
+	}()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	before, err := m.store.GetAlbum(ctx, add.ID)
@@ -216,6 +222,7 @@ func (m *Manager) addAlbum(ctx context.Context, add db.AlbumAdd, trigger domain.
 	if err != nil {
 		return "", domain.Job{}, err
 	}
+	changed = true
 	if trigger == domain.TriggerManual {
 		if err := m.rearmLocked(ctx, domain.ResourceAlbum, add.ID, add.SongIDs, add.Now); err != nil {
 			return "", domain.Job{}, err
@@ -310,6 +317,7 @@ func (m *Manager) Pause(ctx context.Context, kind domain.ResourceKind, id string
 	if err := m.store.SetPaused(ctx, kind, id, true, time.Now().UTC()); err != nil {
 		return err
 	}
+	defer m.recordChanged(ctx, kind, id)
 	active, found, err := m.store.ActiveRunID(ctx, kind, id)
 	if err != nil || !found {
 		return err
@@ -330,6 +338,7 @@ func (m *Manager) Resume(ctx context.Context, kind domain.ResourceKind, id strin
 	if err := m.store.SetPaused(ctx, kind, id, false, now); err != nil {
 		return err
 	}
+	defer m.recordChanged(ctx, kind, id)
 	m.mu.Lock()
 	_, _, err := m.afterAddLocked(ctx, kind, id, domain.TriggerManual, now)
 	m.mu.Unlock()
@@ -381,6 +390,14 @@ type ResetResult struct {
 // A record with a queued or running run is refused with db.ErrRunActive:
 // pause it first, or the run would overwrite the reset with its own outcome.
 func (m *Manager) Reset(ctx context.Context, r ResetRequest) (ResetResult, error) {
+	res, err := m.reset(ctx, r)
+	if err == nil {
+		m.recordChanged(ctx, r.Kind, r.ID)
+	}
+	return res, err
+}
+
+func (m *Manager) reset(ctx context.Context, r ResetRequest) (ResetResult, error) {
 	now := time.Now().UTC()
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -473,6 +490,20 @@ func (m *Manager) DownloadNow(ctx context.Context, jobID string) (domain.Job, er
 
 // config returns the live config, or the defaults when SetConfig was not
 // called (tests).
+// recordChanged tells the overview feed that a record changed outside its
+// runs (domain.EventRecordChanged). The change itself is already stored, so
+// a failed write is logged, not returned. Call it without m.mu held.
+func (m *Manager) recordChanged(ctx context.Context, kind domain.ResourceKind, id string) {
+	ev, err := m.store.AddRecordChange(context.WithoutCancel(ctx), kind, id)
+	if err != nil {
+		logging.FromContext(ctx, m.logger).Warn("record a record change for the feed", "kind", kind, "id", id, "error", err)
+		return
+	}
+	if m.hub != nil {
+		m.hub.Publish(ev)
+	}
+}
+
 func (m *Manager) config() config.Config {
 	if m.cfg == nil {
 		return config.Default()

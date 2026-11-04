@@ -2,8 +2,8 @@
 // recordMenu): Show details opens the record's drawer, Run next and Run
 // last move its queued run, Pause, Resume and Retry act at once, Copy link
 // copies its link, and Download again… and Remove from
-// amdl… ask first. What it changes it tells the app (recordsChanged), since
-// a pause, resume or removal with no run sends no resource_updated.
+// amdl… ask first. What it changes it tells the app at once (recordsChanged),
+// ahead of the feed's resource_updated or resource_deleted.
 
 import { html, useState } from '../ui/preact.js';
 import { pauseRecord, resumeRecord, resetRecord, deleteRecord, cancelDownload } from '../api.js';

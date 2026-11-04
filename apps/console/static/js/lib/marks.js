@@ -72,14 +72,17 @@ export function markFields(kind, id, record) {
 
 /**
  * Applies feed messages to `latest` (a resourceKey -> mark fields map):
- * resource_updated replaces its record's entry. Returns `latest` itself
- * when nothing changed.
+ * resource_updated replaces its record's entry, resource_deleted marks it
+ * gone. Returns `latest` itself when nothing changed.
  */
 export function applyResourceFeed(latest, batch) {
   let next = latest;
   for (const msg of batch || []) {
-    if (!msg || msg.type !== 'resource_updated' || !msg.resource_kind || !msg.resource_id || !msg.resource) continue;
-    const fields = markFields(msg.resource_kind, msg.resource_id, msg.resource);
+    if (!msg || !msg.resource_kind || !msg.resource_id) continue;
+    let fields;
+    if (msg.type === 'resource_updated' && msg.resource) fields = markFields(msg.resource_kind, msg.resource_id, msg.resource);
+    else if (msg.type === 'resource_deleted') fields = { kind: msg.resource_kind, id: msg.resource_id, gone: true };
+    else continue;
     if (next === latest) next = new Map(latest);
     next.set(resourceKey(fields), fields);
   }
@@ -88,12 +91,14 @@ export function applyResourceFeed(latest, batch) {
 
 /**
  * A record mark with the newest news: the feed's fields over the ones an
- * answer carried (a song's song_state stays from the answer).
+ * answer carried (a song's song_state stays from the answer); null for a
+ * record the feed says is gone.
  */
 export function withLatest(resource, latest) {
   if (!resource) return null;
   const fresh = latest && latest.get(resourceKey(resource));
   if (!fresh) return resource;
+  if (fresh.gone) return null;
   const out = { ...resource, ...fresh };
   if (!fresh.active_job_id) delete out.active_job_id;
   return out;
@@ -109,6 +114,16 @@ export function submitMark(result) {
   if (result.status === 'accepted' && result.job && result.job.id) return { kind, id, active_job_id: result.job.id };
   if (result.status === 'duplicate_active' && result.existing_job_id) return { kind, id, active_job_id: result.existing_job_id };
   return null;
+}
+
+/**
+ * `latest` with a submit's mark (submitMark) merged into its record's entry;
+ * a record the feed said was gone is there again.
+ */
+export function withSubmitted(latest, m) {
+  const key = resourceKey(m);
+  const was = latest.get(key);
+  return new Map(latest).set(key, { ...(was && !was.gone ? was : {}), ...m });
 }
 
 const SONG_AFTER = { completed: 'done', failed: 'failed', cancelled: 'pending' };

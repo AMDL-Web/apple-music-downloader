@@ -51,6 +51,7 @@ export function useQueueFacts(app) {
       const news = batch.some(
         (m) =>
           m.type === 'resource_updated' ||
+          m.type === 'resource_deleted' ||
           m.type === 'download_deleted' ||
           (m.type === 'check_updated' && m.check && m.check.finished_at) ||
           (m.type === 'download_upserted' && m.job && !m.job.resource && !['running'].includes(m.job.status)),

@@ -136,6 +136,33 @@ func TestSummaryCountsToday(t *testing.T) {
 	}
 }
 
+// An album downloaded five times is one finished download: the hero, the
+// cover row and today's counts take each record once, by its latest run.
+func TestARecordDownloadedAgainCountsOnce(t *testing.T) {
+	s, _ := newTestStore(t)
+	s.now = func() time.Time { return at(30) }
+	var runs []domain.Job
+	for i := range 5 {
+		done := at(i + 1)
+		runs = append(runs, domain.Job{ID: fmt.Sprintf("a%d", i), Status: domain.JobCompleted, FinishedAt: &done, CompletedItems: 10,
+			ResourceKind: domain.ResourceAlbum, ResourceID: "1"})
+	}
+	st := at(7)
+	runs = append(runs, domain.Job{ID: "st", Type: "station", Status: domain.JobCompleted, FinishedAt: &st, CompletedItems: 3})
+	s.ApplySnapshot(client.DownloadList{Downloads: runs})
+	finished := s.Finished()
+	if len(finished) != 2 || finished[0].ID != "st" || finished[1].ID != "a4" {
+		ids := []string{}
+		for _, j := range finished {
+			ids = append(ids, j.ID)
+		}
+		t.Errorf("finished %v, want the station then the album's latest run", ids)
+	}
+	if sum := s.Summary(); sum.CompletedToday != 2 || sum.TracksToday != 13 {
+		t.Errorf("today: %d downloads, %d tracks, want 2 and 13", sum.CompletedToday, sum.TracksToday)
+	}
+}
+
 func TestFindLinksAndRunningMatch(t *testing.T) {
 	text := "IGOR https://music.apple.com/us/album/igor/1463409338, and\nhttps://music.apple.com/cn/album/1858184006 again https://music.apple.com/us/album/igor/1463409338"
 	links := FindLinks(text)

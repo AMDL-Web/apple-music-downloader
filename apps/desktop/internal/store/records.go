@@ -14,9 +14,14 @@ import (
 // the disk.
 type Records struct {
 	marks map[domain.ResourceRef]domain.ResourceMark
+	// gone holds the records removed since an answer named them, so a
+	// cached answer's mark of one reads as none.
+	gone map[domain.ResourceRef]bool
 }
 
-func (r *Records) reset() { *r = Records{marks: map[domain.ResourceRef]domain.ResourceMark{}} }
+func (r *Records) reset() {
+	*r = Records{marks: map[domain.ResourceRef]domain.ResourceMark{}, gone: map[domain.ResourceRef]bool{}}
+}
 
 // applyResource keeps a resource_updated message's record as its newest
 // mark, reads the open album again when its tracks moved on, and moves the
@@ -57,6 +62,7 @@ func (s *Store) putMark(mark domain.ResourceMark) {
 	ref := domain.ResourceRef{Kind: mark.Kind, ID: mark.ID}
 	old, had := s.Records.marks[ref]
 	s.Records.marks[ref] = mark
+	delete(s.Records.gone, ref)
 	if had && old == mark {
 		return
 	}
@@ -64,6 +70,22 @@ func (s *Store) putMark(mark domain.ResourceMark) {
 		s.albumMoved(ref.ID)
 	}
 	s.Library.recordMoved(ref)
+}
+
+// forgetRecord drops what the store holds of a removed record: its mark,
+// its Library keep and its queue rows; an answer's mark of it reads as
+// none from now on, and the open album and the queue counts are read again.
+func (s *Store) forgetRecord(ref domain.ResourceRef) {
+	delete(s.Records.marks, ref)
+	s.Records.gone[ref] = true
+	delete(s.Library.Kept, ref.ID)
+	s.Queue.dropRecord(ref)
+	if ref.Kind == domain.ResourceAlbum {
+		s.albumMoved(ref.ID)
+	}
+	if s.Queue.open {
+		s.Queue.count(s)
+	}
 }
 
 // noteSubmitted marks the records a submit added with the run it queued,
@@ -86,6 +108,7 @@ func (s *Store) noteSubmitted(res domain.BatchSubmitResponse) {
 		mark := s.Records.marks[*r.Resource]
 		mark.Kind, mark.ID, mark.ActiveJobID = r.Resource.Kind, r.Resource.ID, job
 		s.Records.marks[*r.Resource] = mark
+		delete(s.Records.gone, *r.Resource)
 	}
 }
 
@@ -95,6 +118,12 @@ func (s *Store) noteSubmitted(res domain.BatchSubmitResponse) {
 func (s *Store) Latest(r *domain.ResourceMark) *domain.ResourceMark {
 	if r == nil {
 		return nil
+	}
+	ref := domain.ResourceRef{Kind: r.Kind, ID: r.ID}
+	if s.Records.gone[ref] {
+		if _, ok := s.Records.marks[ref]; !ok {
+			return nil
+		}
 	}
 	out := *r
 	if fresh, ok := s.Records.marks[domain.ResourceRef{Kind: r.Kind, ID: r.ID}]; ok {

@@ -54,6 +54,7 @@ func (m *Manager) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id
 	for _, ev := range tombstones {
 		m.hub.Publish(ev)
 	}
+	m.recordChanged(ctx, kind, id)
 	return nil
 }
 
@@ -87,6 +88,7 @@ func (m *Manager) DownloadRecord(ctx context.Context, r RecordDownload) (RecordD
 	if _, err := m.recordStatus(ctx, r.Kind, r.ID); err != nil {
 		return RecordDownloadResult{}, err
 	}
+	defer m.recordChanged(ctx, r.Kind, r.ID)
 	if r.Codec != "" {
 		if err := m.requestSlots(ctx, r, now); err != nil {
 			return RecordDownloadResult{}, err

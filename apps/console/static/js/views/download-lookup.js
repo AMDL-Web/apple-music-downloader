@@ -10,7 +10,7 @@ import { lookupLink } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
 import { createLookupQueue, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { linkIssue, submittable } from '../lib/submit-check.js';
-import { resourceMark, applyResourceFeed, withLatest, submitMark, resourceKey } from '../lib/marks.js';
+import { resourceMark, applyResourceFeed, withLatest, submitMark, withSubmitted } from '../lib/marks.js';
 
 // Previews outlive the page, so coming back does not look links up again.
 // An album ?i= link previews as a song or the album depending on
@@ -162,8 +162,7 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
       const m = submitMark(p.result);
       if (!m) continue;
       if (p.url) SENT.set(p.url, { kind: m.kind, id: m.id });
-      const key = resourceKey(m);
-      LATEST = new Map(LATEST).set(key, { ...(LATEST.get(key) || {}), ...m });
+      LATEST = withSubmitted(LATEST, m);
       changed = true;
     }
     if (changed) setTick((n) => n + 1);

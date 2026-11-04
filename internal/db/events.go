@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strings"
 
@@ -28,6 +29,23 @@ func addEvent(ctx context.Context, x execer, event domain.Event) (domain.Event, 
 // AddEvent persists event and returns it with its id and created_at set.
 func (s *Store) AddEvent(ctx context.Context, event domain.Event) (domain.Event, error) {
 	return addEvent(ctx, s.db, event)
+}
+
+// AddRecordChange persists a record_changed event for record kind id and
+// removes the record's earlier ones in the same transaction, so a record
+// holds at most one.
+func (s *Store) AddRecordChange(ctx context.Context, kind domain.ResourceKind, id string) (domain.Event, error) {
+	payload, err := json.Marshal(domain.RecordChange{ResourceKind: kind, ResourceID: id})
+	if err != nil {
+		return domain.Event{}, err
+	}
+	return withTx(ctx, s.db, func(tx *sql.Tx) (domain.Event, error) {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM run_events WHERE job_id = '' AND type = ? AND payload = ?`,
+			string(domain.EventRecordChanged), string(payload)); err != nil {
+			return domain.Event{}, err
+		}
+		return addEvent(ctx, tx, domain.Event{Type: domain.EventRecordChanged, Payload: payload})
+	})
 }
 
 // LatestEventID returns the id of the most recent event recorded for jobID, or
