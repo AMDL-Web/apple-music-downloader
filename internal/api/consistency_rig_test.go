@@ -40,7 +40,8 @@ type simProcessor struct {
 	mu sync.Mutex
 	// unavailable songs offer no codec: their main slot ends unavailable.
 	unavailable map[string]bool
-	// failing songs fail their slots.
+	// failing songs fail their slots, or only one slot when keyed
+	// "<song>/<slot>".
 	failing map[string]bool
 	// hold, when set, blocks each record run after its plan until it is
 	// closed or the run is cancelled; started gets the run id first.
@@ -175,7 +176,7 @@ func (p *simProcessor) settle(ctx context.Context, job domain.Job, plan jobs.Pla
 		return finish(domain.ItemCompleted, domain.EventLyricsRefreshed)
 	}
 	p.mu.Lock()
-	unavailable, failing := p.unavailable[slot.SongID], p.failing[slot.SongID]
+	unavailable, failing := p.unavailable[slot.SongID], p.failing[slot.SongID] || p.failing[slot.SongID+"/"+slot.Slot]
 	p.mu.Unlock()
 	path := slot.FixedPath
 	if path == "" {
@@ -200,6 +201,7 @@ func (p *simProcessor) settle(ctx context.Context, job domain.Job, plan jobs.Pla
 	if slot.Slot != domain.SlotMain {
 		codec = slot.Slot
 	}
+	item.Codec = codec
 	if _, err := os.Stat(path); err == nil && !slot.Replace && !p.cfg.Get().Download.OverwriteExisting {
 		if err := rr.SlotDone(ctx, job.ID, slot.FileKey, db.FileOutcome{Codec: codec}); err != nil {
 			return err
@@ -224,6 +226,22 @@ type simCatalog struct {
 	mu        sync.Mutex
 	albums    map[string][]string
 	playlists map[string][]string
+}
+
+func (c *simCatalog) setAlbum(id string, songs []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if songs == nil {
+		delete(c.albums, id)
+		return
+	}
+	c.albums[id] = songs
+}
+
+func (c *simCatalog) setPlaylist(id string, songs []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.playlists[id] = songs
 }
 
 func (c *simCatalog) albumRead(id string) (db.AlbumRead, bool) {
@@ -332,6 +350,8 @@ type rig struct {
 	proc    *simProcessor
 	catalog *simCatalog
 	feed    *feedModel
+	// statsDays is the days value of the last GET /stats read.
+	statsDays int
 }
 
 func newRig(t *testing.T, albums, playlists map[string][]string) *rig {

@@ -146,7 +146,8 @@ Download activity. `days` is 1-90 (default 14); anything else is `400 invalid_re
 
 - `totals`: every retained job (`jobs`), its tracks by final status (`tracks_completed`,
   `tracks_skipped` for files already on disk, `tracks_failed`), the bytes written by
-  completed tracks and their total playback time (`duration_ms`).
+  completed tracks and their total playback time (`duration_ms`). A lyrics reset writes no
+  track: its items count neither here nor in `codecs`.
 - `daily`: exactly `days` entries, one per UTC date, oldest first, ending today. Each has
   `tracks_completed`, `bytes_written`, `jobs_completed` and `jobs_failed`; a quiet day has
   zeros. A track counts on the day it completed, a job on each day it finished or failed
@@ -356,7 +357,7 @@ curl http://localhost:18080/api/v1/library/albums/1463409338
 ```
 
 A record's rollup is stored with it: `tracks_wanted` (wanted tracks its storefront
-lists), `tracks_done` (of those, the ones whose main slot is done), `tracks_failed`,
+lists, less those whose main slot no codec offers), `tracks_done` (of those, the ones whose main slot is done), `tracks_failed`,
 `tracks_given_up`, `tracks_missing`, and `state`, `complete` when every wanted track is
 done. `withheld_count` counts tracks of the release its storefront does not list;
 they are not counted and not retried. `activity_at` is when one of the record's runs
@@ -555,7 +556,7 @@ curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,ca
 Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `resource_kind`
 (`album`, `playlist`) and `resource_id` (one record's runs), `trigger`, `current=true`
 (leaves out a run once its record, or a station's link, has a newer run, and a run of a
-complete record), `q` (substring of
+complete record with no failed, given-up or missing slot), `q` (substring of
 the title, artist name or input), `sort` (`created_at` | `updated_at` | `queue_order`), `order`
 (`asc` | `desc`); other parameters are ignored. `sort=queue_order` lists the queued jobs in
 run order (with `order=asc`, the next to start first) ahead of every other job; combine it

@@ -21,13 +21,27 @@ const (
 	FlagGivenUp RecordFlag = "given_up"
 	// FlagMissing: a check found a done slot's file gone.
 	FlagMissing RecordFlag = "missing"
-	// FlagWaiting: a failed slot waits for its automatic retry.
+	// FlagWaiting: a failed slot of a wanted track waits for its automatic
+	// retry.
 	FlagWaiting RecordFlag = "waiting"
 	// FlagPaused: the record is paused.
 	FlagPaused RecordFlag = "paused"
 	// FlagUnresolved: no read has listed the record's tracks yet.
 	FlagUnresolved RecordFlag = "unresolved"
 )
+
+// waitingSlotSQL is the condition that file w, of a record of kind, is a
+// failed slot of a wanted, available track (a playlist's still listed)
+// that waits for its retry; its one parameter is the time now. Only such a
+// slot is ever retried: the picker plans only those tracks.
+func waitingSlotSQL(kind domain.ResourceKind) string {
+	listed := `EXISTS (SELECT 1 FROM tracks t WHERE t.album_id = w.owner_id AND t.song_id = w.song_id AND t.wanted = 1 AND t.availability = 'available')`
+	if kind == domain.ResourcePlaylist {
+		listed = `EXISTS (SELECT 1 FROM playlist_tracks t WHERE t.playlist_id = w.owner_id AND t.song_id = w.song_id
+			AND t.removed_at IS NULL AND t.availability = 'available')`
+	}
+	return `w.owner_kind = '` + string(kind) + `' AND w.audio_state = 'failed' AND w.next_attempt_at > ? AND ` + listed
+}
 
 // RecordFlags is every RecordFlag.
 var RecordFlags = []RecordFlag{FlagFailed, FlagGivenUp, FlagMissing, FlagWaiting, FlagPaused, FlagUnresolved}
@@ -178,8 +192,7 @@ func recordWhere(kind domain.ResourceKind, f RecordFilter) (string, []any, error
 		case FlagUnresolved:
 			flagConds = append(flagConds, `r.resolved_at IS NULL`)
 		case FlagWaiting:
-			flagConds = append(flagConds, `EXISTS (SELECT 1 FROM files w WHERE w.owner_kind = '`+string(kind)+`' AND w.owner_id = r.id
-				AND w.audio_state = 'failed' AND w.next_attempt_at > ?)`)
+			flagConds = append(flagConds, `EXISTS (SELECT 1 FROM files w WHERE w.owner_id = r.id AND `+waitingSlotSQL(kind)+`)`)
 			args = append(args, formatTime(f.Now))
 		default:
 			return "", nil, fmt.Errorf("unknown record flag %q", flag)
@@ -252,8 +265,8 @@ func (s *Store) CountRecords(ctx context.Context, kind domain.ResourceKind, now 
 		COALESCE(SUM(state = 'none'), 0), COALESCE(SUM(state = 'partial'), 0), COALESCE(SUM(state = 'complete'), 0),
 		COALESCE(SUM(tracks_failed > 0), 0), COALESCE(SUM(tracks_given_up > 0), 0), COALESCE(SUM(tracks_missing > 0), 0),
 		COALESCE(SUM(paused = 1), 0), COALESCE(SUM(resolved_at IS NULL), 0),
-		(SELECT COUNT(DISTINCT owner_id) FROM files WHERE owner_kind = ? AND audio_state = 'failed' AND next_attempt_at > ?)
-		FROM `+table, string(kind), formatTime(now)).Scan(
+		(SELECT COUNT(DISTINCT w.owner_id) FROM files w WHERE `+waitingSlotSQL(kind)+`)
+		FROM `+table, formatTime(now)).Scan(
 		&out.Total, &none, &partial, &complete, &failed, &givenUp, &missing, &paused, &unresolved, &waiting)
 	if err != nil {
 		return RecordCounts{}, err

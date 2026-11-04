@@ -119,6 +119,12 @@ func (s *Store) Stats(ctx context.Context, now time.Time, days int) (Stats, erro
 	return out, nil
 }
 
+// notLyricsItemSQL keeps run item i out of the track figures when its run
+// was a lyrics reset (its plan's scope is internal/jobs#ScopeLyrics): it
+// refreshed lyrics, it downloaded no track.
+const notLyricsItemSQL = `NOT EXISTS (SELECT 1 FROM runs r WHERE r.id = i.job_id AND r.plan <> '' AND json_valid(r.plan)
+	AND json_extract(r.plan, '$.scope') = 'lyrics')`
+
 func (s *Store) statsTotals(ctx context.Context) (StatsTotals, error) {
 	completed, skipped, failed := string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemFailed)
 	var t StatsTotals
@@ -129,7 +135,7 @@ func (s *Store) statsTotals(ctx context.Context) (StatsTotals, error) {
 			COUNT(CASE WHEN status = ? THEN 1 END),
 			COALESCE(SUM(CASE WHEN status = ? THEN file_size END), 0),
 			COALESCE(SUM(CASE WHEN status = ? THEN duration_ms END), 0)
-		FROM run_items`,
+		FROM run_items i WHERE `+notLyricsItemSQL,
 		completed, skipped, failed, completed, completed,
 	).Scan(&t.Jobs, &t.TracksCompleted, &t.TracksSkipped, &t.TracksFailed, &t.BytesWritten, &t.DurationMS)
 	return t, err
@@ -196,8 +202,8 @@ func (s *Store) statsDaily(ctx context.Context, start time.Time, days int, from,
 }
 
 func (s *Store) statsCodecs(ctx context.Context) ([]CodecStats, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT codec, bit_depth, sample_rate, COUNT(*) FROM run_items
-		WHERE status = ?
+	rows, err := s.db.QueryContext(ctx, `SELECT codec, bit_depth, sample_rate, COUNT(*) FROM run_items i
+		WHERE status = ? AND `+notLyricsItemSQL+`
 		GROUP BY codec, bit_depth, sample_rate
 		ORDER BY COUNT(*) DESC, codec, bit_depth, sample_rate`,
 		string(domain.ItemCompleted))

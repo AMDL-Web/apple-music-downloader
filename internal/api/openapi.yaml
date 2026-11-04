@@ -1907,7 +1907,9 @@ paths:
       description: |
         The scheduler stops queuing runs for the record, and its queued or
         running run is cancelled; running slots go back to pending and resume
-        checkpoints stay, so a resume continues partial downloads.
+        checkpoints stay, so a resume continues partial downloads. The answer
+        comes once that run has ended (up to 10 s), so a delete or reset
+        right after it is not refused.
       operationId: pauseLibraryRecord
       parameters:
         - $ref: '#/components/parameters/RecordKind'
@@ -2047,7 +2049,8 @@ paths:
           description: >-
             true keeps only the runs nothing has replaced: a run is left out
             once its record has a newer run (a station's run, once its link
-            has one) or its record is complete.
+            has one) or its record is complete with no failed, given-up or
+            missing slot.
           schema:
             type: boolean
             default: false
@@ -2624,8 +2627,9 @@ components:
       in: query
       description: >-
         Only records with any of these flags: failed, given_up, missing (a
-        track has a slot in that state), waiting (a failed slot waits for its
-        automatic retry), paused, unresolved (no read listed its tracks yet).
+        track has a slot in that state), waiting (a failed slot of a wanted,
+        listed track waits for its automatic retry), paused, unresolved (no
+        read listed its tracks yet).
       schema:
         type: array
         items:
@@ -3285,7 +3289,7 @@ components:
               type: integer
             tracks_completed:
               type: integer
-              description: Items with status completed (written by this backend).
+              description: Items with status completed (written by this backend); a lyrics reset's items are not tracks and are left out, as they are from codecs.
             tracks_skipped:
               type: integer
               description: Items with status skipped_existing (already on disk).
@@ -5050,7 +5054,7 @@ components:
       required: [tracks_wanted, tracks_done, tracks_failed, tracks_given_up, tracks_missing, state]
       description: Stored with the record and recomputed with every slot write.
       properties:
-        tracks_wanted: {type: integer, description: Wanted tracks the account storefront lists.}
+        tracks_wanted: {type: integer, description: Wanted tracks the account storefront lists, less those whose main slot no codec offers (unavailable).}
         tracks_done: {type: integer, description: Of those, tracks whose main slot is done.}
         tracks_failed: {type: integer, description: Tracks with a failed slot.}
         tracks_given_up: {type: integer, description: Tracks with a given-up slot.}
@@ -5094,7 +5098,7 @@ components:
             catalog_state:
               type: string
               enum: [ok, not_in_storefront, gone]
-              description: Not ok after a 404 on a run's required read; the scheduler then skips the record until a reset.
+              description: Not ok after a 404 on a run's required read; the scheduler then skips the record until a manual add, download, resume or reset sets it ok again for a new read.
             wanted_all:
               type: boolean
               description: True for a whole album; false when tracks were added one by one.

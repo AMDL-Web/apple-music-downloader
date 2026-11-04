@@ -80,7 +80,17 @@ type surfaces struct {
 	doneTotal int
 	failTotal int
 	needsRuns []domain.Job
-	details   map[string]*struct {
+	waitTotal int
+	stats     struct {
+		Totals struct {
+			TracksCompleted int `json:"tracks_completed"`
+		} `json:"totals"`
+		Codecs []struct {
+			Codec  string `json:"codec"`
+			Tracks int    `json:"tracks"`
+		} `json:"codecs"`
+	}
+	details map[string]*struct {
 		recordView
 		Tracks []detailTrack `json:"tracks"`
 	}
@@ -119,7 +129,13 @@ func (r *rig) read() surfaces {
 		s.doneTotal += page.Total
 		r.call(http.MethodGet, "/library/"+kind+"?flag=failed&flag=given_up&flag=missing&limit=1", "", http.StatusOK, &page)
 		s.failTotal += page.Total
+		r.call(http.MethodGet, "/library/"+kind+"?flag=waiting&limit=1", "", http.StatusOK, &page)
+		s.waitTotal += page.Total
 	}
+	// GET /stats keeps an answer per days value for a while: each read asks
+	// for a days value not read before.
+	r.statsDays++
+	r.call(http.MethodGet, fmt.Sprintf("/stats?days=%d", r.statsDays), "", http.StatusOK, &s.stats)
 	var needs struct {
 		Downloads []domain.Job `json:"downloads"`
 	}
@@ -315,6 +331,36 @@ func (r *rig) check(step string, known ...knownDefects) surfaces {
 		if paused != listedPaused {
 			t.Errorf("summary paused %d, listed paused %d", paused, listedPaused)
 		}
+		if waiting := s.summary.Albums.Flags["waiting"] + s.summary.Playlists.Flags["waiting"]; waiting != s.waitTotal {
+			t.Errorf("summary waiting %d, ?flag=waiting total %d", waiting, s.waitTotal)
+		}
+	})
+	run("needs attention", func(t *testing.T) {
+		for _, j := range s.needsRuns {
+			set := s.albums
+			if j.ResourceKind == domain.ResourcePlaylist {
+				set = s.playlists
+			}
+			rec, ok := set[j.ResourceID]
+			if j.ResourceID == "" || !ok {
+				continue
+			}
+			if rec.State == domain.RecordComplete && rec.TracksFailed+rec.TracksGivenUp+rec.TracksMissing == 0 {
+				t.Errorf("failed run %s needs attention, yet its record %s is complete with nothing failed", j.ID, j.ResourceID)
+			}
+		}
+	})
+	run("stats", func(t *testing.T) {
+		sum := 0
+		for _, c := range s.stats.Codecs {
+			sum += c.Tracks
+			if c.Codec == "" {
+				t.Errorf("stats count %d tracks of no codec", c.Tracks)
+			}
+		}
+		if sum != s.stats.Totals.TracksCompleted {
+			t.Errorf("stats: %d tracks completed, %d by codec", s.stats.Totals.TracksCompleted, sum)
+		}
 	})
 	run("marks", func(t *testing.T) {
 		for _, id := range r.albumIDs() {
@@ -467,7 +513,7 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 	for _, overwrite := range []bool{false, true} {
 		step := fmt.Sprintf("overwrite %v", overwrite)
 		r.call(http.MethodDelete, "/library/albums/100", "", http.StatusNoContent, nil)
-		s = r.check(step+": record deleted")
+		s = r.check(step + ": record deleted")
 		if _, ok := s.albums["100"]; ok || s.pageMarks["100"] != nil || s.hitMarks["100"] != nil {
 			t.Fatalf("%s: album 100 still shows after its delete", step)
 		}
@@ -517,7 +563,6 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 	r.waitStarted()
 	r.call(http.MethodPost, "/library/albums/400/pause", "", http.StatusOK, nil)
 	t.Run("delete right after pause", func(t *testing.T) {
-		t.Skip("known defect, checklist i16 #12: pause returns before its run has ended")
 		if code := r.status(http.MethodDelete, "/library/albums/400", ""); code != http.StatusNoContent {
 			t.Errorf("delete right after pause = %d, want 204", code)
 		}
@@ -528,4 +573,75 @@ func TestRecordActionsKeepSurfacesConsistent(t *testing.T) {
 		r.call(http.MethodDelete, "/library/albums/400", "", http.StatusNoContent, nil)
 	}
 	r.check("record deleted")
+}
+
+// needsAttention reports whether a failed run of album id is among the runs
+// the console's Needs attention lists.
+func (s surfaces) needsAttention(id string) bool {
+	for _, j := range s.needsRuns {
+		if j.ResourceKind == domain.ResourceAlbum && j.ResourceID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// TestStuckAndUnseenStatesClear walks the states checklist i16 names: a
+// record its storefront did not have, a track no codec offers, a playlist
+// song gone while its failure waits, an extra quality that failed, and a
+// lyrics refresh; every surface agrees after each.
+func TestStuckAndUnseenStatesClear(t *testing.T) {
+	r := newRig(t, map[string][]string{
+		"600": {"61", "62"},
+		"700": {"71"},
+		"100": {"11", "12"},
+	}, map[string][]string{"pl.2": {"81", "82"}})
+
+	r.add("album|us|500")
+	s := r.check("album not in the storefront")
+	if a, ok := s.albums["500"]; !ok || a.State != domain.RecordNone {
+		t.Errorf("album 500 = %+v (%v), want a record with nothing downloaded", a, ok)
+	}
+	r.catalog.setAlbum("500", []string{"51"})
+	r.call(http.MethodPost, "/library/albums/500/download", "", http.StatusAccepted, nil)
+	s = r.check("downloaded once the storefront has it")
+	if a := s.albums["500"]; a.State != domain.RecordComplete {
+		t.Errorf("album 500 after Download = %+v, want complete", a)
+	}
+
+	r.proc.setUnavailable("62", true)
+	r.add("album|us|600")
+	s = r.check("a track no codec offers")
+	if a := s.albums["600"]; a.State != domain.RecordComplete || a.TracksWanted != 1 {
+		t.Errorf("album 600 = %+v, want complete without the track no codec offers", a)
+	}
+
+	r.proc.setFailing("82", true)
+	r.add("playlist|us|pl.2")
+	s = r.check("a playlist song failed")
+	if s.waitTotal != 1 {
+		t.Errorf("records waiting for a retry = %d, want the playlist", s.waitTotal)
+	}
+	r.catalog.setPlaylist("pl.2", []string{"81"})
+	r.call(http.MethodPost, "/library/playlists/pl.2/reset", `{"what":"audio","songs":["81"]}`, http.StatusOK, nil)
+	s = r.check("the failed song left the playlist")
+	if p := s.playlists["pl.2"]; s.waitTotal != 0 || p.TracksFailed != 0 || p.State != domain.RecordComplete {
+		t.Errorf("after the song left: %d waiting, playlist %+v; want none waiting and the playlist complete", s.waitTotal, p)
+	}
+
+	r.add("album|us|700")
+	r.check("an album")
+	r.proc.setFailing("71/aac", true)
+	r.call(http.MethodPost, "/library/albums/700/download", `{"codec":"aac"}`, http.StatusAccepted, nil)
+	s = r.check("its extra quality failed")
+	if a := s.albums["700"]; a.State != domain.RecordComplete || a.TracksFailed != 1 || !s.needsAttention("700") {
+		t.Errorf("album 700 = %+v, needs attention %v; want complete, one failed track, and its run in Needs attention", a, s.needsAttention("700"))
+	}
+
+	r.add("album|us|100")
+	before := r.check("before a lyrics refresh").stats.Totals.TracksCompleted
+	r.call(http.MethodPost, "/library/albums/100/reset", `{"what":"lyrics"}`, http.StatusOK, nil)
+	if after := r.check("lyrics refreshed").stats.Totals.TracksCompleted; after != before {
+		t.Errorf("tracks completed %d after a lyrics refresh, %d before", after, before)
+	}
 }

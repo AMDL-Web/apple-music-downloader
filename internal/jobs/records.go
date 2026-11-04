@@ -263,6 +263,11 @@ func (m *Manager) afterAddLocked(ctx context.Context, kind domain.ResourceKind, 
 	if err != nil {
 		return "", domain.Job{}, err
 	}
+	if trigger == domain.TriggerManual {
+		if rec.catalog, err = m.recatalogLocked(ctx, kind, id, rec.catalog, now); err != nil {
+			return "", domain.Job{}, err
+		}
+	}
 	if rec.paused || rec.catalog != domain.CatalogOK {
 		return AddRecorded, domain.Job{}, nil
 	}
@@ -297,6 +302,20 @@ func (m *Manager) afterAddLocked(ctx context.Context, kind domain.ResourceKind, 
 	return AddQueued, job, nil
 }
 
+// recatalogLocked clears a record's not_in_storefront or gone mark when the
+// user asks for it again: only a run's read can find it again, and the mark
+// kept every run from starting. A run whose read still finds nothing marks
+// it again. Caller holds m.mu.
+func (m *Manager) recatalogLocked(ctx context.Context, kind domain.ResourceKind, id string, state domain.CatalogState, now time.Time) (domain.CatalogState, error) {
+	if state == domain.CatalogOK {
+		return state, nil
+	}
+	if err := m.store.SetCatalogState(ctx, kind, id, domain.CatalogOK, now); err != nil {
+		return state, err
+	}
+	return domain.CatalogOK, nil
+}
+
 func triggerFor(source domain.RecordSource) domain.RunTrigger {
 	switch source {
 	case domain.SourceLibrarySync:
@@ -311,8 +330,9 @@ func triggerFor(source domain.RecordSource) domain.RunTrigger {
 
 // Pause stops a record: the picker no longer queues runs for it, and its
 // active run is cancelled with the cause ErrPaused (its running slots go back
-// to pending and its resume checkpoints stay). Pausing a paused record does
-// nothing more.
+// to pending and its resume checkpoints stay). It returns once that run has
+// ended, up to pauseWait, so a delete or reset right after is not refused.
+// Pausing a paused record does nothing more.
 func (m *Manager) Pause(ctx context.Context, kind domain.ResourceKind, id string) error {
 	if err := m.store.SetPaused(ctx, kind, id, true, time.Now().UTC()); err != nil {
 		return err
@@ -327,7 +347,39 @@ func (m *Manager) Pause(ctx context.Context, kind domain.ResourceKind, id string
 		// The run finished between the lookup and the stop.
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	m.awaitRunEnd(ctx, active)
+	return nil
+}
+
+// pauseWait bounds how long Pause waits for its run to wind down; a run
+// slower than that still ends on its own.
+const pauseWait = 10 * time.Second
+
+// awaitRunEnd waits until run jobID has no worker, finalize sequence or
+// hook left, up to pauseWait or ctx's end.
+func (m *Manager) awaitRunEnd(ctx context.Context, jobID string) {
+	deadline := time.NewTimer(pauseWait)
+	defer deadline.Stop()
+	tick := time.NewTicker(20 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		m.mu.Lock()
+		busy := m.cancels[jobID] != nil || m.finalizing[jobID] || m.hooks.Pending(jobID)
+		m.mu.Unlock()
+		if !busy {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline.C:
+			return
+		case <-tick.C:
+		}
+	}
 }
 
 // Resume clears a record's paused flag and queues its run when it needs one,
@@ -440,6 +492,9 @@ func (m *Manager) reset(ctx context.Context, r ResetRequest) (ResetResult, error
 	}
 	rec, err := m.recordStatus(ctx, r.Kind, r.ID)
 	if err != nil {
+		return result, err
+	}
+	if _, err := m.recatalogLocked(ctx, r.Kind, r.ID, rec.catalog, now); err != nil {
 		return result, err
 	}
 	if rec.paused {
