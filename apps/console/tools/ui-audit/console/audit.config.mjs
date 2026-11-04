@@ -77,6 +77,7 @@ const SCENARIOS = [
       { id: 'live-progress', title: 'live progress for 3 s', allowMove: BADGE, run: live(12) },
       { id: 'job-finishes', title: 'a job finishes', run: live(30, 120), hold: 300 },
       nav('#/queue'),
+      nav('#/logs'),
       { id: 'theme-toggle', title: 'theme toggle', expectThemeChange: true, ignoreFocus: true, run: (ctx) => ctx.page.locator('.theme button, button.theme-cycle').first().click() },
     ],
   },

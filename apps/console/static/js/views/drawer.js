@@ -104,12 +104,14 @@ export function JobDrawer({ jobId, onClose }) {
   };
 
   const job = detail && detail.job;
+  // The job shown is the previous one until jobId's snapshot arrives.
+  const stale = Boolean(job && job.id !== jobId);
   // A 404 after the job was on screen means it was deleted; a 404 for a job
   // never loaded (a typo in the link, a job gone before the page opened)
   // says only that no download has this id.
-  const gone = Boolean((detail && detail.deleted) || (error && error.status === 404));
-  const deleted = gone && Boolean(job);
-  const missing = gone && !job;
+  const gone = Boolean((detail && !stale && detail.deleted) || (error && error.status === 404));
+  const deleted = gone && Boolean(job) && !stale;
+  const missing = gone && (!job || stale);
   // Deleted elsewhere while the confirm asked: the question is gone, and
   // focus, which was in it, goes to the drawer's Close.
   useEffect(() => {
@@ -139,12 +141,14 @@ export function JobDrawer({ jobId, onClose }) {
               <${Empty} icon="circle-slash" title="No download with this id" />`
           : deleted
           ? html`<h2 id="drawer-title" class="sr-only">Job deleted</h2><${Empty} icon="circle-slash" title="This job was deleted" />`
-          : !job && error
+          : (!job || stale) && error
             ? html`<${ErrorNote} title="Couldn't load this job" error=${error} onRetry=${refetch} />`
             : !job
               ? html`<h2 id="drawer-title" class="sr-only">Loading job</h2><${SkeletonRows} n=${8} kind="track" />`
               : html`<${DrawerBody}
+                  key=${job.id}
                   detail=${detail}
+                  stale=${stale}
                   streamEnded=${streamEnded}
                   onChanged=${() => reopen(true)}
                   onDelete=${() => setDeleting('ask')}
@@ -171,7 +175,7 @@ export function JobDrawer({ jobId, onClose }) {
   </div>`;
 }
 
-function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
+function DrawerBody({ detail, stale, streamEnded, onChanged, onDelete, app }) {
   const { job, items, hooks, activity } = detail;
   const unresolved = isUnresolved(job);
   // A link that failed before Apple named anything reads as in the queue row
@@ -198,7 +202,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
   // A finished job with no tracks (a link that never resolved) has nothing to list.
   const tracks = items.length > 0 || !isTerminal(job.status);
 
-  return html`<div class="drawer-body">
+  return html`<div class="drawer-body" data-stale=${stale ? '' : undefined} inert=${stale || undefined} aria-busy=${stale ? 'true' : undefined}>
     <header class="drawer-head" style=${paletteStyle(palette)}>
       <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${240} widths=${HEAD_ART} sizes="(max-width: 639px) 88px, 112px" className="art-64" eager>
         ${job.motion_artwork_url ? html`<${MotionCover} job=${job} size=${112} />` : null}

@@ -296,6 +296,18 @@ last answer of each read (the status store below; `lib/cache.js`: the
 Queue's list per tab and filter, Needs attention) while it reads again,
 instead of its placeholders.
 
+A change never draws an emptied view between the old and the new. A move
+to another page keeps the page drawn, its head included, while the next
+mounts unseen over it at the place it will take (`.page-view.is-pending`),
+and swaps them once the next page's root drops `data-held` and
+`data-pending` (Activity before its first rows, Logs before its first
+page), or after `lib/page-swap.js` `PAGE_HOLD_MS`; the sidebar and the tab
+bar mark the new page at once. The job drawer switching jobs, the Logs
+page changing its filter, and New download opening an artist over its
+hits keep what they show until the new answer replaces it whole; the
+drawer and the log view quiet it (`[data-stale]`) only after 300 ms, and
+an artist's own skeleton shows only after the same hold.
+
 Motion: 120 ms hover color fades, 200 ms drawer/palette/toast/insert,
 `--ease-out` in. Movement uses only `transform` and `opacity` (stage and meter
 fills: `scaleX`, linear); never `transition: all`. The running pulse and the

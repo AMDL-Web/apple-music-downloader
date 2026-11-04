@@ -893,7 +893,7 @@
 
   /* An open section's head is the back link and the section title; the
      page's "Settings" stays for screen readers and as the focus target. */
-  .main:has(> .page-settings[data-view="section"]) > .page-head {
+  .page-view:has(> .page-settings[data-view="section"]) > .page-head {
     position: absolute;
     width: 1px;
     height: 1px;

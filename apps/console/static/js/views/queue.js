@@ -278,7 +278,8 @@ export function QueuePage({ route }) {
       streams.more ? html`<div key="more" class="queue-more" aria-hidden="true"><${SkeletonJobRows} n=${2} /></div>` : null,
     ];
 
-  return html`<div class="page page-queue" data-tab=${filters.tab} data-selecting=${selecting || bulk.run ? '' : undefined} data-held=${held ? '' : undefined}>
+  // data-pending: no row is in yet, so a page change keeps the last page drawn meanwhile (lib/page-swap.js).
+  return html`<div class="page page-queue" data-tab=${filters.tab} data-selecting=${selecting || bulk.run ? '' : undefined} data-held=${held ? '' : undefined} data-pending=${!ready && rows.length === 0 ? '' : undefined}>
     <div class="toolbar">
       <${Segmented} label="Show" options=${tabs} value=${filters.tab} onChange=${chooseTab} />
       <div class="toolbar-filters">

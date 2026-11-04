@@ -88,6 +88,14 @@
   flex-direction: column;
   gap: var(--s-5);
   padding: var(--s-5);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* Switching jobs: the one shown stays until the next replaces it, quieted
+   only when the answer is slow. */
+.drawer-body[data-stale] {
+  opacity: 0.55;
+  transition-delay: 300ms;
 }
 
 .drawer-head {

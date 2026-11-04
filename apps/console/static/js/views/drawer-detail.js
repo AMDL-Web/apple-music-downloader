@@ -31,7 +31,7 @@ export function useDrawerDetail({ jobId, app }) {
       (body) => {
         if (jobIdRef.current !== jobId) return null;
         setError(null);
-        setDetail((d) => (d ? mergeSnapshot(d, body) : detailFromSnapshot(body)));
+        setDetail((d) => (d && d.job && body.job && d.job.id === body.job.id ? mergeSnapshot(d, body) : detailFromSnapshot(body)));
         return body;
       },
       (err) => {
@@ -40,8 +40,10 @@ export function useDrawerDetail({ jobId, app }) {
       },
     );
 
+  // Switching to another job keeps the one shown until the new snapshot
+  // replaces it whole, so the drawer never empties or grows back between
+  // them; JobDrawer marks it stale meanwhile.
   useEffect(() => {
-    setDetail(null);
     setError(null);
     setStreamEnded(false);
     refetch();
@@ -52,7 +54,7 @@ export function useDrawerDetail({ jobId, app }) {
   useEffect(() => {
     if (!loaded) return undefined;
     setStreamEnded(false);
-    const coalescer = createCoalescer((batch) => setDetail((d) => (d ? applyJobEvents(d, batch) : d)), 100);
+    const coalescer = createCoalescer((batch) => setDetail((d) => (d && d.job && d.job.id === jobId ? applyJobEvents(d, batch) : d)), 100);
     // From the start, not from the snapshot's cursor: the events at or before
     // it only fill Activity (lib/store.js applyJobEvents), which is how a job
     // opened after it finished still shows what happened.

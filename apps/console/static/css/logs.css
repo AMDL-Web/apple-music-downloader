@@ -234,6 +234,14 @@
   font-family: var(--font-mono);
   font-size: var(--fs-12);
   line-height: var(--lh-mono-12);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* A filter change: the records shown stay until the new ones answer, quieted
+   only when the answer is slow. */
+.log-view[data-stale] {
+  opacity: 0.55;
+  transition-delay: 300ms;
 }
 
 .log-view:focus-visible {

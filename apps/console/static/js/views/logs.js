@@ -9,12 +9,15 @@ import { appendLogs, emptyLogs, LOG_CAP } from '../lib/store.js';
 import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
 import { buildHash, logFilters, logParams, logQuery, LOG_LEVELS, LOG_COMPONENTS } from '../lib/route.js';
 import { useApp, Icon, Button, Empty, ErrorNote, SkeletonRows, StatusText } from '../ui/components.js';
-import { useDebounced, useMedia } from '../ui/hooks.js';
+import { useDebounced, useLate, useMedia } from '../ui/hooks.js';
 import { LogRow } from './logs-row.js';
 import { connectionView, LOG_RETENTION_OFF } from '../lib/status.js';
 
 const FOLLOW_SLACK_PX = 24;
 const INITIAL_LIMIT = 200;
+// How long the live line keeps saying live while the tail reconnects for a
+// new filter, before it says what the stream says.
+const SWITCH_HOLD_MS = 1500;
 
 /**
  * Titles of the jobs the log mentions, by id: the most recently updated 200
@@ -74,9 +77,22 @@ export function LogsPage({ route }) {
   const q = useDebounced(qInput, 300);
   const [logs, setLogs] = useState(emptyLogs());
   const [loading, setLoading] = useState(true);
+  // A filter change keeps the records shown until the new page answers
+  // (refreshing), and the live line keeps saying so while the tail
+  // reconnects for the new filter (switching), so neither blanks.
+  const [refreshing, setRefreshing] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const [error, setError] = useState(null);
   const [live, setLive] = useState(true);
   const [streamState, setStreamState] = useState('connecting');
+  const shown = useRef(logs);
+  shown.current = logs;
+  const streamStateRef = useRef(streamState);
+  streamStateRef.current = streamState;
+  const switchLate = useLate(switching, SWITCH_HOLD_MS);
+  useEffect(() => {
+    if (switching && (streamState === 'live' || switchLate)) setSwitching(false);
+  }, [switching, streamState, switchLate]);
   const [expanded, setExpanded] = useState(() => new Set());
   const narrow = useMedia('(max-width: 639px)');
   const [wrap, setWrap] = useState(narrow);
@@ -124,22 +140,31 @@ export function LogsPage({ route }) {
   // Initial page for the current filters.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (shown.current.entries.length > 0) {
+      setRefreshing(true);
+      setSwitching(streamStateRef.current === 'live');
+    } else {
+      setLoading(true);
+      setLogs(emptyLogs());
+    }
     setError(null);
-    setLogs(emptyLogs());
-    setExpanded(new Set());
-    setUnseen(0);
-    setFollow(true);
     listLogs(logQuery(filters, { limit: INITIAL_LIMIT })).then(
       (page) => {
         if (cancelled) return;
-        setLogs((s) => ({ ...appendLogs(s, page.logs || []), truncated: Boolean(page.truncated), cursor: page.next_cursor }));
+        // A new page replaces the rows whole (gen keys them), so rows of both pages are not moved into place.
+        setLogs({ ...appendLogs(emptyLogs(), page.logs || []), truncated: Boolean(page.truncated), cursor: page.next_cursor, gen: (shown.current.gen || 0) + 1 });
+        setExpanded(new Set());
+        setUnseen(0);
+        setFollow(true);
         setLoading(false);
+        setRefreshing(false);
       },
       (err) => {
         if (cancelled) return;
+        setLogs(emptyLogs());
         setError(err);
         setLoading(false);
+        setRefreshing(false);
       },
     );
     return () => {
@@ -149,8 +174,8 @@ export function LogsPage({ route }) {
 
   // Live tail from the cursor after the initial page; pausing keeps the cursor.
   useEffect(() => {
-    if (loading || error || !live) {
-      setStreamState(live ? 'connecting' : 'paused');
+    if (loading || refreshing || error || !live) {
+      if (!refreshing) setStreamState(live ? 'connecting' : 'paused');
       return undefined;
     }
     const coalescer = createCoalescer((batch) => {
@@ -165,7 +190,10 @@ export function LogsPage({ route }) {
         const entry = parseData(ev);
         if (entry) coalescer.push(entry);
       },
-      onState: (s) => setStreamState(s.state),
+      // stop() reports 'stopped' on every filter change; the next client says what follows.
+      onState: (s) => {
+        if (s.state !== 'stopped') setStreamState(s.state);
+      },
       onEnd: ({ status, body }) => {
         const err = body && body.error;
         if (status === 400) setError({ status, message: (err && err.message) || 'Invalid filter' });
@@ -179,7 +207,7 @@ export function LogsPage({ route }) {
       client.stop();
       releaseSecondary(client);
     };
-  }, [key, loading, error === null, live]);
+  }, [key, loading, refreshing, error === null, live]);
 
   // Follow the bottom after new rows while the reader is at the bottom.
   useLayoutEffect(() => {
@@ -224,7 +252,7 @@ export function LogsPage({ route }) {
   const sv = retentionOff
     ? { icon: 'circle-minus', role: 'neutral', label: 'Off' }
     : live
-      ? connectionView(streamState)
+      ? connectionView(switching ? 'live' : streamState)
       : { icon: 'pause', role: 'neutral', label: 'Paused' };
 
   let body;
@@ -243,7 +271,7 @@ export function LogsPage({ route }) {
         : null,
       ...logs.entries.map(
         (e) => html`<${LogRow}
-          key=${e.sequence}
+          key=${`${logs.gen}:${e.sequence}`}
           entry=${e}
           open=${expanded.has(e.sequence)}
           stop=${e.sequence === tabSeq}
@@ -255,7 +283,7 @@ export function LogsPage({ route }) {
       ),
     ];
 
-  return html`<div class="page page-logs">
+  return html`<div class="page page-logs" data-pending=${loading ? '' : undefined}>
     <div class="toolbar toolbar-logs">
       <${Button}
         size="sm"
@@ -312,6 +340,8 @@ export function LogsPage({ route }) {
       <div class="card-body">
       <div
         class=${wrap ? 'log-view is-wrap' : 'log-view'}
+        data-stale=${refreshing ? '' : undefined}
+        aria-busy=${refreshing ? 'true' : undefined}
         role="log"
         aria-label="Process logs"
         aria-live="off"

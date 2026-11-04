@@ -254,6 +254,30 @@
   outline: none;
 }
 
+/* The page drawn and, while a page change waits for the next page to be
+   ready, that page unseen over it at the place it will take
+   (lib/page-swap.js), so the swap moves nothing. */
+.page-stack {
+  position: relative;
+  min-width: 0;
+}
+
+.page-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+.page-view.is-pending {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .tabbar {
   display: none;
 }

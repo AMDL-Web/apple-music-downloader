@@ -8,6 +8,7 @@ import { sectionById } from './lib/settings-sections.js';
 import { pastedLinks } from './lib/links.js';
 import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
 import { count, pageSummary } from './lib/format.js';
+import { followRoute, settle, pageReady, PAGE_HOLD_MS } from './lib/page-swap.js';
 
 // Pages whose head has a live summary line: the line is there before the counts are.
 const SUB_PAGES = ['overview', 'queue'];
@@ -89,6 +90,26 @@ function leaveField(e) {
   el.blur();
 }
 
+/** The page component of route r. */
+function pageFor(r) {
+  switch (r.page) {
+    case 'overview':
+      return html`<${OverviewPage} />`;
+    case 'queue':
+      return html`<${QueuePage} route=${r} />`;
+    case 'library':
+      return html`<${LibraryPage} route=${r} />`;
+    case 'logs':
+      return html`<${LogsPage} key=${'logs'} route=${r} />`;
+    case 'new':
+      return html`<${DownloadPage} route=${r} />`;
+    case 'settings':
+      return html`<${SettingsPage} route=${r} />`;
+    default:
+      return html`<div class="card"><div class="card-body"><p>This page does not exist. <a class="link" href=${buildHash('overview')}>Go to the overview</a>.</p></div></div>`;
+  }
+}
+
 export function App() {
   const { route, navigate, resumeLeave, setLeaveGuard } = useHashRouter();
   const [theme, setThemeState] = useState(loadTheme);
@@ -96,6 +117,38 @@ export function App() {
   const opener = useRef(null);
   const mainRef = useRef(null);
   const h1Ref = useRef(null);
+
+  // A move to another page keeps the page drawn until the next one is ready
+  // (lib/page-swap.js): `shown` is the route drawn, `pending` the one
+  // mounting unseen over it. The sidebar, the tab bar and the document
+  // title follow `route` at once.
+  const swapRef = useRef(null);
+  const [, redraw] = useState(0);
+  swapRef.current = followRoute(swapRef.current, route);
+  const { shown, pending } = swapRef.current;
+  const pendingRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!pending) return undefined;
+    const page = pending.page;
+    const swap = () => {
+      const s = swapRef.current;
+      if (!s.pending || s.pending.page !== page) return;
+      swapRef.current = settle(s);
+      redraw((n) => n + 1);
+    };
+    const root = pendingRef.current && pendingRef.current.querySelector(':scope > .page');
+    if (pageReady(root)) {
+      swap();
+      return undefined;
+    }
+    const watch = new MutationObserver(() => pageReady(root) && swap());
+    watch.observe(root, { attributes: true, attributeFilter: ['data-held', 'data-pending'] });
+    const late = setTimeout(swap, PAGE_HOLD_MS);
+    return () => {
+      watch.disconnect();
+      clearTimeout(late);
+    };
+  }, [pending && pending.page]);
 
   const setTheme = useCallback((t) => {
     setThemeState(t);
@@ -171,14 +224,16 @@ export function App() {
   // A job's or a record's drawer over the page.
   const drawer = route.jobId || (route.record ? `${route.record.kind}/${route.record.id}` : null);
   // Focus: a new page focuses its heading; the drawer returns focus to the row that opened it.
-  const prevPage = useRef(route.page);
-  useEffect(() => {
-    if (prevPage.current !== route.page) {
+  // It runs at the swap, in the frame the new page is drawn: before it the
+  // page shown is the old one, and its scroll and focus stay.
+  const prevPage = useRef(shown.page);
+  useLayoutEffect(() => {
+    if (prevPage.current !== shown.page) {
       window.scrollTo(0, 0);
       if (!drawer && h1Ref.current) h1Ref.current.focus({ preventScroll: true });
     }
-    prevPage.current = route.page;
-  }, [route.page]);
+    prevPage.current = shown.page;
+  }, [shown.page]);
   // A layout effect: it reads the opener at commit, before the drawer's own
   // effect (a child's, so it runs first) moves focus into the panel.
   const prevJob = useRef(drawer);
@@ -195,7 +250,7 @@ export function App() {
   }, [drawer]);
 
   // After the heading focus above, so a palette result for a setting lands on its field.
-  useFieldFocus(route);
+  useFieldFocus(shown);
 
   const closeDrawer = useCallback(() => navigate(buildHash(route.page, route.params)), [route.page, route.params, navigate]);
 
@@ -319,31 +374,21 @@ export function App() {
     [navigate, toast, watchJobs, unwatchJobs, announce, subscribeFeed, counts, conn, epoch, recordsStamp, recordsChanged, simulate, defaultStorefront, setLeaveGuard, resumeLeave],
   );
 
-  const title = TITLES[route.page] || 'AMDL';
-  const summary = pageSummary(route.page, counts);
-  let page;
-  switch (route.page) {
-    case 'overview':
-      page = html`<${OverviewPage} />`;
-      break;
-    case 'queue':
-      page = html`<${QueuePage} route=${route} />`;
-      break;
-    case 'library':
-      page = html`<${LibraryPage} route=${route} />`;
-      break;
-    case 'logs':
-      page = html`<${LogsPage} key=${'logs'} route=${route} />`;
-      break;
-    case 'new':
-      page = html`<${DownloadPage} route=${route} />`;
-      break;
-    case 'settings':
-      page = html`<${SettingsPage} route=${route} />`;
-      break;
-    default:
-      page = html`<div class="card"><div class="card-body"><p>This page does not exist. <a class="link" href=${buildHash('overview')}>Go to the overview</a>.</p></div></div>`;
-  }
+  // One page with its head: the shown one, or the pending one, unseen and
+  // inert, laid out at the place it will take (.page-view.is-pending).
+  const view = (r, unseen) => {
+    const summary = pageSummary(r.page, counts);
+    return html`<div key=${r.page} class=${unseen ? 'page-view is-pending' : 'page-view'} ref=${unseen ? pendingRef : undefined} inert=${unseen || undefined} aria-hidden=${unseen ? 'true' : undefined}>
+      <div class="page-head">
+        <h1 class="page-title" tabindex="-1" ref=${unseen ? undefined : h1Ref}>${TITLES[r.page] || 'AMDL'}</h1>
+        ${summary || SUB_PAGES.includes(r.page) ? html`<p class="page-sub">${summary || '\u00a0'}</p>` : null}
+        ${r.page === 'settings' ? html`<div class="page-actions"><${KeysToggle} /></div>` : null}
+        ${r.page === 'logs' ? html`<div class="page-actions"><a class="btn btn-ghost btn-icon" href=${settingsHash('logging')} aria-label="Log settings" title="Log settings"><${Icon} name="settings" /></a></div>` : null}
+      </div>
+      <${Banners} conn=${conn} onRetry=${() => retryRef.current()} />
+      ${pageFor(r)}
+    </div>`;
+  };
 
   return html`<${AppContext.Provider} value=${ctx}>
     <div class="shell">
@@ -362,15 +407,8 @@ export function App() {
             <${ThemeControl} theme=${theme} setTheme=${setTheme} />
           </div>
         </header>
-        <main id="main" class="main" tabindex="-1" ref=${mainRef} data-page=${route.page}>
-          <div class="page-head">
-            <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
-            ${summary || SUB_PAGES.includes(route.page) ? html`<p class="page-sub">${summary || '\u00a0'}</p>` : null}
-            ${route.page === 'settings' ? html`<div class="page-actions"><${KeysToggle} /></div>` : null}
-            ${route.page === 'logs' ? html`<div class="page-actions"><a class="btn btn-ghost btn-icon" href=${settingsHash('logging')} aria-label="Log settings" title="Log settings"><${Icon} name="settings" /></a></div>` : null}
-          </div>
-          <${Banners} conn=${conn} onRetry=${() => retryRef.current()} />
-          ${page}
+        <main id="main" class="main" tabindex="-1" ref=${mainRef} data-page=${shown.page}>
+          <div class="page-stack">${[view(shown, false), pending ? view(pending, true) : null]}</div>
         </main>
       </div>
       <${TabBar} route=${route} library=${libraryOn} />

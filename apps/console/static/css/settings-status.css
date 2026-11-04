@@ -792,7 +792,7 @@ fieldset.field-control {
 
   /* The page head is for screen readers only in a section view; its
      button would be a focus stop no one sees. */
-  .main:has(> .page-settings[data-view="section"]) > .page-head > .page-actions {
+  .page-view:has(> .page-settings[data-view="section"]) > .page-head > .page-actions {
     display: none;
   }
 

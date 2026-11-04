@@ -19,8 +19,11 @@ import { Card, Button, Icon, Artwork, Skeleton, Notice } from '../ui/components.
 import { AlbumTile, ArtistTile, SkeletonTiles } from './download-tiles.js';
 import { HitRow, SkeletonHits } from './download-songs.js';
 import { GroupView } from './download-search-group.js';
+import { useLate } from '../ui/hooks.js';
 
 const ARTIST_ART = artWidths(120);
+// How long the hits stay over an artist whose albums have not answered.
+const ARTIST_HOLD_MS = 400;
 
 // Placeholders per group while the first answer loads: a typical answer,
 // so the page is about its final height when the hits arrive.
@@ -127,11 +130,16 @@ function ArtistView({ artist, hit, row, onBack, onMore, onRetry, onDownloadAll }
  */
 export function SearchCard({ s, term, tooLong, inputRef, openHit, focusArtist, row, onBack, onDownloadAll, group = '', onGroup, onAllResults }) {
   const { search, artist } = s;
-  const viewing = artist.status !== 'idle';
+  const haveHits = Boolean(search.data);
+  // An artist opened over the hits takes their place once its albums
+  // answer: the hits stay as they are until then, and the artist's
+  // skeleton shows only for a slow answer (ARTIST_HOLD_MS).
+  const artistWaiting = artist.status === 'loading' && haveHits;
+  const artistLate = useLate(artistWaiting, ARTIST_HOLD_MS);
+  const viewing = artist.status !== 'idle' && (!artistWaiting || artistLate);
   const alone = !viewing && !tooLong && Boolean(group);
   // Skeletons only while there is nothing to show; otherwise the last
   // answer stays, dimmed, through the debounce and the request.
-  const haveHits = Boolean(search.data);
   const loading = !viewing && !haveHits && (s.pending || search.status === 'loading');
   const stale = !viewing && haveHits && (s.pending || search.stale);
   const empty = !viewing && !alone && !loading && search.status === 'ready' && search.data && shownHits(search.data).length === 0;
