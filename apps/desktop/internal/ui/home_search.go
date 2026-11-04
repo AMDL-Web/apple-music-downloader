@@ -453,6 +453,13 @@ func (a *App) chosenHit(hits []client.SearchHit) *client.SearchHit {
 	return nil
 }
 
+// keyedRing reports whether the hit the keys chose shows its ring: while
+// the field keeps the keyboard, or nothing has it. Once Tab moves the
+// keyboard on, the control that has it shows the one ring.
+func (a *App) keyedRing(c *ui.Context) bool {
+	return a.searchKeyed && (a.field.Focused(c) || !c.Root().FocusWithin())
+}
+
 // moveHit picks the hit by steps after the chosen one, in reading order;
 // before any is chosen, Down picks the first and Up the last.
 func (a *App) moveHit(by int) {

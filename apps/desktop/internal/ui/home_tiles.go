@@ -87,7 +87,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 		art.Children(func() {
 			open := tileOpen(c, size, radius, h.Name)
 			if on {
-				if a.searchKeyed {
+				if a.keyedRing(c) {
 					focusRing(open, radius)
 				}
 				if a.searchReveal && !a.viewSwapping(c) {
@@ -348,7 +348,7 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 		card.Background(k.Raise2)
 	}
 	if on {
-		if a.searchKeyed {
+		if a.keyedRing(c) {
 			focusRing(card, radiusTile)
 		}
 		if a.searchReveal {
