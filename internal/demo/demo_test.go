@@ -418,21 +418,6 @@ func TestRecordActionsMatchTheBackend(t *testing.T) {
 	b, c, clk := newDemo(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	msgs := make(chan domain.DownloadFeedMessage, 4096)
-	live := make(chan bool, 1)
-	go c.FollowFeed(ctx, client.FeedHandlers{
-		Message: func(m domain.DownloadFeedMessage) { msgs <- m },
-		State: func(s client.ConnState) {
-			if s.Phase == client.Live {
-				live <- true
-			}
-		},
-	})
-	select {
-	case <-live:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the feed never went live")
-	}
 	l, _ := c.Downloads(ctx, client.ListQuery{})
 	var run0 domain.Job
 	for _, j := range l.Downloads {
@@ -461,6 +446,23 @@ func TestRecordActionsMatchTheBackend(t *testing.T) {
 	}
 	if m, err := c.ResumeRecord(ctx, domain.ResourceAlbum, album); err != nil || m.ActiveJobID != "" {
 		t.Errorf("resume of the complete record: %+v, %v, want no run", m, err)
+	}
+	// The feed opens now: a feed that falls behind loses messages, as the
+	// simulated minutes above would make it.
+	msgs := make(chan domain.DownloadFeedMessage, 1024)
+	live := make(chan bool, 1)
+	go c.FollowFeed(ctx, client.FeedHandlers{
+		Message: func(m domain.DownloadFeedMessage) { msgs <- m },
+		State: func(s client.ConnState) {
+			if s.Phase == client.Live {
+				live <- true
+			}
+		},
+	})
+	select {
+	case <-live:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the feed never went live")
 	}
 	if err := c.DeleteRecord(ctx, domain.ResourceAlbum, album); err != nil {
 		t.Fatal(err)
