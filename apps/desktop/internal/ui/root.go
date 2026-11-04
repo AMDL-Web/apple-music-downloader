@@ -132,6 +132,19 @@ func (a *App) shortcuts(c *ui.Context) {
 	}
 }
 
+// captionGap is the room kept between the title bar's buttons and the window
+// buttons at its right. Windows' caption buttons are 46 wide and take
+// the hover over their whole box, so a button 8 from them is a slip away
+// from Close; the other systems' controls are small and round.
+var captionGap = captionGapFor(runtime.GOOS)
+
+func captionGapFor(goos string) float32 {
+	if goos == "windows" {
+		return 16
+	}
+	return 8
+}
+
 // titleBar is the content's top strip, which drags the window, clear of
 // the window controls; with the sidebar closed it keeps the traffic lights
 // and the sidebar button (sidebarToggle) on the content's own ground.
@@ -139,7 +152,7 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 	bar := c.TitleBar()
 	right := float32(18)
 	if bar.Right > 0 {
-		right = bar.Right + 8
+		right = bar.Right + captionGap
 	}
 	left := float32(18)
 	if !sidebar {

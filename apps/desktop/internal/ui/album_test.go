@@ -216,3 +216,32 @@ func TestAlbumOfOneDownloadedSongOffersTheRest(t *testing.T) {
 		t.Errorf("mark of an album whose songs are all downloaded = %v, want done", mark)
 	}
 }
+
+// The album page's buttons in the title bar keep clear of the window's own
+// buttons at its right by captionGap, 16 on Windows, whose caption buttons
+// take the hover over their whole box.
+func TestTheTitleBarsButtonsKeepClearOfTheWindowButtons(t *testing.T) {
+	if captionGapFor("windows") < 16 || captionGapFor("linux") != 8 || captionGapFor("darwin") != 8 {
+		t.Fatalf("gaps: windows %v, linux %v, darwin %v", captionGapFor("windows"), captionGapFor("linux"), captionGapFor("darwin"))
+	}
+	const captions = 138 // three of Windows' 46-wide caption buttons
+	defer func(g float32) { captionGap = g }(captionGap)
+	for _, gap := range []float32{8, 16} {
+		captionGap = gap
+		a, albums := searchApp(t)
+		a.PageMotion = false
+		tt := ui.NewTester(a.View, 1280, 800)
+		tt.SetScale(1)
+		tt.SetTitleBar(ui.TitleBar{Height: 32, Right: captions})
+		a.OpenAlbum(albums[0])
+		tt.Frame()
+		tt.Frame()
+		btn, ok := tt.Find("Download " + albums[0].Name + " again")
+		if !ok {
+			t.Fatalf("no download button in the title bar: %q", tt.Texts())
+		}
+		if room := 1280 - (btn.X + btn.W) - captions; room < gap-0.5 || room > gap+0.5 {
+			t.Errorf("gap %v: the button ends %.1f from the window buttons", gap, room)
+		}
+	}
+}
