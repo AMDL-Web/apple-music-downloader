@@ -222,8 +222,9 @@ type flight struct {
 	views, viewsPrev []ui.Rect
 	// grow is set while the page shown opened from a cover it grows out of
 	// (flight_grow.go); main is the main column's box in the window as the
-	// frame before laid it out; ride is how far the surface carries the page
-	// from its place in this frame, ridePrev in the frame before; growFrom
+	// frame before laid it out; ride is where the growing page's origin is
+	// in this frame, from the main column's, ridePrev in the frame before;
+	// growFrom
 	// and growRadius the cover's box and corners it grows from, as last
 	// seen, growTo and growToRadius the page's, as last laid out.
 	grow bool
@@ -237,6 +238,13 @@ type flight struct {
 	growRadius     float32
 	growTo         ui.Rect
 	growToRadius   float32
+	// growClipTop and growClipBottom are how much of the cover grown from
+	// its list's bars cut (flightClip).
+	growClipTop, growClipBottom float32
+	// page is the growing page's box in the window, at scale, which
+	// puts its cover where the flying cover is (growBox).
+	page  ui.Rect
+	scale float32
 	// surface is the growing page's surface in this frame, in the window
 	// (growSurface).
 	surface ui.Rect

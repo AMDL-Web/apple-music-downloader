@@ -8,17 +8,16 @@ import (
 )
 
 // An album page opened from a cover other than the queue hero's (a search
-// tile, a row, the wall, a song) grows out of that cover: it is an opaque
-// surface whose rounded box is the flying cover's own until the page's
-// parts start to show, then opens from it to the main column's as they
-// fade in (opened), with the page, title bar included, laid out at its
-// full size from the box's top-left corner, so what is on the page moves
-// with it. Nothing of the page lies beyond what has grown, and nothing
-// under it shows through it. The screen under it stays whole, blurred and
-// dimmed as far as the surface has opened (motionTune). The cover flies on
-// q, inside the box all the way; the page's light comes in from the plain
-// ground; its other parts fade in late, in place on the surface
-// (lateShown). Going out runs the same way back. The hero's page morphs
+// tile, a row, the wall, a song) grows out of that cover: the page, title
+// bar included, is laid out at its full size and scaled and placed so that
+// its own cover is the flying cover, which goes on q from the cover clicked
+// to its place on the page; it shows through an opaque surface whose
+// rounded box is the flying cover's until the page's parts start to show
+// and then opens from it to the whole page as they fade in (lateShown).
+// Whatever of the surface shows is the page, and nothing under it shows
+// through it. The screen under it stays whole, blurred and dimmed as far
+// as the surface has opened (motionTune). The page's light comes in from
+// the plain ground. Going out runs the same way back. The hero's page morphs
 // into place instead (flight.go).
 
 // growLand is the q at which a page going back into its cover has landed.
@@ -38,13 +37,9 @@ func (a *App) lateShown() float32 {
 }
 
 // opened is how far the growing surface has opened from the flying cover
-// to the main column: not at all until the page's parts start to show
-// (lateShown), all of it as the page lands, so that it opens with them
-// while the cover still flies and ends with q. An opaque box wider than
-// the cover before the parts show would lead it as an empty box.
-func (a *App) opened() float32 {
-	return smoothstep(a.tune.Text, 1, a.fly.q)
-}
+// to the whole page: as far as the page's parts show (lateShown), so that
+// no more of its ground shows than they fill.
+func (a *App) opened() float32 { return a.lateShown() }
 
 func smoothstep(a, b, x float32) float32 {
 	if b <= a {
@@ -57,39 +52,45 @@ func smoothstep(a, b, x float32) float32 {
 	return t * t * (3 - 2*t)
 }
 
-// growBox is the surface's box in this frame, in the main column's
-// coordinates, main being the main column's box in the window, and its
-// corner radius: the flying cover's box and corners, which go on q from
-// the cover the page opened from (the last box it was seen at) to the
-// page's, opened that far (opened) to the whole column.
-func (f *flight) growBox(main ui.Rect, open float32) (ui.Rect, float32) {
+// growBox is, in this frame and in the main column's coordinates, main
+// being the main column's box in the window, the surface's box and corner
+// radius, and the page's: its box, at its scale, which puts its own cover
+// where the flying cover is. The flying cover goes on q from the cover the
+// page opened from (the last box it was seen at) to the page's (the last
+// place it was laid out); the surface opens that far (open) from the part
+// of it its list shows to the page's box.
+func (f *flight) growBox(main ui.Rect, open float32) (box ui.Rect, radius float32, page ui.Rect) {
 	full := ui.Rect{W: main.W, H: main.H}
 	if !f.growing() {
-		return full, 0
+		return full, 0, full
 	}
 	if src := f.src[partCover]; src.ok && src.box.W > 0 {
+		f.growFrom, f.growRadius = src.box, src.size
 		// The part of the cover its list shows: a tile cut by the bar over
 		// its list grows from under that bar, as the cover is cut
 		// (clipCover).
-		top, bottom := f.flightClip(src.box)
-		b := src.box
-		b.Y, b.H = b.Y+top, max(0, b.H-top-bottom)
-		f.growFrom, f.growRadius = b, src.size
+		f.growClipTop, f.growClipBottom = f.flightClip(src.box)
 	}
-	from := f.growFrom
-	if from.W <= 0 {
-		// Nothing seen to grow from: the middle of the column.
+	from, to, q := f.growFrom, f.growTo, f.q
+	if from.W <= 0 || to.W <= 0 {
+		// Nothing seen to grow from, or the page not laid out yet: from
+		// the middle of the column, at its size.
 		from = ui.Rect{X: main.X + main.W/2, Y: main.Y + main.H/2}
+		r := ui.Rect{X: lerp(from.X-main.X, 0, q), Y: lerp(from.Y-main.Y, 0, q), W: lerp(0, full.W, q), H: lerp(0, full.H, q)}
+		return r, 0, r
 	}
-	q := f.q
-	cover, radius := from, f.growRadius
-	if to := f.growTo; to.W > 0 {
-		cover = ui.Rect{X: lerp(from.X, to.X, q), Y: lerp(from.Y, to.Y, q), W: lerp(from.W, to.W, q), H: lerp(from.H, to.H, q)}
-		radius = lerp(f.growRadius, f.growToRadius, unit(q))
-	}
+	cover := ui.Rect{X: lerp(from.X, to.X, q), Y: lerp(from.Y, to.Y, q), W: lerp(from.W, to.W, q), H: lerp(from.H, to.H, q)}
 	cover.X, cover.Y = cover.X-main.X, cover.Y-main.Y
-	r := ui.Rect{X: lerp(cover.X, 0, open), Y: lerp(cover.Y, 0, open), W: lerp(cover.W, full.W, open), H: lerp(cover.H, full.H, open)}
-	return r, lerp(radius, 0, open)
+	scale := cover.W / to.W
+	at := ui.Point{X: to.X - main.X, Y: to.Y - main.Y}
+	page = ui.Rect{X: cover.X - scale*at.X, Y: cover.Y - scale*at.Y, W: scale * full.W, H: scale * full.H}
+	shown := cover
+	if cut := 1 - unit(q); cut > 0 {
+		shown.Y += f.growClipTop * cut
+		shown.H = max(0, shown.H-(f.growClipTop+f.growClipBottom)*cut)
+	}
+	box = ui.Rect{X: lerp(shown.X, page.X, open), Y: lerp(shown.Y, page.Y, open), W: lerp(shown.W, page.W, open), H: lerp(shown.H, page.H, open)}
+	return box, lerp(lerp(f.growRadius, f.growToRadius, unit(q)), 0, open), page
 }
 
 // growSurface builds the album page as the surface it grows on: over the
@@ -98,9 +99,14 @@ func (f *flight) growBox(main ui.Rect, open float32) (ui.Rect, float32) {
 func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) {
 	f := &a.fly
 	main := f.main
-	box, radius := f.growBox(main, a.opened())
-	f.ridePrev, f.ride = f.ride, ui.Point{X: box.X, Y: box.Y}
+	box, radius, pg := f.growBox(main, a.opened())
+	f.ridePrev, f.ride = f.ride, ui.Point{X: pg.X, Y: pg.Y}
 	f.surface = ui.Rect{X: main.X + box.X, Y: main.Y + box.Y, W: box.W, H: box.H}
+	f.page = ui.Rect{X: main.X + pg.X, Y: main.Y + pg.Y, W: pg.W, H: pg.H}
+	f.scale = 1
+	if main.W > 0 {
+		f.scale = pg.W / main.W
+	}
 	t := unit(f.q)
 	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground)
 	if lift := 4 * t * (1 - t); f.growing() && lift > 0.01 {
@@ -115,7 +121,11 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 		s.PassThrough()
 	}
 	s.Children(func() {
-		ui.Box(c).Absolute().Top(0).Left(0).Size(main.W, main.H).Children(func() {
+		layer := ui.Box(c).Absolute().Left(pg.X-box.X).Top(pg.Y-box.Y).Size(main.W, main.H)
+		if f.scale != 1 {
+			layer.TransformOrigin(0, 0).Scale(f.scale, f.scale)
+		}
+		layer.Children(func() {
 			b := paletteBackdrop(k, a.screenPalette(c, ScreenAlbum), false)
 			if f.growing() {
 				plain := paletteBackdrop(k, Palette{}, false)
@@ -168,26 +178,29 @@ var (
 
 // growEdges fades el, a part of the growing page that comes in late
 // (lateShown), towards the surface's right and bottom edges (growBand), so
-// the surface, smaller than the column the page is laid out for, does not
-// cut its words and rows as a hard line. The band comes in with the part,
-// and narrows to nothing as the surface reaches the column's edges, so
-// nothing changes as it lands. Each part takes it on its own: an effect on
-// a layer that holds the flying cover moves the cover off its way.
+// the surface, smaller than the page, does not cut its words and rows as a
+// hard line. The band comes in with the part, and narrows to nothing as
+// the surface reaches the page's edges, so nothing changes as it lands.
+// Each part takes it on its own: an effect on a layer that holds the
+// flying cover moves the cover off its way.
 func (a *App) growEdges(el ui.Element) {
 	f := &a.fly
-	if !f.growing() {
+	if !f.growing() || f.scale <= 0 {
 		return
 	}
-	main, s := f.main, f.surface
+	s, p := f.surface, f.page
 	band := growBand * a.lateShown()
-	bx, by := min(band, main.W-s.W), min(band, main.H-s.H)
+	bx, by := min(band, p.X+p.W-s.X-s.W), min(band, p.Y+p.H-s.Y-s.H)
 	if bx < 0.5 && by < 0.5 {
 		return
 	}
-	// Laid out where the surface carried the page in the frame before.
+	// In the page's own DIPs, which the page's scale draws smaller: el is
+	// laid out where the page was placed in the frame before.
 	b := el.LayoutBounds()
-	right := s.X + s.W - (b.X - f.ridePrev.X + f.ride.X)
-	bottom := s.Y + s.H - (b.Y - f.ridePrev.Y + f.ride.Y)
+	k := f.scale
+	right := (s.X+s.W-p.X)/k - (b.X - f.main.X - f.ridePrev.X)
+	bottom := (s.Y+s.H-p.Y)/k - (b.Y - f.main.Y - f.ridePrev.Y)
+	bx, by = bx/k, by/k
 	if b.W <= 0 || right >= b.W+bx && bottom >= b.H+by {
 		return
 	}
@@ -223,16 +236,20 @@ func (a *App) growDim(c *ui.Context) {
 
 // growCover shows el, the page's cover, laid out at dst, flying from src as
 // the page grows: on q from src's box to its own place on the page, which
-// is where the frame before laid it out less how far the surface had
-// carried it (ridePrev); this frame lays it out where the surface carries
-// it now (ride).
+// is where the frame before laid it out less where the page was placed
+// (ridePrev). The page is placed and scaled (growBox) to put it there
+// already; what the page's own layout and scale leave, as the frame in
+// which the page is first laid out, el's own scale and move make up.
 func (f *flight) growCover(el ui.Element, src flightSrc, dst ui.Rect, size float32) {
 	at := ui.Rect{X: dst.X - f.ridePrev.X, Y: dst.Y - f.ridePrev.Y, W: dst.W, H: dst.H}
 	f.cover, f.growTo, f.growToRadius = at, at, size
 	t := f.lead()
 	s := lerp(src.box.W, dst.W, t) / dst.W
-	el.TransformOrigin(0, 0).Scale(s, s).
-		Translate(lerp(src.box.X, at.X, t)-(at.X+f.ride.X), lerp(src.box.Y, at.Y, t)-(at.Y+f.ride.Y))
+	k := max(f.scale, 0.01)
+	// The page's origin in the window, about which it is scaled.
+	o := ui.Point{X: f.main.X + f.ride.X, Y: f.main.Y + f.ride.Y}
+	el.TransformOrigin(0, 0).Scale(s/k, s/k).
+		Translate((lerp(src.box.X, at.X, t)-o.X)/k-(at.X-f.main.X), (lerp(src.box.Y, at.Y, t)-o.Y)/k-(at.Y-f.main.Y))
 	if s > 0 {
 		el.Radius(lerp(src.size, size, t) / s)
 		f.clipCover(el, src.box, t, s)
