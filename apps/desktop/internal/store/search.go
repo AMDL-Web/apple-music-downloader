@@ -93,6 +93,8 @@ type Search struct {
 	gone map[string]bool
 	// songWatch holds the songs submitted from here, by HitKey, with when.
 	songWatch map[string]time.Time
+	// songReading counts the reads of the songs shown that are out.
+	songReading int
 }
 
 // ArtistPages is one artist and the pages of its albums read so far.
@@ -149,7 +151,7 @@ func (s *Store) WantSearch(term string) {
 	// A new term shows its own hits, not the artist opened from the last.
 	s.OpenArtist("")
 	if term == "" {
-		*q = Search{Region: q.Region, cache: q.cache, sent: q.sent, gone: q.gone, songWatch: q.songWatch, Starting: q.Starting, Artist: q.Artist, Album: q.Album, want: term, gen: q.gen}
+		*q = Search{Region: q.Region, cache: q.cache, sent: q.sent, gone: q.gone, songWatch: q.songWatch, Starting: q.Starting, Artist: q.Artist, Album: q.Album, songReading: q.songReading, want: term, gen: q.gen}
 		return
 	}
 	if s.showCachedSearch(term) {
@@ -460,7 +462,11 @@ func (s *Store) HitMark(h client.SearchHit) (MarkState, string) {
 			}
 		}
 	}
-	return MarkOf(s.HitRecord(h), h.Type == "song", h.TrackCount)
+	m, job := MarkOf(s.HitRecord(h), h.Type == "song", h.TrackCount)
+	if m == MarkNone && s.songInFlight(h) {
+		return MarkActive, ""
+	}
+	return m, job
 }
 
 // SubmitHit downloads exactly h under overrides (nil: the backend's
