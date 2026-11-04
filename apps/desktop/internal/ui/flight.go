@@ -49,16 +49,20 @@ const (
 	crossover = 0.2
 	// outLand is the q by which, going out, the screens have crossed back
 	// and the light has turned (cross, light): the cover settles the last
-	// of its way, about a fifth of it, over its own screen.
-	outLand = 0.08
+	// of its way over its own screen.
+	outLand = 0.12
 	// inCross and outCross are how much of q the screens take to cross
 	// (cross): coming in from the start, over the first few frames, and
-	// going out down to outLand.
-	inCross, outCross = 0.45, 0.3
+	// going out down to outLand, over about twelve frames, so that what
+	// only the screen under has, as the queue's recently finished row,
+	// comes in rather than pops in.
+	inCross, outCross = 0.45, 0.58
 	// inParts and outParts are the q from which the page's own parts show
-	// (partsFrom), as the screen under thins out, so the two overlap a
-	// little and the window never stands blank between them.
-	inParts, outParts = 0.3, 0.25
+	// (partsFrom): coming in, as the screen under thins out, so the two
+	// overlap a little and the window never stands blank between them;
+	// going out, they are gone before the screen under starts to show
+	// (cross), so that no word of the page is left over one of the screen.
+	inParts, outParts = 0.3, 0.72
 	// panelLined is the q from which the lower panel's top line shows, as
 	// it lands.
 	panelLined = 0.85

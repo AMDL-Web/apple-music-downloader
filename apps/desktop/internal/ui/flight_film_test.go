@@ -247,6 +247,8 @@ func TestARowsGreyCoverColorsInAsItFlies(t *testing.T) {
 	})
 	tt.Advance(time.Second)
 	tt.Frame()
+	rest := image.NewRGBA(tt.Image().Bounds())
+	copy(rest.Pix, tt.Image().Pix)
 	if err := tt.Click(failed.Name()); err != nil {
 		t.Fatalf("no row for %q: %v", failed.Name(), err)
 	}
@@ -255,18 +257,19 @@ func TestARowsGreyCoverColorsInAsItFlies(t *testing.T) {
 	if !a.fly.moving || !a.fly.src[partCover].ok {
 		t.Fatal("the page does not fly from the row")
 	}
-	first := saturation(tt, a.fly.src[partCover].box)
+	box := a.fly.src[partCover].box
+	first, still := saturation(tt.Image(), box), saturation(rest, box)
 	flyFrames(a, tt, 120)
 	page, ok := tt.Find("Artwork")
 	if !ok {
 		t.Fatal("no cover on the page")
 	}
-	landed := saturation(tt, page)
-	if landed < 40 {
-		t.Fatalf("the landed cover shows saturation %d: no colors to compare", landed)
+	landed := saturation(tt.Image(), page)
+	if landed < 40 || landed < still+20 {
+		t.Fatalf("the landed cover shows saturation %d, the row's %d: no colors to compare", landed, still)
 	}
-	if first > landed/2 {
-		t.Errorf("the cover left the grey row with saturation %d of the landed %d: it was in color from the start", first, landed)
+	if first > still+(landed-still)/4 {
+		t.Errorf("the cover left the grey row (saturation %d) with %d of the landed %d: it was in color from the start", still, first, landed)
 	}
 }
 
@@ -298,20 +301,19 @@ func TestARecentCoverLeavesInItsColors(t *testing.T) {
 	if !a.fly.moving || a.fly.from != "wall:"+j.ID {
 		t.Fatalf("the page does not fly from the recent cover: %q", a.fly.from)
 	}
-	first := saturation(tt, a.fly.src[partCover].box)
+	first := saturation(tt.Image(), a.fly.src[partCover].box)
 	flyFrames(a, tt, 120)
 	page, ok := tt.Find("Artwork")
 	if !ok {
 		t.Fatal("no cover on the page")
 	}
-	if landed := saturation(tt, page); landed < 40 || first < landed/2 {
+	if landed := saturation(tt.Image(), page); landed < 40 || first < landed/2 {
 		t.Errorf("the recent cover left with saturation %d of the landed %d: it left grey", first, landed)
 	}
 }
 
 // saturation is the most saturated of a few points in the middle of r.
-func saturation(tt *ui.Tester, r ui.Rect) int {
-	img := tt.Image()
+func saturation(img *image.RGBA, r ui.Rect) int {
 	s := float32(img.Bounds().Dx()) / 1280
 	hi := 0
 	for dy := float32(-0.3); dy <= 0.3; dy += 0.1 {

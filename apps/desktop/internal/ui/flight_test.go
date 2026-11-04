@@ -118,9 +118,8 @@ func TestTheHeroCoverFliesToThePageAndBack(t *testing.T) {
 }
 
 // The cover sets off in the first frames, ahead of the rest of the page,
-// which follows it; going out, the queue comes back over the last stretch
-// of the cover's way and is whole only as it lands, rather than standing
-// still while the cover is still crossing it.
+// which follows it; going out, the queue comes in over several frames,
+// rather than popping in, and is whole before the cover lands.
 func TestTheCoverLeadsAndLandsWithTheQueue(t *testing.T) {
 	a, tt, j := flightApp(t)
 	from, ok := tt.Find("Open " + j.Name())
@@ -161,10 +160,20 @@ func TestTheCoverLeadsAndLandsWithTheQueue(t *testing.T) {
 	if len(out) == 0 {
 		t.Fatal("no frame of the page going out")
 	}
+	coming, wholeAt := 0, -1
 	for i, f := range out {
-		if d := dist(f.box, from); f.under >= 1 && d > whole/4 {
-			t.Errorf("going out, frame %d: the queue is whole while the cover is still %.1f of %.1f from the hero", i, d, whole)
+		if f.under > 0 && f.under < 1 {
+			coming++
 		}
+		if f.under >= 1 && wholeAt < 0 {
+			wholeAt = i
+		}
+	}
+	if coming < 4 {
+		t.Errorf("going out, the queue came in over %d frames: it popped in", coming)
+	}
+	if wholeAt < 0 || wholeAt > len(out)-4 {
+		t.Errorf("going out, the queue was whole at frame %d of %d: not before the cover landed", wholeAt, len(out))
 	}
 }
 

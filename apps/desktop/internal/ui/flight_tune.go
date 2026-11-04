@@ -27,8 +27,8 @@ type motionTune struct {
 	replay bool
 }
 
-// tuneDefaults are the values the maintainer chose on the prototype.
-var tuneDefaults = motionTune{In: 420, Out: 420, Bounce: 0, Blur: 8, Dim: 0.17, Text: 0.76, Slow: 1}
+// tuneDefaults are the values the maintainer chose in the app.
+var tuneDefaults = motionTune{In: 300, Out: 320, Bounce: 0.05, Blur: 8, Dim: 0.38, Text: 0.38, Slow: 1}
 
 func tunePath() string {
 	dir, err := os.UserConfigDir()
