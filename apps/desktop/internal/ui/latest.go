@@ -147,8 +147,10 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: jobPalette(j, false).Bg, Size: size, Radius: radiusControl, Color: 1, Video: video}.Show(c)
 		}
 		frame.Children(cover)
-		if f := &a.fly; f.moving && !f.grow && strings.HasPrefix(f.from, "hero:") && lift <= 0.01 {
-			// Its copy over the page stands for it (flightCopies).
+		if f := &a.fly; f.moving && f.ready && !f.grow && strings.HasPrefix(f.from, "hero:") && lift <= 0.01 {
+			// Its copy over the page stands for it (flightCopies), once
+			// the page shows: before, the page is laid out hidden, and
+			// its copy with it.
 			f.wall = append(f.wall, flightWall{box: frame.Bounds(), build: cover})
 			frame.Opacity(0)
 		}
