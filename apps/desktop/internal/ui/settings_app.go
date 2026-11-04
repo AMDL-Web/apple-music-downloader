@@ -152,14 +152,13 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		})
 	}
 	if d.Mode == mode.Standalone {
-		ui.Column(c).Gap(6).Children(func() {
+		card(c, k).Gap(6).Children(func() {
 			ui.Text(c, "ffmpeg").FontSize(12).FontWeight(600)
-			placeholder := "Not found — set a path"
+			placeholder := "Not found"
 			if p, src, err := ffmpeg.Find("", a.Dirs.Resources); err == nil {
 				placeholder = fmt.Sprintf("%s · %s", src, p)
 			}
 			field(c, k, "ffmpeg", &d.FFmpeg, placeholder, true)
-			ui.Text(c, "Leave empty to use the one found here.").FontSize(11.5).TextColor(k.Faint)
 		})
 	}
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
