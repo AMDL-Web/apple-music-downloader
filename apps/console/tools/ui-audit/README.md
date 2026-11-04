@@ -81,6 +81,8 @@ then a report job joins them with `merge`. The console has one skin, so skin is 
 axis. The artifact `console-ui-audit-<commit>` (kept 14 days) holds `index.html`, `report.json`,
 `result.json` and the screenshots; the run's summary page lists the counts and the high
 findings. Nothing here fails a build: past the threshold the job only annotates a warning.
+A scenario that throws, or a browser that dies mid-run, is recorded as a failed step (the summary lists it) and
+the results gathered so far are still written.
 Screenshots from the runner use Linux fonts, so pixels differ from a Mac run and a
 before → after `diff` is only meaningful between two CI runs.
 

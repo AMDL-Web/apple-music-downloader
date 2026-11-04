@@ -58,6 +58,7 @@ export async function audit(cfg, opts) {
   try {
     for (const engine of opts.engines) {
       const browser = engine === 'chrome' ? await pw.chromium.launch({ channel: 'chrome', headless: true }) : await pw.webkit.launch({ headless: true });
+      let lost = false;
       try {
         for (const v of variantsOf(cfg, { ...opts, engines: [engine] })) {
           const vt = Date.now();
@@ -83,12 +84,23 @@ export async function audit(cfg, opts) {
             if (sc.themes && !sc.themes.includes(v.theme)) continue;
             if (sc.engines && !sc.engines.includes(engine)) continue;
             errors.length = 0;
-            const run = await runScenario({ cfg, app, page, context, sc, v, pcfg, out, opts, phone, engine });
+            let run;
+            try {
+              run = await runScenario({ cfg, app, page, context, sc, v, pcfg, out, opts, phone, engine });
+            } catch (e) {
+              // One broken scenario (or a browser that died) must not cost the whole report.
+              run = { scenario: sc.id, title: sc.title || sc.id, variant: v.id, engine, width: v.width, theme: v.theme, findings: [], transitions: [], metrics: {}, setupError: String(e.message || e).split('\n')[0] };
+            }
             run.errors = [...new Set(errors)].slice(0, 10);
             result.runs.push(run);
-            if (opts.log) opts.log(`${v.id} ${sc.id}: ${run.skipped ? `skipped (${run.skipped})` : `${run.findings.length} findings, ${run.ms} ms`}`);
+            if (opts.log) opts.log(`${v.id} ${sc.id}: ${run.skipped ? `skipped (${run.skipped})` : run.setupError ? `failed (${run.setupError})` : `${run.findings.length} findings, ${run.ms} ms`}`);
+            if (!browser.isConnected()) {
+              lost = true;
+              break;
+            }
           }
-          await context.close();
+          await context.close().catch(() => {});
+          if (lost) break;
           result.timings[v.id] = Date.now() - vt;
         }
       } finally {
