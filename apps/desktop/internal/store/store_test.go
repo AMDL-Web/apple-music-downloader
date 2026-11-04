@@ -316,6 +316,33 @@ func TestActivityListsEachEventOnceNewestFirst(t *testing.T) {
 	}
 }
 
+// A run of one song is not the album its link names, whatever the record
+// says: with the album's record never made, or removed, the album link
+// pasted while the song's run is queued is still ready to add.
+func TestASongRunIsNotItsAlbumLinkRunning(t *testing.T) {
+	s, _ := newTestStore(t)
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
+		{ID: "j", Type: "song", Status: domain.JobQueued, Input: "https://music.apple.com/cn/album/x/1782838884?i=1782838897"},
+	}})
+	album := domain.ResourceRef{Kind: domain.ResourceAlbum, ID: "1782838884"}
+	for _, c := range []struct {
+		name string
+		mark *domain.ResourceMark
+		gone bool
+	}{
+		{"no record", nil, false},
+		{"record removed", &domain.ResourceMark{Kind: album.Kind, ID: album.ID, State: domain.RecordComplete, WantedAll: true}, true},
+	} {
+		if c.gone {
+			s.Records.gone[album] = true
+		}
+		l := &Link{State: LinkReady, Lookup: client.Lookup{Type: "album", ID: album.ID, TrackCount: 5, Resource: c.mark}}
+		if j := s.Running(l); j != nil {
+			t.Errorf("%s: the album link is running %s, the run of one of its songs, want it ready", c.name, j.ID)
+		}
+	}
+}
+
 // A run of an album record that wants only the songs added one by one does
 // not hold the album: its link and its hit offer the add, which the backend
 // accepts, and a run of the whole album still holds them.
