@@ -34,6 +34,17 @@ func (a *App) lateShown() float32 {
 	return smoothstep(from, min(1, from+0.35), a.fly.q)
 }
 
+// groundGrown is how much of the growing page's ground shows: none at the
+// cover, all of it by the time the page's parts start to show (lateShown).
+// The box sets off larger than the cover at once, so an opaque ground
+// would show as a box over the tile beside it in the first frame.
+func (a *App) groundGrown() float32 {
+	if !a.fly.growing() {
+		return 1
+	}
+	return smoothstep(0, a.tune.Text, a.fly.q)
+}
+
 func smoothstep(a, b, x float32) float32 {
 	if b <= a {
 		if x >= b {
@@ -83,8 +94,9 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 	box, radius := f.growBox(main)
 	f.ridePrev, f.ride = f.ride, ui.Point{X: box.X, Y: box.Y}
 	t := unit(f.q)
-	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground)
-	if lift := 4 * t * (1 - t); f.growing() && lift > 0.01 {
+	ground := a.groundGrown()
+	s := ui.Box(c.Key("surface")).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Clip().Radius(radius).Background(k.Ground.Alpha(ground))
+	if lift := 4 * t * (1 - t) * ground; f.growing() && lift > 0.01 {
 		s.Shadow(0, 10*lift, 24*lift, 0, ui.RGBA(0, 0, 0, 0.18*lift))
 	}
 	if !f.ready {
