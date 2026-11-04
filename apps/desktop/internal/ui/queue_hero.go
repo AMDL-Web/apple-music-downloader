@@ -23,12 +23,14 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	}
 	pal := jobPalette(j, video != nil)
 	hc := a.heroInk(c, pal, k)
-	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.End).Children(func() {
+	// The words line up with the cover at its top and its bottom: the names
+	// at the top, the bar at the bottom, the percent and the buttons as well.
+	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.Stretch).Children(func() {
 		a.heroCover(c, j, func() ui.Element {
 			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: 1, Video: video}.Show(c)
 		})
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
-			a.heroNames(c, k, j, "", hc, compact)
+		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Justify(ui.SpaceBetween).Children(func() {
+			ui.Column(c).Gap(10).Children(func() { a.heroNames(c, k, j, "", hc, compact) })
 			ui.Column(c).MaxWidth(600).Gap(6).Margin(6, 0, 0, 0).Children(func() {
 				widgets.StageBar{Stages: j.Stages, Color: hc.accent, Track: k.Track, Height: 10, Gap: 3, Running: true, Still: a.scrolling(c)}.Show(c, "hero-bar")
 				ui.Row(c).Children(func() {
@@ -41,7 +43,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		if compact {
 			return
 		}
-		ui.Column(c).AlignItems(ui.End).Gap(10).Children(func() {
+		ui.Column(c).AlignItems(ui.End).Gap(10).Justify(ui.SpaceBetween).Children(func() {
 			// The number keeps the room of three digits, so reaching 100
 			// takes nothing from the title beside it.
 			ui.Box(c).Children(func() {
@@ -172,7 +174,7 @@ func (a *App) heroCover(c *ui.Context, j *store.Job, show func() ui.Element) {
 		a.openingFrom(heroFrom(j))
 		a.OpenJob(j.ID)
 	}
-	b.Cursor(ui.CursorPointer).Scale(1+0.02*lift, 1+0.02*lift).Children(func() {
+	b.AlignSelf(ui.Center).Cursor(ui.CursorPointer).Scale(1+0.02*lift, 1+0.02*lift).Children(func() {
 		a.flySourceCover(show(), heroFrom(j), radiusCover, 1, 0, 1)
 	})
 }
