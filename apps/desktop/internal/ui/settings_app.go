@@ -30,7 +30,6 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		f.wrapperBase = now
 	}
 	ui.Column(c).Gap(10).Children(func() {
-		label(c, k, "Where downloads run")
 		ui.Row(c).Gap(14).Children(func() {
 			modeCard := func(m mode.Kind, ic *ui.SVG, title string) {
 				on, off := d.Mode == m, a.Demo && m == mode.Standalone
@@ -251,7 +250,6 @@ func (a *App) checkList(c *ui.Context, k *Tokens, checks []mode.Check) {
 
 func (a *App) appearanceSettings(c *ui.Context, k *Tokens) {
 	ui.Column(c).Gap(8).Children(func() {
-		label(c, k, "Theme")
 		theme := a.set.theme
 		// A row, so the track is as wide as its choices.
 		ui.Row(c).Children(func() { segmented(c, k, "theme", &a.set.theme, []string{"System", "Light", "Dark"}, nil) })
