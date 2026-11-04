@@ -219,3 +219,21 @@ func TestTheLibraryKeepsTheMarksOfTheRecordsItRead(t *testing.T) {
 		t.Errorf("an item with no record has the mark %+v", got)
 	}
 }
+
+// A kind read before shows again at once when it is chosen back, as it
+// was, while it is read again: the Library never stands empty while the
+// backend answers, which looked like every cover loading again.
+func TestAKindChosenBackShowsItsLastListAtOnce(t *testing.T) {
+	f := &appleCopy{albums: 12, songs: 30}
+	s, settle := live(t, f)
+	l := &s.Library
+	s.OpenLibrary()
+	settle(func() bool { return l.AppleStatus == SearchReady })
+	s.SetAppleKind("songs")
+	settle(func() bool { return l.AppleStatus == SearchReady && l.Apple.Kind == "songs" })
+	s.SetAppleKind("albums")
+	if l.AppleStatus != SearchReady || len(l.Apple.Items) != 12 || l.Apple.Kind != "albums" {
+		t.Fatalf("albums chosen back: status %v, %d items of %q", l.AppleStatus, len(l.Apple.Items), l.Apple.Kind)
+	}
+	settle(func() bool { return l.AppleStatus == SearchReady && len(l.Apple.Items) == 12 })
+}

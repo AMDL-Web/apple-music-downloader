@@ -97,6 +97,9 @@ type Library struct {
 	// AppleAccount is the account whose copy the Apple tab shows: the
 	// default's until the status names the accounts with their copy on.
 	AppleAccount string
+	// appleRead are the lists last read, by account and kind, which a
+	// switch back to one shows at once while it is read again (showApple).
+	appleRead map[string]client.AppleLibraryPage
 	// Kept are the catalog ids amdl has a record of, marking Apple's items.
 	Kept map[string]bool
 	// Marks are the records' marks as the last read of them had them, by
@@ -158,8 +161,19 @@ func (s *Store) SetAppleKind(kind string) {
 	if l.AppleKind == kind {
 		return
 	}
-	l.AppleKind, l.Apple, l.AppleStatus = kind, client.AppleLibraryPage{}, SearchIdle
+	l.AppleKind = kind
+	l.showApple()
 	l.refresh(s)
+}
+
+// showApple shows the shown account's list of the shown kind as it was
+// last read, or nothing while it was never read.
+func (l *Library) showApple() {
+	if page, ok := l.appleRead[l.AppleAccount+"\x00"+l.AppleKind]; ok {
+		l.Apple, l.AppleStatus, l.AppleErr = page, SearchReady, ""
+		return
+	}
+	l.Apple, l.AppleStatus = client.AppleLibraryPage{}, SearchIdle
 }
 
 // AppleAccounts are the status entries of the accounts whose Apple library
@@ -224,7 +238,8 @@ func (s *Store) SetAppleAccount(id string) {
 	if l.AppleAccount == id {
 		return
 	}
-	l.AppleAccount, l.Apple, l.AppleStatus = id, client.AppleLibraryPage{}, SearchIdle
+	l.AppleAccount = id
+	l.showApple()
 	l.Tracks = map[string][]domain.AppleLibraryTrack{}
 	l.refresh(s)
 }
@@ -327,6 +342,10 @@ func (l *Library) readApple(s *Store, gen int) {
 				return
 			}
 			l.AppleStatus, l.AppleErr, l.Apple = SearchReady, "", page
+			if l.appleRead == nil {
+				l.appleRead = map[string]client.AppleLibraryPage{}
+			}
+			l.appleRead[account+"\x00"+kind] = page
 		})
 	}()
 }
