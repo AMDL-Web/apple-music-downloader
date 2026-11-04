@@ -24,6 +24,9 @@
 //     is the history; each step runs once, in its own transaction, preserves
 //     user data, and is never edited after it ships in a release. Versions 2
 //     to 5 (the 2.0 release candidates) are refused at open.
+//   - A run's resource_kind and resource_id name a record that exists or one
+//     a pending add will make (migration 8, DeletePending); a run of no
+//     record stores NULL in both.
 //   - Every Job the store returns carries item counters derived from run_items
 //     by the jobColumns select list; no counter is stored.
 //   - A record's rollup (tracks_wanted, tracks_done, the flag counts, state)

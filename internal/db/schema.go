@@ -36,6 +36,7 @@ var migrations = []migrationStep{
 	{0, 1, func(ctx context.Context, tx *sql.Tx, _ migrationEnv) error { return migrateTo1(ctx, tx) }}, // the final 1.x schema, for databases created by any 1.x release
 	{1, 6, migrateTo6}, // 2.0: records, files, runs; imports the 1.x jobs
 	{6, 7, migrateTo7}, // accounts: per-account library state, record and pending-add storefronts
+	{7, 8, migrateTo8}, // runs that name a missing record name none
 }
 
 // latestSchemaVersion is the user_version a database has after Open.

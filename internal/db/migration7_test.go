@@ -72,8 +72,8 @@ func TestMigration7KeepsEveryRowAndAddsAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open schema 6: %v", err)
 	}
-	if got := userVersion(t, store.db); got != 7 {
-		t.Fatalf("user_version = %d, want 7", got)
+	if got := userVersion(t, store.db); got != latestSchemaVersion() {
+		t.Fatalf("user_version = %d, want %d", got, latestSchemaVersion())
 	}
 	after := dumpV6(t, store.db)
 	for table, rows := range before {

@@ -422,7 +422,7 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 
 Back up `amdl.db` first: the upgrade rewrites the 1.x tables and cannot be undone
 except from that copy. The first start runs the migrations, each in its own transaction
-(schema version 7, `PRAGMA user_version`):
+(schema version 8, `PRAGMA user_version`):
 
 - every 1.x job becomes a run in `runs`, keeping its id, type, values and
   timestamps; `started_at` and `finished_at` are backfilled from its events
@@ -454,6 +454,12 @@ except from that copy. The first start runs the migrations, each in its own tran
   it the default and sets its `library_sync` switch to `library_sync.enabled` and its
   `apple_library` switch on, so a library monitor that was syncing keeps syncing. An empty
   pin reads in the default account's storefront, as before.
+- migration 8 clears `resource_kind` and `resource_id` (to `NULL`, as on a station run) on
+  every run whose album or playlist record does not exist: the finished album and catalog
+  playlist jobs the import made no record for, and runs a release candidate kept when it
+  deleted their record. A run whose paused add (a job the upgrade stopped) will still make
+  its record keeps it. Such a run is shown, retried and removed as a run of no record; the
+  row and its items and events stay.
 
 A database written by a 2.0 release candidate (schema 2 to 5) is refused with a
 message; move it aside and start again. A 1.x build opening the migrated file finds no

@@ -94,10 +94,57 @@ func (s *Store) ListPending(ctx context.Context, state domain.PendingAddState) (
 }
 
 // DeletePending removes a pending add: the resolver did it, or the user
-// dropped it.
+// dropped it. Runs that name the record the add would have made (the 1.x
+// import's stopped jobs) name none when that record does not exist and no
+// other add will make it, as migration 8 left them (detachRunsOfMissingRecord).
 func (s *Store) DeletePending(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM pending_adds WHERE id = ?`, id)
-	return requirePendingRow(res, err)
+	_, err := withTx(ctx, s.db, func(tx *sql.Tx) (struct{}, error) {
+		var kind, catalogID, albumHint string
+		if err := tx.QueryRowContext(ctx, `SELECT kind, catalog_id, album_hint FROM pending_adds WHERE id = ?`, id).
+			Scan(&kind, &catalogID, &albumHint); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return struct{}{}, ErrPendingNotFound
+			}
+			return struct{}{}, err
+		}
+		if err := requirePendingRow(tx.ExecContext(ctx, `DELETE FROM pending_adds WHERE id = ?`, id)); err != nil {
+			return struct{}{}, err
+		}
+		switch domain.PendingAddKind(kind) {
+		case domain.PendingAlbum:
+			return struct{}{}, detachRunsOfMissingRecord(ctx, tx, domain.ResourceAlbum, catalogID)
+		case domain.PendingPlaylist:
+			return struct{}{}, detachRunsOfMissingRecord(ctx, tx, domain.ResourcePlaylist, catalogID)
+		case domain.PendingSong:
+			if albumHint != "" {
+				return struct{}{}, detachRunsOfMissingRecord(ctx, tx, domain.ResourceAlbum, albumHint)
+			}
+		}
+		return struct{}{}, nil
+	})
+	return err
+}
+
+// detachRunsOfMissingRecord stores no record on the runs of kind/id when that
+// record does not exist and no pending add will make it: an add of the same
+// kind and id, or a song add whose album hint is the album. A run must not
+// name a record that is not there, since a retry or a record delete of it
+// would find none.
+func detachRunsOfMissingRecord(ctx context.Context, tx *sql.Tx, kind domain.ResourceKind, id string) error {
+	table, err := recordTable(kind)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE runs SET resource_kind = NULL, resource_id = NULL
+		WHERE resource_kind = ?1 AND resource_id = ?2
+		AND NOT EXISTS (SELECT 1 FROM `+table+` r WHERE r.id = ?2)
+		AND NOT EXISTS (SELECT 1 FROM pending_adds p WHERE p.kind = ?1 AND p.catalog_id = ?2)
+		AND NOT (?1 = 'album' AND EXISTS (SELECT 1 FROM pending_adds p WHERE p.kind = 'song' AND p.album_hint = ?2))`,
+		string(kind), id)
+	if err != nil {
+		return fmt.Errorf("detach the runs of %s %s: %w", kind, id, err)
+	}
+	return nil
 }
 
 // RecordPendingFailure counts a failed resolve of a pending add and, when

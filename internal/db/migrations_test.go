@@ -38,8 +38,8 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	}
 	defer store.Close()
 	ctx := context.Background()
-	if got := userVersion(t, store.db); got != 7 {
-		t.Fatalf("user_version = %d, want 7", got)
+	if got := userVersion(t, store.db); got != 8 {
+		t.Fatalf("user_version = %d, want 8", got)
 	}
 	after := dumpAll(t, store.db)
 
@@ -134,10 +134,13 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 		t.Errorf("completed item of a stopped run = %v, want completed", got)
 	}
 
-	// Records named by runs, storefront dropped, legacy segment ignored.
+	// Records named by runs, storefront dropped, legacy segment ignored. A
+	// finished run whose record the import did not make (j-done, j-legacy,
+	// j-pl-other) names none after migration 8; a stopped one keeps the
+	// record its paused pending add will make.
 	wantResource := map[string]string{
-		"j-done": "album/1", "j-running": "album/2", "j-legacy": "album/10", "j-album-us9": "album/9", "j-album-jp9": "album/9",
-		"j-pl-us": "playlist/pl.u1", "j-pl-jp": "playlist/pl.u1", "j-pl-other": "playlist/pl.u2",
+		"j-done": "", "j-running": "album/2", "j-legacy": "", "j-album-us9": "album/9", "j-album-jp9": "album/9",
+		"j-pl-us": "playlist/pl.u1", "j-pl-jp": "playlist/pl.u1", "j-pl-other": "",
 		"j-pl-lib": "", "j-pl-lib-queued": "", "j-failed": "", "j-retried": "", "j-queued": "", "j-legacy-queued": "",
 	}
 	for id, want := range wantResource {
@@ -294,7 +297,7 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if done.CompletedItems != 2 || done.TotalItems != 2 || done.Overrides != nil || done.ResourceKind != domain.ResourceAlbum || done.ResourceID != "1" || done.Trigger != domain.TriggerImport1x {
+	if done.CompletedItems != 2 || done.TotalItems != 2 || done.Overrides != nil || done.ResourceKind != "" || done.ResourceID != "" || done.Trigger != domain.TriggerImport1x {
 		t.Errorf("j-done = %+v", done)
 	}
 	failed, err := store.GetJob(ctx, "j-failed")
@@ -405,8 +408,8 @@ func TestOpenCreatesLatestSchemaInFreshDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if got := userVersion(t, store.db); got != 7 || got != latestSchemaVersion() {
-		t.Fatalf("fresh user_version = %d, want 7 (latest %d)", got, latestSchemaVersion())
+	if got := userVersion(t, store.db); got != 8 || got != latestSchemaVersion() {
+		t.Fatalf("fresh user_version = %d, want 8 (latest %d)", got, latestSchemaVersion())
 	}
 	for _, table := range []string{"runs", "run_items", "run_events", "albums", "tracks", "playlists", "playlist_tracks", "files",
 		"pending_adds", "resource_sources", "deleted_resources", "check_runs", "library_sync_anchor",
