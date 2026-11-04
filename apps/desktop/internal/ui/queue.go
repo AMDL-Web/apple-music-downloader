@@ -32,13 +32,13 @@ func (a *App) heroJob() *store.Job {
 // comes in or goes out, the light turns with it, from the screen under it
 // to the page's, over the whole column at once.
 func (a *App) backdrop(c *ui.Context, k *Tokens) {
-	b := paletteBackdrop(k, a.screenPalette(c, a.Screen), a.Screen == ScreenHome)
+	b := a.screenBackdrop(c, k, a.Screen)
 	if f := &a.fly; f.moving {
 		under := a.Screen
 		if under == ScreenAlbum {
 			under = f.under
 		}
-		from := paletteBackdrop(k, a.screenPalette(c, under), under == ScreenHome)
+		from := a.screenBackdrop(c, k, under)
 		b = paletteBackdrop(k, a.screenPalette(c, ScreenAlbum), false)
 		b.From, b.Mix = &from, f.light()
 		if f.grow {
@@ -51,6 +51,18 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 	b.Show(c)
 }
 
+// screenBackdrop is the light of what s shows. The queue's reaches past
+// the discs' blur, as home's does: its bar lets the light fade into the
+// list's ground (groundRise), which a band ending at the album page's
+// height would cut across.
+func (a *App) screenBackdrop(c *ui.Context, k *Tokens, s Screen) widgets.Backdrop {
+	b := paletteBackdrop(k, a.screenPalette(c, s), s == ScreenHome)
+	if s == ScreenQueue {
+		b.Height = backdropReach
+	}
+	return b
+}
+
 // screenPalette is the palette of what s shows, if any.
 func (a *App) screenPalette(c *ui.Context, s Screen) Palette {
 	switch s {
@@ -60,24 +72,27 @@ func (a *App) screenPalette(c *ui.Context, s Screen) Palette {
 		return a.homePalette()
 	case ScreenQueue:
 		if j := a.heroJob(); j != nil {
-			// A narrow window's queue hero shows the still cover.
-			return jobPalette(j, !a.compact && a.motionShown(c, j.MotionArtworkURL))
+			// A compact queue hero shows the still cover.
+			return jobPalette(j, !a.heroCompact(c) && a.motionShown(c, j.MotionArtworkURL))
 		}
 	}
 	return Palette{}
 }
 
+// backdropReach is the height past which the discs' blur has faded out.
+const backdropReach = 560
+
 // paletteBackdrop lights the top of the main column with pal, or eases the
 // light out without one. Home's band reaches past the discs' blur, so the
 // light fades out above the results instead of ending in a line; the
-// queue's and the album page's end under their opaque lists.
+// album page's ends under its opaque list.
 func paletteBackdrop(k *Tokens, pal Palette, home bool) widgets.Backdrop {
 	strength, height := float32(0.55), float32(420)
 	switch {
 	case home && k.Dark:
-		strength, height = 0.45, 560
+		strength, height = 0.45, backdropReach
 	case home:
-		strength, height = 0.22, 560
+		strength, height = 0.22, backdropReach
 	case !k.Dark:
 		strength = 0.28
 	}
@@ -142,6 +157,23 @@ func jobQuality(j *store.Job) string {
 // 24/48 included.
 func isHiRes(q string) bool { return strings.HasPrefix(q, "ALAC 24/") }
 
+// The window heights, in DIPs, below which the queue's top gives up room
+// so the list under it keeps three rows of jobs (65 DIPs each): under
+// heroShort the full hero, whose list starts 476 DIPs down, takes its
+// compact form, as in a narrow window; under wallShort the recent covers,
+// with which the compact hero's list starts 417 down, go too.
+const (
+	heroShort = 476 + 3*65
+	wallShort = 417 + 3*65
+)
+
+// heroCompact reports whether the queue's hero takes its compact form: in
+// a narrow window or a short one.
+func (a *App) heroCompact(c *ui.Context) bool {
+	_, h := c.Size()
+	return a.compact || h < heroShort
+}
+
 // queueScreen is the main screen: the album downloading now, or else the
 // one that finished last, the covers of those before it, then the queue:
 // what runs and waits, then amdl's records and the stations' runs, one row
@@ -155,7 +187,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	if s.Loaded {
 		s.OpenQueue(tab)
 		if a.tabShown != a.Tab {
-			a.tabShown = a.Tab
+			a.tabShown, a.tabAt = a.Tab, c.Now()
 			s.ShowQueueTab(tab)
 		}
 	}
@@ -170,12 +202,14 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	finished := s.Finished()
 	var latest *store.Job
 	if j := s.Now(); j != nil {
-		a.hero(c, k, j, compact)
+		a.hero(c, k, j, a.heroCompact(c))
 	} else if len(finished) > 0 {
 		latest = finished[0]
-		a.latestHero(c, k, latest, compact)
+		a.latestHero(c, k, latest, a.heroCompact(c))
 	}
-	a.recentWall(c, k, finished, latest, compact)
+	if _, h := c.Size(); h >= wallShort {
+		a.recentWall(c, k, finished, latest, compact)
+	}
 	tabs := []string{"All", fmt.Sprintf("Active · %d", s.QueueCount(store.TabActive)), fmt.Sprintf("Done · %d", s.QueueCount(store.TabDone)),
 		fmt.Sprintf("Failed · %d", s.QueueCount(store.TabFailed))}
 	// Each count keeps the room of two digits, so a count going from 9 to 10
@@ -204,7 +238,10 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		adds = s.Queue.Adds
 	}
 	upNext := len(running)+len(queued) > 0
-	top := ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground)
+	// The bar's ground rises from clear at its top to the list's at its
+	// bottom, so the light over the hero ends in the bar rather than at
+	// its edge.
+	top := ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).LinearGradient(groundRise(k))
 	// The list's top, which the album page's lower panel flies from.
 	a.flyEdge(top)
 	top.Children(func() {
@@ -222,17 +259,38 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 			}
 		})
 	})
-	if !upNext && len(rows) == 0 && len(adds) == 0 {
-		switch {
-		case tab != store.TabActive && l.Status == store.SearchFailed:
-			queueFailed(c, k, l.Err, func() { s.RetryQueue(tab) })
-		case tab != store.TabActive && l.Status != store.SearchReady:
-			// The first read is out; what it brings takes the room.
-		default:
-			a.emptyQueue(c, k, latest != nil)
-		}
-		return
+	// What the filter shows changes as a switch does: its list, or what
+	// stands for it.
+	state := "list"
+	switch {
+	case upNext || len(rows) > 0 || len(adds) > 0:
+	case tab != store.TabActive && l.Status == store.SearchFailed:
+		state = "failed"
+	case tab != store.TabActive && l.Status != store.SearchReady:
+		// The first read is out; what it brings takes the room.
+		state = "reading"
+	default:
+		state = "empty"
 	}
+	shown := ui.Column(c.Key(fmt.Sprintf("queue-%d-%s", tab, state))).Grow(1).MinHeight(0)
+	shown.Transition(a.switchMotion(c, shown, a.tabAt)).Children(func() {
+		switch state {
+		case "failed":
+			queueFailed(c, k, l.Err, func() { s.RetryQueue(tab) })
+		case "empty":
+			a.emptyQueue(c, k, latest != nil)
+		case "list":
+			a.queueList(c, k, tab, rows, more, adds, running, queued, compact)
+		}
+	})
+}
+
+// queueList is the queue's list of filter tab: Up next, the failed adds,
+// then rows, one each, newest activity first, page after page.
+func (a *App) queueList(c *ui.Context, k *Tokens, tab store.Tab, rows []store.QueueRow, more bool, adds []domain.PendingAdd, running, queued []*store.Job, compact bool) {
+	s := a.Store
+	l := s.Queue.List(tab)
+	upNext := len(running)+len(queued) > 0
 	// The list's items: Up next as one, the failed adds as one, the
 	// heading of the rest, then the rest one by one, and the row that says
 	// a next page failed.
@@ -312,6 +370,18 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	a.settleQueueDrag(c, list)
 }
 
+// groundRise is the ground going from clear at the top to opaque at the
+// bottom, an inward ramp where a lit band meets an opaque list.
+func groundRise(k *Tokens) ui.LinearGradient {
+	stops := make([]ui.GradientStop, 0, 9)
+	for i := range 9 {
+		t := float32(i) / 8
+		// Smoothstep, so that neither end shows a crease.
+		stops = append(stops, ui.GradientStop{Color: k.Ground.Alpha(t * t * (3 - 2*t)), At: t})
+	}
+	return ui.LinearGradient{Angle: 180, Stops: stops}
+}
+
 // jobRow is one job of the queue: cover, names, stage bar with counts,
 // status pill, and a menu.
 func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place func(row ui.Element)) {
@@ -368,7 +438,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 			ui.Row(c).Children(func() {
 				mono(c, a.jobCount(j), 11).TextColor(k.Muted)
 				ui.Spacer(c)
-				note, col := rowNote(j, k, a.jobQualityText(j))
+				note, col := rowNote(j, k, a.jobQualityText(j), compact)
 				mono(c, note, 11).TextColor(col).Ellipsis("…")
 			})
 		})
@@ -411,9 +481,15 @@ func rowCount(j *store.Job) string {
 	return s
 }
 
-func rowNote(j *store.Job, k *Tokens, quality string) (string, ui.Color) {
+// rowNote is what the row says of j under its bar: why it failed, or its
+// quality. A queued job's wait is said by its pill, or here in a compact
+// row, which has none.
+func rowNote(j *store.Job, k *Tokens, quality string, compact bool) (string, ui.Color) {
 	switch j.Status {
 	case domain.JobQueued:
+		if !compact {
+			return "", k.Muted
+		}
 		return "waiting for a worker", k.Muted
 	case domain.JobFailed:
 		e := j.Error

@@ -12,7 +12,7 @@ import (
 // segmented control holds it.
 type libraryForm struct {
 	apple int
-	// kindAt is when another kind was chosen (appleMotion).
+	// kindAt is when another kind or account was chosen (switchMotion).
 	kindAt time.Time
 	// appleLists are the places of the Apple lists, by kind, and addedAt
 	// when each Apple item's Add was clicked, by URL.

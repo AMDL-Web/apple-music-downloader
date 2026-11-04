@@ -125,10 +125,11 @@ type App struct {
 	fly flight
 	// tune is how the album page grows, which the tuning panel changes.
 	tune motionTune
-	// Tab is the queue's filter, and tabShown the one its list last read
-	// for.
+	// Tab is the queue's filter, tabShown the one its list last read for,
+	// and tabAt when the list last changed filter (switchMotion).
 	Tab      int
 	tabShown int
+	tabAt    time.Time
 
 	// winW is the window's width as last built; compact is set while the
 	// page is narrower than compactContent. openNarrow is set while the
@@ -171,15 +172,14 @@ type App struct {
 	searchKeyed  bool
 	// keys are the window shortcuts' actions (shortcuts).
 	keys struct{ toggle, field, home, queue, library, settings, tune func() }
-	// groupsAt is when the search last changed tab, from groupsFrom, which
-	// groupsMoved asks the next frame to note (tabChange).
+	// groupsAt is when the search last changed tab, which groupsMoved asks
+	// the next frame to note (tabChange).
 	groupsAt time.Time
 	// groupsShown is the tab the search's last build asked for, and
 	// groupsLast the one the frame before showed, which the frame at
 	// groupsFrame shows (searchBody).
 	groupsShown, groupsLast string
 	groupsFrame             time.Time
-	groupsFrom              string
 	groupsMoved             bool
 	// viewArtist is the artist whose albums the search shows, "" for the
 	// results, since viewAt; viewScroll waits for the view going out to

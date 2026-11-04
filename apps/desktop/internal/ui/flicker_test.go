@@ -116,17 +116,29 @@ func abs32(v float32) float32 {
 // frames for further checks.
 func noFlash(t *testing.T, tt *ui.Tester, click string, answer func()) (before, mid, after frameSnap) {
 	t.Helper()
-	before = restOn(tt, click)
-	if err := tt.Click(click); err != nil {
-		t.Fatal(err)
-	}
+	restOn(tt, click)
+	return noFlashOn(t, tt, "clicking “"+click+"”", func() {
+		if err := tt.Click(click); err != nil {
+			t.Fatal(err)
+		}
+	}, answer)
+}
+
+// noFlashOn is noFlash for an action other than a click, as typing, which
+// act takes and what names.
+func noFlashOn(t *testing.T, tt *ui.Tester, what string, act, answer func()) (before, mid, after frameSnap) {
+	t.Helper()
+	tt.Frame()
+	before = snapFrame(tt)
+	act()
+	tt.Frame()
 	mid = snapFrame(tt)
 	answer()
 	tt.Frame()
 	after = snapFrame(tt)
 	d1, d2 := mid.differs(before), mid.differs(after)
 	if d1 != "" && d2 != "" {
-		t.Errorf("clicking %q flashes: the frame before its answer is neither the one before the click (%s) nor the one after the answer (%s)", click, d1, d2)
+		t.Errorf("%s flashes: the frame before its answer is neither the one before (%s) nor the one after the answer (%s)", what, d1, d2)
 	}
 	return before, mid, after
 }
@@ -452,4 +464,77 @@ func TestWaitingStatesShowOnlyOnceTheRequestIsSlow(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A search answers in place: more words keep the results as they are, and
+// a first search shows nothing below the field, until the answer, unless
+// the read has been out statusDelay, when the results dim or the skeleton
+// shows.
+func TestASearchWaitsInPlaceUntilItIsSlow(t *testing.T) {
+	stage := func(t *testing.T, words string) (*App, *ui.Tester, func(until func() bool)) {
+		a, run := liveApp(t, remoteSettings())
+		a.Screen = ScreenHome
+		tt := liveTester(a)
+		if words != "" {
+			a.Store.SetOmniText(words)
+			tt.Frame()
+			run(func() bool { return a.Store.Search.Status == store.SearchReady })
+			// The field docks as the first key lands.
+			tt.Advance(time.Second)
+		}
+		return a, tt, run
+	}
+	ready := func(a *App, run func(func() bool)) func() {
+		return func() { run(func() bool { return a.Store.Search.Status == store.SearchReady }) }
+	}
+	t.Run("more words", func(t *testing.T) {
+		a, tt, run := stage(t, "yoru")
+		noFlashOn(t, tt, "typing more words", func() { a.Store.SetOmniText("yoru elma") }, ready(a, run))
+	})
+	t.Run("more words, slow", func(t *testing.T) {
+		a, tt, run := stage(t, "yoru")
+		a.Store.SetOmniText("yoru elma")
+		tt.Frame()
+		mid := snapFrame(tt)
+		run(func() bool { return !a.Store.Search.Sent.IsZero() })
+		// The window draws again as the store changes.
+		tt.Frame()
+		tt.Advance(statusDelay - time.Millisecond)
+		if d := snapFrame(tt).differs(mid); d != "" {
+			t.Errorf("the results changed before statusDelay: %s", d)
+		}
+		tt.Advance(2 * time.Millisecond)
+		if snapFrame(tt).differs(mid) == "" {
+			t.Errorf("past statusDelay the results do not dim")
+		}
+		ready(a, run)()
+		tt.Frame()
+		if d := snapFrame(tt).differs(mid); d != "" {
+			t.Errorf("after the answer the results are not as they were: %s", d)
+		}
+	})
+	t.Run("first search", func(t *testing.T) {
+		a, tt, run := stage(t, "")
+		a.Store.SetOmniText("yoru")
+		tt.Frame()
+		if tt.HasText("Overview") {
+			t.Errorf("the first key shows the skeleton's tabs at once: %q", tt.Texts())
+		}
+		run(func() bool { return !a.Store.Search.Sent.IsZero() })
+		// The window draws again as the store changes.
+		tt.Frame()
+		tt.Advance(statusDelay - time.Millisecond)
+		if tt.HasText("Overview") {
+			t.Errorf("the skeleton shows before statusDelay: %q", tt.Texts())
+		}
+		tt.Advance(2 * time.Millisecond)
+		if !tt.HasText("Overview") {
+			t.Errorf("past statusDelay no skeleton: %q", tt.Texts())
+		}
+		ready(a, run)()
+		tt.Frame()
+		if !tt.HasText("Elma") {
+			t.Errorf("after the answer no result: %q", tt.Texts())
+		}
+	})
 }

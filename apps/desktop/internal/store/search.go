@@ -63,6 +63,10 @@ type Search struct {
 	Result *client.SearchResult
 	Stale  bool
 	Err    string
+	// Sent is when the read of Term left, zero while typing pauses
+	// (searchDelay): a view says it waits, or dims what it shows, only
+	// once the read is slow from there.
+	Sent time.Time
 	// More is a group's next page while it loads or after it failed.
 	More map[string]PageState
 	// Focus is the group shown alone, page after page, or "" for the
@@ -161,8 +165,8 @@ func (s *Store) WantSearch(term string) {
 		q.Term, q.Status, q.Result, q.Stale, q.Err, q.More = term, SearchFailed, nil, false, "Not connected to a server", nil
 		return
 	}
-	// The list dims at once and keeps its height while typing pauses.
-	q.Term, q.Status, q.Stale, q.Err, q.More = term, SearchLoading, q.Result != nil, "", nil
+	// The list keeps its height while typing pauses.
+	q.Term, q.Status, q.Stale, q.Err, q.More, q.Sent = term, SearchLoading, q.Result != nil, "", nil, time.Time{}
 	gen, ctx := q.gen, s.ctx
 	time.AfterFunc(searchDelay, func() {
 		s.postIf(ctx, func() {
@@ -183,7 +187,7 @@ func (s *Store) RetrySearch() {
 
 func (s *Store) startSearch(term string) {
 	q := &s.Search
-	q.Term, q.Status, q.Stale, q.Err, q.More = term, SearchLoading, q.Result != nil, "", nil
+	q.Term, q.Status, q.Stale, q.Err, q.More, q.Sent = term, SearchLoading, q.Result != nil, "", nil, s.now()
 	c, ctx, gen, storefront := s.client, s.ctx, q.gen, s.searchStorefront()
 	if c == nil {
 		q.Status, q.Stale, q.Err = SearchFailed, false, "Not connected to a server"

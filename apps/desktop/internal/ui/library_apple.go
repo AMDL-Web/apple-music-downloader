@@ -48,22 +48,37 @@ func (a *App) appleList(c *ui.Context, k *Tokens) {
 		ui.Spacer(c)
 		a.appleAccounts(c, k)
 	})
+	// What the list of the kind and account shows changes as a switch
+	// does: the list, or what stands for it.
+	state := "list"
 	switch {
 	case l.AppleStatus == store.SearchFailed:
-		searchMessage(c, k, icWarn, "Your Apple Music library is not available", l.AppleErr)
-		return
+		state = "failed"
 	case l.AppleStatus != store.SearchReady:
-		return
+		state = "reading"
 	case len(l.Apple.Items) == 0:
-		searchMessage(c, k, icLibrary, "Nothing here", "")
-		return
+		state = "empty"
 	}
-	items := l.Apple.Items
-	if l.AppleKind == "songs" {
-		a.appleSongs(c, k, items)
-		return
+	shown := ui.Column(c.Key(l.AppleKind + "/" + l.AppleAccount + "/" + state)).Grow(1).MinHeight(0)
+	t := a.switchMotion(c, shown, f.kindAt)
+	if a.PageMotion {
+		// A list read after the screen opened fades in where it shows.
+		t.Enter = &fadeOut
 	}
-	a.appleGrid(c, k, items)
+	shown.Transition(t).Children(func() {
+		switch state {
+		case "failed":
+			searchMessage(c, k, icWarn, "Your Apple Music library is not available", l.AppleErr)
+		case "empty":
+			searchMessage(c, k, icLibrary, "Nothing here", "")
+		case "list":
+			if l.AppleKind == "songs" {
+				a.appleSongs(c, k, l.Apple.Items)
+				return
+			}
+			a.appleGrid(c, k, l.Apple.Items)
+		}
+	})
 }
 
 // appleListState is the place of the Apple list of kind, which each kind
@@ -82,7 +97,7 @@ func (a *App) appleListState(kind string) *ui.ListState {
 
 // appleSongs is the Apple library's songs, a row each, built as they show.
 func (a *App) appleSongs(c *ui.Context, k *Tokens, items []domain.AppleLibraryItem) {
-	ui.Box(c.Key("apple-area-songs")).Grow(1).MinHeight(0).Background(k.Ground).Transition(a.appleMotion(c)).Children(func() {
+	ui.Box(c.Key("apple-area-songs")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
 		st := a.scrollState(c, "apple-songs")
 		list := ui.List(c.Key("apple-songs"), a.appleListState("songs"), len(items), func(i int) {
 			a.appleRow(c, k, items[i])
@@ -90,24 +105,6 @@ func (a *App) appleSongs(c *ui.Context, k *Tokens, items []domain.AppleLibraryIt
 		a.fadeEdges(list, st)
 		a.noteView(list)
 	})
-}
-
-// swapFadeLate fades a kind's list in once the one it replaces has faded
-// out (groupFade), as the search's tabs go from one group to another.
-var swapFadeLate = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupFade.Duration}
-
-// appleMotion is the Transition of the Apple list of a kind: the one left
-// fades out, and the one chosen fades in after it, so the two never show
-// through each other. It is none without page motion.
-func (a *App) appleMotion(c *ui.Context) ui.ElementTransition {
-	if !a.PageMotion {
-		return ui.ElementTransition{}
-	}
-	t := ui.ElementTransition{Animation: &groupFade, Enter: &fadeOut, Exit: &fadeOut}
-	if c.Now().Sub(a.lib.kindAt) < 2*groupFade.Duration {
-		t.Animation = &swapFadeLate
-	}
-	return t
 }
 
 // appleGridGapY is the room between two rows of the Apple grid, as between
@@ -121,7 +118,7 @@ func (a *App) appleGrid(c *ui.Context, k *Tokens, items []domain.AppleLibraryIte
 	width := a.pageWidth(c) - 2*libraryPadX
 	cols, size := tileColumns(width), tileSize(width, 0)
 	rows := (len(items) + cols - 1) / cols
-	ui.Box(c.Key("apple-area-" + kind)).Grow(1).MinHeight(0).Background(k.Ground).Transition(a.appleMotion(c)).Children(func() {
+	ui.Box(c.Key("apple-area-" + kind)).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
 		st := a.scrollState(c, "apple-"+kind)
 		list := ui.List(c.Key("apple-"+kind), a.appleListState(kind), rows, func(r int) {
 			ui.Row(c).Padding(0, libraryPadX, appleGridGapY, libraryPadX).Gap(tileGap).AlignItems(ui.Start).Children(func() {
@@ -331,6 +328,7 @@ func (a *App) appleAccounts(c *ui.Context, k *Tokens) {
 	segmentedTips(c, k, "apple-account", &sel, labels, labels, nil, names)
 	if sel != prev {
 		a.Store.SetAppleAccount(on[sel].AccountID)
+		a.lib.kindAt = c.Now()
 	}
 }
 

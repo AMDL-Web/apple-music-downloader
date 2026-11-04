@@ -80,13 +80,14 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 	if round {
 		radius = radiusFull
 	}
-	ui.Column(c.Key(key)).Width(size).Gap(10).Transition(a.hitMotion(c)).Children(func() {
+	tile := ui.Column(c.Key(key)).Width(size).Gap(10)
+	tile.Transition(a.hitMotion(c, tile)).Children(func() {
 		art := ui.Box(c.Key("art")).Size(size, size)
 		hover := art.Hovered()
 		art.Children(func() {
 			open := tileOpen(c, size, radius, h.Name)
 			if on {
-				if a.searchKeyed {
+				if a.keyedRing(c) {
 					focusRing(open, radius)
 				}
 				if a.searchReveal && !a.viewSwapping(c) {
@@ -341,12 +342,13 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 	hk := a.hitKey(h)
 	on := sel != nil && a.hitKey(*sel) == hk
 	card := ui.Row(c.Key(key)).Width(width).Height(songHeight).Padding(padTile).PaddingEnd(10).Gap(12).Radius(radiusTile).
-		AlignItems(ui.Center).Background(k.Raise).Border(1, k.Line).Transition(a.hitMotion(c))
+		AlignItems(ui.Center).Background(k.Raise).Border(1, k.Line)
+	card.Transition(a.hitMotion(c, card))
 	if card.Hovered() {
 		card.Background(k.Raise2)
 	}
 	if on {
-		if a.searchKeyed {
+		if a.keyedRing(c) {
 			focusRing(card, radiusTile)
 		}
 		if a.searchReveal {
