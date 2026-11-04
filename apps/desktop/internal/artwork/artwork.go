@@ -1,6 +1,7 @@
 // Package artwork fetches and decodes album covers for the views: off the UI
-// thread, a few at a time, sized for where they show, and released a while
-// after they stop showing.
+// thread, a few at a time, sized for where they show, and kept decoded until
+// they take more memory than keepBytes, the least lately shown released
+// first.
 package artwork
 
 import (
@@ -10,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,8 +20,18 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// idleRelease is how long a cover nobody asked for keeps its pixels.
-const idleRelease = 2 * time.Minute
+// keepBytes bounds the decoded covers kept: past it, the covers shown
+// longest ago are released, never one shown in the last shownLately. A
+// screen left and opened again finds its covers decoded, which a fetch,
+// even from the disk, would show only some frames late, as placeholders
+// first. failedRelease is how long a cover that failed and is no longer
+// asked for is remembered, and sweepEvery how often the cache looks.
+const (
+	keepBytes     = 384 << 20
+	shownLately   = 5 * time.Second
+	failedRelease = 2 * time.Minute
+	sweepEvery    = time.Minute
+)
 
 // retryFirst is how long a cover that failed to load waits before it is
 // tried again, doubling with each failure up to retryMost: a view asks for
@@ -50,7 +62,10 @@ type Cache struct {
 	disk    *diskCache
 	slots   chan struct{}
 	entries map[coverKey]*entry
-	swept   time.Time
+	// bytes is what the decoded covers of entries take, and keep its bound:
+	// keepBytes but in tests.
+	bytes, keep int
+	swept       time.Time
 	// now is time.Now but in tests.
 	now func() time.Time
 }
@@ -63,7 +78,9 @@ type coverKey struct {
 }
 
 type entry struct {
-	img     ui.ImageSource
+	img ui.ImageSource
+	// bytes is what img takes decoded.
+	bytes   int
 	used    time.Time
 	loading bool
 	// failures counts the loads that failed in a row, the last at failedAt.
@@ -87,6 +104,7 @@ func NewWith(post func(func()), rt http.RoundTripper) *Cache {
 		http:    &http.Client{Transport: rt, Timeout: 30 * time.Second},
 		slots:   make(chan struct{}, 6),
 		entries: map[coverKey]*entry{},
+		keep:    keepBytes,
 		now:     time.Now,
 	}
 }
@@ -107,7 +125,12 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 	if template == "" {
 		return nil
 	}
-	key := coverKey{template, bucket(px)}
+	key := coverKey{template, 0}
+	// A URL without a size, as a private playlist's, is the one picture
+	// whatever size it shows at.
+	if strings.Contains(template, "{w}") {
+		key.px = bucket(px)
+	}
 	now := c.now()
 	e := c.entries[key]
 	if e == nil {
@@ -119,7 +142,7 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 		e.loading = true
 		go c.fetch(key, e)
 	}
-	if now.Sub(c.swept) > idleRelease/2 {
+	if now.Sub(c.swept) > sweepEvery {
 		c.sweep(now)
 	}
 	return e.img
@@ -158,7 +181,11 @@ func (c *Cache) fetch(key coverKey, e *entry) {
 			time.AfterFunc(retryWait(e.failures), func() { c.post(func() {}) })
 			return
 		}
-		e.img, e.failures = img, 0
+		e.img, e.failures, e.bytes = img, 0, decodedBytes(img)
+		c.bytes += e.bytes
+		if c.bytes > c.keep {
+			c.sweep(c.now())
+		}
 	})
 }
 
@@ -174,6 +201,11 @@ func (c *Cache) loadSized(key coverKey) (ui.ImageSource, int, error) {
 			continue
 		}
 		if smaller, _, ferr := c.load(URL(key.template, px)); ferr == nil {
+			// The disk keeps it under the refused size's URL too, so a later
+			// load of that size finds it without asking the CDN again.
+			if data, ok := c.disk.get(URL(key.template, px)); ok {
+				c.disk.put(URL(key.template, key.px), data)
+			}
 			return smaller, http.StatusOK, nil
 		}
 	}
@@ -231,12 +263,39 @@ func (c *Cache) download(url string) ([]byte, int, error) {
 	return data, resp.StatusCode, nil
 }
 
-// sweep drops covers not asked for lately, failed ones too.
+// sweep forgets covers that failed and are not asked for, then releases
+// the covers shown longest ago while the kept ones take more than keep.
 func (c *Cache) sweep(now time.Time) {
 	c.swept = now
+	var old []coverKey
 	for k, e := range c.entries {
-		if !e.loading && now.Sub(e.used) > idleRelease {
+		switch {
+		case e.loading:
+		case e.img == nil && now.Sub(e.used) > failedRelease:
 			delete(c.entries, k)
+		case e.img != nil && now.Sub(e.used) > shownLately:
+			old = append(old, k)
 		}
 	}
+	if c.bytes <= c.keep {
+		return
+	}
+	slices.SortFunc(old, func(a, b coverKey) int { return c.entries[a].used.Compare(c.entries[b].used) })
+	for _, k := range old {
+		if c.bytes <= c.keep {
+			break
+		}
+		c.bytes -= c.entries[k].bytes
+		delete(c.entries, k)
+	}
+}
+
+// decodedBytes is what img takes decoded: four bytes a pixel, and a third
+// more for the smaller copies drawn as it shows small.
+func decodedBytes(img ui.ImageSource) int {
+	if b, ok := img.(*ui.Bitmap); ok {
+		w, h := b.Size()
+		return w * h * 4 * 4 / 3
+	}
+	return 0
 }
