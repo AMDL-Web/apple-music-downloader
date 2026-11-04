@@ -92,8 +92,8 @@ test('retired section ids and fields open the section that holds them now', () =
 
 test('every runtime key belongs to exactly one of the nine sections, and the board leaves out Lyrics & artwork', () => {
   const counts = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, FIELDS.filter((f) => f.section === s.id).length]));
-  assert.deepEqual(counts, { account: 4, quality: 5, files: 5, lyrics_artwork: 11, jobs: 8, library_sync: 4, hooks: 0, logging: 4, server: 6 });
-  assert.equal(FIELDS.length, 47);
+  assert.deepEqual(counts, { account: 4, quality: 5, files: 6, lyrics_artwork: 11, jobs: 8, library_sync: 4, hooks: 0, logging: 4, server: 6 });
+  assert.equal(FIELDS.length, 48);
   assert.deepEqual(BOARD_SECTIONS.map((s) => s.id), ['account', 'quality', 'files', 'jobs', 'library_sync', 'hooks', 'logging', 'server']);
   assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['wrapper', 'server'], ['simulate', 'server'], ['config_file', 'server']]);
   assert.equal(SETTINGS_SECTIONS.findIndex((s) => s.split), 5, 'the nav splits before Library sync');

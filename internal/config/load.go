@@ -31,7 +31,7 @@ func Load(path string) (Config, error) {
 // starting; the loader drops them instead and RetiredKeys names them for a
 // startup warning.
 var retiredKeys = map[string]string{
-	"download.force_overwrite": "records decide what downloads; re-download with Reset",
+	"download.force_overwrite": "records decide what downloads; download.overwrite_existing replaces a file already at a track's path, and Reset downloads a record again",
 	"wrapper.data_dir":         "amdl reads each account's media-user-token from the wrapper's GET /token",
 	"catalog.media_user_token": "amdl reads each account's media-user-token from the wrapper's GET /token",
 }

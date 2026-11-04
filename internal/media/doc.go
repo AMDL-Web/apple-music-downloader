@@ -22,7 +22,7 @@
 // in-flight semaphores, the request gate and the background-work group. A
 // track reaches its output path only through finalizeToOutput, so
 // handleExistingOutput, the one stat of a target, may adopt any file already
-// there. The amp-api motion-artwork lookup never fails a job. Resume
+// there (unless download.overwrite_existing replaces it). The amp-api motion-artwork lookup never fails a job. Resume
 // checkpoints belong to the record of a record run (they survive a pause, a
 // failed run and a restart, and go when their slot is done or given up) and to
 // the run of a one-off run (a failed run keeps them for Retry; completing,

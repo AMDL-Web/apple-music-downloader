@@ -171,7 +171,7 @@ def track():
 
     SK = s.node(925, 627, "skipped_existing", "stopped")
     s.edge(f"M {D['right']} {D['cy']} C 760 {D['cy']} 780 {SK['cy']} {SK['left'] - 1} {SK['cy']}",
-           "file exists,\nno force_overwrite", (742, D['cy'] + 2))
+           "file exists,\nno overwrite_existing", (742, D['cy'] + 2))
 
     F = s.node(MX, 950, "Decrypting in-process\ninternal/fairplay", "draw")
     s.edge(curve(MX, E['bottom'], MX, F['top'] - 1), "encrypted bytes in\nRAM or temp_dir", (MX, 862))

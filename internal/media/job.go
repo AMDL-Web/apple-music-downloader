@@ -121,7 +121,8 @@ func parseJobInput(job domain.Job, albumTrackURLMode string) (applemusic.ParsedU
 
 // processJob runs a one-off run (a station, a library playlist the cache does
 // not hold): every track of the resolved collection, each once. A file
-// already at a track's path is kept and the track skipped (handleExistingOutput).
+// already at a track's path is kept and the track skipped, or replaced with
+// download.overwrite_existing (handleExistingOutput).
 func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jobs.Reporter) error {
 	parsed, err := parseJobInput(job, d.cfg.Catalog.AlbumTrackURLMode)
 	if err != nil {

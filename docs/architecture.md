@@ -196,7 +196,8 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   from `run_items` by one store query, including when the manager decides the terminal
   status at finalize. There are no stored per-status counter columns. `done_items` and
   the legacy `force` flag are gone, and so is `force_overwrite`: a reset of the record
-  downloads again.
+  downloads again (`download.overwrite_existing` only replaces a file a download finds at
+  its path).
 - `started_at` is set when a worker first starts the current run and kept across
   recovery after a restart; a retry starts a new run and clears it, with `finished_at`.
   `finished_at` is set on the terminal transition. So `finished_at - started_at` is the

@@ -159,7 +159,15 @@ export const FIELDS = [
     label: 'Temporary folder',
     defaultValue: 'data/tmp',
   },
-  { key: 'download.library_path_format', section: 'files', type: 'template', label: 'Library', help: 'Songs, albums and artists; a file already here counts as downloaded.', defaultValue: 'library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}' },
+  {
+    key: 'download.overwrite_existing',
+    section: 'files',
+    type: 'switch',
+    label: 'Overwrite existing files',
+    help: 'Off keeps a file already at a track’s path as its download.',
+    defaultValue: false,
+  },
+  { key: 'download.library_path_format', section: 'files', type: 'template', label: 'Library', help: 'Songs, albums and artists.', defaultValue: 'library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}' },
   { key: 'download.playlist_path_format', section: 'files', type: 'template', label: 'Playlists', help: '{SongNumber} is the position in the playlist.', defaultValue: 'playlists/{PlaylistName}/{SongNumber:02d}. {SongName}' },
   { key: 'download.station_path_format', section: 'files', type: 'template', label: 'Stations', help: '{SongNumber} is the position in the station’s track list.', defaultValue: 'stations/{StationName}/{SongNumber:02d}. {SongName}' },
   // Lyrics & artwork

@@ -125,6 +125,7 @@ var overrideExclusions = map[string]bool{
 	"download.max_attempts":         true,
 	"download.give_up_after_runs":   true,
 	"download.downloads_dir":        true,
+	"download.overwrite_existing":   true,
 	"download.library_path_format":  true,
 	"download.playlist_path_format": true,
 	"download.station_path_format":  true,

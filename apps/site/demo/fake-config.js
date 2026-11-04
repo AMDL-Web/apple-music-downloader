@@ -29,6 +29,7 @@ export const CONFIG = {
     give_up_after_runs: 3,
     max_parallel_downloads: 16,
     max_running_jobs: 3,
+    overwrite_existing: false,
     playlist_path_format: 'playlists/{PlaylistName}/{SongNumber:02d}. {SongName}',
     progress_event_interval_ms: 500,
     quality_priority: ['alac'],

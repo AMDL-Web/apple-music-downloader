@@ -88,6 +88,8 @@ var configFields = []configField{
 	{key: "download.downloads_dir", section: "files", kind: fieldPath, confirm: true, label: "Downloads folder"},
 	{key: "download.temp_dir", section: "files", kind: fieldPath, label: "Temporary folder",
 		help: "Fastest on the downloads folder's disk."},
+	{key: "download.overwrite_existing", section: "files", kind: fieldSwitch, label: "Overwrite existing files",
+		help: "Off keeps a file already at a track's path as its download."},
 	{key: "download.library_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Library",
 		help: "Songs, albums and artists."},
 	{key: "download.playlist_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Playlists",

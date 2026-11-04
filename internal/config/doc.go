@@ -8,7 +8,7 @@
 // variables that are not read. Store holds the live snapshot shared after
 // startup (Reload applies hand edits, UpdateAndSave persists API changes,
 // Saved and PendingRestart report the changes waiting for a restart),
-// DownloadOverrides layers a submission's quality and overwrite choices over
+// DownloadOverrides layers a submission's quality choices over
 // a base Config, and MutableView and RuntimeLockedChanges back the runtime
 // config API.
 //

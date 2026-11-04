@@ -171,7 +171,8 @@ wrapper 还提供 Hi-Res ALAC 曲目的设备清单；歌词和 AAC-LC 许可证
 
 **一首曲目。** 每首曲目先解析，再下载和解密。解密后的样本直接通过管道送进 `ffmpeg` 重封装，
 整首曲目的明文副本从不落盘；校验和打标签都在 `download.temp_dir` 里完成，只有成品文件才移进
-`download.downloads_dir`。如果那个文件已经存在，这首曲目会被跳过，不再获取封面和歌词。
+`download.downloads_dir`。如果那个文件已经存在，这首曲目会被跳过，不再获取封面和歌词；打开
+`download.overwrite_existing` 则照常下载，完成后替换旧文件。
 
 **编码回退。** `download.quality_priority` 按顺序列出要尝试的编码。每个编码的下载阶段和解密
 阶段各有自己的 `download.max_attempts` 次数，两次尝试之间会退避等待。开启
@@ -188,7 +189,7 @@ wrapper 还提供 Hi-Res ALAC 曲目的设备清单；歌词和 AAC-LC 许可证
 
 成品文件放在 `download.downloads_dir` 下（Compose 部署时是 `./data/downloads`）。单曲、专辑和
 艺人共用一个资料库，默认是 `library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}`：
-同一首歌不管怎么下载都落在同一个路径，那里已有文件就跳过。歌单和电台各有自己的文件夹。
+同一首歌不管怎么下载都落在同一个路径，那里已有文件就跳过（`download.overwrite_existing` 打开时替换它）。歌单和电台各有自己的文件夹。
 三个路径模板都由 `{AlbumArtist}`、`{AlbumName}`、`{SongName}` 等变量组成。
 独立封面和 `.lrc` / `.ttml` 歌词文件可以存到音频旁边。模板、可用变量和附属文件选项见
 [`configs/config.example.yaml`](configs/config.example.yaml) 与

@@ -48,6 +48,7 @@ wins when they disagree, so details are not copied here.
 | Pending add | An add that needs a catalog read before it becomes records (a song without its album, an artist); the resolver reads it | `internal/domain#PendingAdd` |
 | Queue entry | A queued run. A record has at most one queued or running run; a new add, a retry or a reset of it is a new run, never the old row queued again | `internal/jobs#Manager.SubmitBatch` |
 | Download again | A reset of a record's slots: each done file is downloaded again to its stored path and replaced once its new copy is complete | `internal/jobs#Manager.Reset` |
+| Overwrite existing | `download.overwrite_existing`: a download that finds a file already at its track's path replaces it instead of adopting it as `skipped_existing`; it changes no record's state | `internal/media#trackRun.handleExistingOutput` |
 | Quality label | The `{Quality}` path value, such as `24-bit/96 kHz` or `256Kbps` | `internal/media#qualityLabel` |
 | Standalone cover | `cover.<ext>` or `artist.<ext>` written next to the audio | [docs/download-pipeline.md](docs/download-pipeline.md#standalone-covers) |
 

@@ -262,6 +262,9 @@ needs the API changes below before it works against 2.0.
 - `download.force_overwrite` is removed: records decide what downloads, and a reset
   downloads again. A `config.yaml` that still has it starts with a warning naming the key
   (the console used to write every key into the file), and `PUT /config` with it is `400`.
+  `download.overwrite_existing` (default `false`) is new and narrower: it decides what a
+  download does with a file already at a track's path, replacing it instead of taking it
+  as the track's download; it never makes a submit of a downloaded record download again.
 - `download.give_up_after_runs` (default 3, `0` never gives up) is new: a run that fails a
   slot is retried by a new run 30 minutes later, then each wait four times the last, and
   after that many failed runs the slot is given up until a reset. `download.max_attempts`
@@ -394,7 +397,8 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 - A reset no longer deletes first. 1.x's `force_overwrite` removed the existing file and
   its lyrics sidecars before downloading, so a download that failed left nothing; 2.0
   downloads into a temporary file and renames it over the old track once it is complete,
-  then the sidecars. A reset download that fails leaves the old files as they were.
+  then the sidecars. A reset download that fails leaves the old files as they were, and
+  so does a download that `download.overwrite_existing` sends over a file.
 - Duplicate detection ignores the destination folder now that a submission cannot pick
   one: the same album, song or playlist is one download. A job from before the upgrade
   keeps its old key, so while it is queued or running (also after a retry of a failed

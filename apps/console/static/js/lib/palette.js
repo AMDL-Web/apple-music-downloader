@@ -79,6 +79,7 @@ const KEY_WORDS = {
   'catalog.album_track_url_mode': 'song track album link',
   'library_sync.interval_minutes': 'poll interval',
   'download.give_up_after_runs': 'retry retries give up failed runs',
+  'download.overwrite_existing': 'replace force overwrite skip existing',
   'download.progress_event_interval_ms': 'throttle',
   'logging.level': 'verbose',
 };

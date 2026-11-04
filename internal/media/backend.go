@@ -42,8 +42,8 @@ type mediaBackend interface {
 	// download replaces stays until the new copy is committed over it.
 	discardOutput(outPath string)
 	// statOutput reports whether a finished track is at outPath, and its size.
-	// A file there is complete (finalizeToOutput), so a track run adopts it
-	// (handleExistingOutput).
+	// A file there is complete (finalizeToOutput), so a track run may adopt
+	// it (handleExistingOutput).
 	statOutput(outPath string) (size int64, ok bool)
 
 	// stage creates the scratch file a codec attempt flattens, verifies and

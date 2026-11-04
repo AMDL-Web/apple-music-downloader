@@ -386,9 +386,12 @@ resume queues its run again. Both answer the record, which names a queued or run
 in `active_job_id`. Delete answers `204`; a record with a queued
 or running run is `409 run_active`. The library monitor does not add a deleted album back;
 adding it by hand does, and its first run takes a file still at a track's path as that
-track's download instead of downloading it again.
+track's download instead of downloading it again (with `download.overwrite_existing`, it
+downloads the track and replaces the file).
 
-**Reset** replaces what `force_overwrite` did:
+**Reset** downloads a record again, as 1.x's `force_overwrite` did for a submit;
+`download.overwrite_existing` only decides what a download does with a file it finds at
+its path:
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/library/albums/1463409338/reset -d '{"what":"audio","states":["missing"]}'

@@ -3817,11 +3817,22 @@ components:
                 rejects them outright. Default 500. Read once when a job starts, so
                 changes only affect jobs started afterwards, not running ones.
             downloads_dir: {type: string}
+            overwrite_existing:
+              type: boolean
+              description: >-
+                What a track does when a file is already at its path as it is
+                about to be saved there, in any run: true downloads it and
+                replaces the file once the new copy is complete; false keeps the
+                file as the track's download (skipped_existing). Records still
+                decide what is downloaded, so a submit of a record whose tracks
+                are done answers already_downloaded either way, and a reset
+                replaces its files either way. Default false.
             library_path_format:
               type: string
               description: >-
                 Where every song, album and artist download lands, relative to
-                downloads_dir; a file at that path counts as downloaded. Folder
+                downloads_dir; a file already at that path when a track downloads
+                is taken as its download unless overwrite_existing is on. Folder
                 segments may use only {AlbumArtist}, {AlbumName}, {AlbumId},
                 {ReleaseDate} and {ReleaseYear} and must name {AlbumName} or
                 {AlbumId}; the file name must contain {SongNumber} (the track's

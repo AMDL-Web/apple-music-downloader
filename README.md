@@ -197,7 +197,8 @@ undocumented and can change without notice.
 are piped straight into `ffmpeg` for the remux, so no plaintext copy of the whole track is
 written to disk; verifying and tagging happen in `download.temp_dir`, and only the
 finished file moves into `download.downloads_dir`. If that file already exists the track
-is skipped before its cover and lyrics are fetched.
+is skipped before its cover and lyrics are fetched, or, with `download.overwrite_existing`,
+downloaded again and moved over the old file once complete.
 
 **Codec fallback.** `download.quality_priority` lists the codecs to try in order. The
 download and decrypt phases of each codec have their own `download.max_attempts` budget,

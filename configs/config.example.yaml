@@ -199,6 +199,14 @@ download:
   progress_event_interval_ms: 500
   # string path: root download directory. Relative paths are resolved from the backend working directory.
   downloads_dir: "data/downloads"
+  # bool: what a track does when a file is already at its path as it is about to be saved there.
+  # amdl's own records decide what is downloaded; this applies only when a download, of any kind
+  # (an add, a retry, the library monitor), finds a file in its way. true downloads the track and
+  # replaces the file once the new copy is complete (a failed download leaves the old file and its
+  # lyrics files); false keeps the file as that track's download and skips it. A reset ("Download
+  # again", POST /api/v1/library/{kind}/{id}/reset) replaces the files it names either way.
+  # When the key is absent: false. Runtime key: applies to runs started after the change.
+  overwrite_existing: false
   # Output path templates, relative to downloads_dir. Each is a single "/"-separated path
   # template, non-empty; the last segment is the file name and gets the .m4a extension
   # appended automatically. Every segment is sanitized independently, so template values
@@ -213,7 +221,8 @@ download:
   # string template: where every song, album and artist download lands — the library. One
   # template serves all three, so a song lands at the same file whether it was downloaded on
   # its own, with its album or with its artist. amdl's own records, not the files, decide what
-  # is downloaded; a file already at a track's path when it downloads is taken as that track.
+  # is downloaded; a file already at a track's path when it downloads is taken as that track,
+  # or replaced with overwrite_existing.
   # When the key is absent, the value below applies.
   # Folder segments may use only literal text and the album's own values: {AlbumArtist},
   # {AlbumName}, {AlbumId}, {ReleaseDate} (YYYY-MM-DD) and {ReleaseYear}, and at least one

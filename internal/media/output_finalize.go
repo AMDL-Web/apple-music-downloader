@@ -19,20 +19,22 @@ import (
 )
 
 // handleExistingOutput looks at outPath before anything is downloaded to it.
-// A file already there is adopted: the item finishes as skipped_existing (and
-// drops any resume checkpoint for it), and for a slot of a record run the file
-// becomes the slot's (reportSlot). Records decide what is downloaded; this
-// stat only keeps a file someone put at the target. A slot that was done
-// before (target.replace) keeps the old file and its sidecars where they are
-// until the new copy is committed over them, so a download that fails leaves
-// the old track intact; only staging orphans are swept.
+// Records decide what is downloaded; this stat only decides what happens to a
+// file already at the target. With download.overwrite_existing off it is
+// adopted: the item finishes as skipped_existing (and drops any resume
+// checkpoint for it), and for a slot of a record run the file becomes the
+// slot's (reportSlot). With the key on, and for a slot that was done before
+// (target.replace, a reset) whatever the key, the track downloads and the old
+// file and its sidecars stay where they are until the new copy is committed
+// over them, so a download that fails leaves the old track intact; only
+// staging orphans are swept.
 func (r *trackRun) handleExistingOutput(ctx context.Context, outPath string) (bool, error) {
 	r.item.OutputPath = domain.AbsolutePath(outPath)
 	size, exists := r.media.statOutput(outPath)
 	if !exists {
 		return false, nil
 	}
-	if r.target.replace {
+	if r.target.replace || r.d.cfg.Download.OverwriteExisting {
 		r.media.discardOutput(outPath)
 		return false, nil
 	}

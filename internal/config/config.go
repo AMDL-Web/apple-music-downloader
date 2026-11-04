@@ -156,26 +156,32 @@ type DownloadConfig struct {
 	// item_progress events for the same item while it stays in one state. It
 	// throttles only movement of the download/decrypt meters; status changes
 	// and pipeline-stage completions are always published immediately.
-	ProgressEventIntervalMS int      `yaml:"progress_event_interval_ms" json:"progress_event_interval_ms"`
-	DownloadsDir            string   `yaml:"downloads_dir" json:"downloads_dir"`
-	LibraryPathFormat       string   `yaml:"library_path_format" json:"library_path_format"`
-	PlaylistPathFormat      string   `yaml:"playlist_path_format" json:"playlist_path_format"`
-	StationPathFormat       string   `yaml:"station_path_format" json:"station_path_format"`
-	TempDir                 string   `yaml:"temp_dir" json:"temp_dir"`
-	CoverSize               string   `yaml:"cover_size" json:"cover_size"`
-	CoverFormat             string   `yaml:"cover_format" json:"cover_format"`
-	EmbedCover              bool     `yaml:"embed_cover" json:"embed_cover"`
-	SaveAlbumCover          bool     `yaml:"save_album_cover" json:"save_album_cover"`
-	SaveArtistCover         bool     `yaml:"save_artist_cover" json:"save_artist_cover"`
-	SavePlaylistCover       bool     `yaml:"save_playlist_cover" json:"save_playlist_cover"`
-	EmbedLyrics             bool     `yaml:"embed_lyrics" json:"embed_lyrics"`
-	LyricsFiles             []string `yaml:"lyrics_files" json:"lyrics_files"`
-	LyricsTiming            string   `yaml:"lyrics_timing" json:"lyrics_timing"`
-	LyricsExtras            []string `yaml:"lyrics_extras" json:"lyrics_extras"`
-	ALACMaxSampleRate       int      `yaml:"alac_max_sample_rate" json:"alac_max_sample_rate"`
-	ALACMaxBitDepth         int      `yaml:"alac_max_bit_depth" json:"alac_max_bit_depth"`
-	CheckIntegrity          bool     `yaml:"check_integrity" json:"check_integrity"`
-	IntegrityMode           string   `yaml:"integrity_mode" json:"integrity_mode"`
+	ProgressEventIntervalMS int    `yaml:"progress_event_interval_ms" json:"progress_event_interval_ms"`
+	DownloadsDir            string `yaml:"downloads_dir" json:"downloads_dir"`
+	// OverwriteExisting decides what a track does when a file is already at
+	// its target path as it is about to land there: true downloads it and
+	// replaces the file once the new copy is complete, false keeps the file
+	// as the track's. The records decide what downloads; this only applies
+	// when a download finds a file in its way.
+	OverwriteExisting  bool     `yaml:"overwrite_existing" json:"overwrite_existing"`
+	LibraryPathFormat  string   `yaml:"library_path_format" json:"library_path_format"`
+	PlaylistPathFormat string   `yaml:"playlist_path_format" json:"playlist_path_format"`
+	StationPathFormat  string   `yaml:"station_path_format" json:"station_path_format"`
+	TempDir            string   `yaml:"temp_dir" json:"temp_dir"`
+	CoverSize          string   `yaml:"cover_size" json:"cover_size"`
+	CoverFormat        string   `yaml:"cover_format" json:"cover_format"`
+	EmbedCover         bool     `yaml:"embed_cover" json:"embed_cover"`
+	SaveAlbumCover     bool     `yaml:"save_album_cover" json:"save_album_cover"`
+	SaveArtistCover    bool     `yaml:"save_artist_cover" json:"save_artist_cover"`
+	SavePlaylistCover  bool     `yaml:"save_playlist_cover" json:"save_playlist_cover"`
+	EmbedLyrics        bool     `yaml:"embed_lyrics" json:"embed_lyrics"`
+	LyricsFiles        []string `yaml:"lyrics_files" json:"lyrics_files"`
+	LyricsTiming       string   `yaml:"lyrics_timing" json:"lyrics_timing"`
+	LyricsExtras       []string `yaml:"lyrics_extras" json:"lyrics_extras"`
+	ALACMaxSampleRate  int      `yaml:"alac_max_sample_rate" json:"alac_max_sample_rate"`
+	ALACMaxBitDepth    int      `yaml:"alac_max_bit_depth" json:"alac_max_bit_depth"`
+	CheckIntegrity     bool     `yaml:"check_integrity" json:"check_integrity"`
+	IntegrityMode      string   `yaml:"integrity_mode" json:"integrity_mode"`
 }
 
 const (

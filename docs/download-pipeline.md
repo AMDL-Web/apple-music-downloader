@@ -277,7 +277,8 @@ and codec fallback. Only the backend's work is pretended: transfers and decrypti
 paced by a speed drawn from `simulate.min_speed_kbps`..`max_speed_kbps`, the AAC-LC
 WebPlayback asset, cover art and lyrics are stand-ins, and nothing is written, deleted
 or run (no ffmpeg, no wrapper). An output that already exists on disk is still reported
-as skipped, and simulate mode never deletes or replaces a real file. A simulated run
+as skipped (with `download.overwrite_existing`, as downloaded again), and simulate mode
+never deletes or replaces a real file. A simulated run
 records its slots as downloaded like a real one, so a disk check finds their files
 missing.
 
@@ -355,9 +356,11 @@ the same path fail the second with `path_taken` instead of overwriting the first
 
 The one stat left is at that claim (`internal/media#trackRun.handleExistingOutput`): a
 file already at the slot's path, put there by hand or by an earlier install, is adopted as
-the slot's file, `skipped_existing`, without a download. A reset of a done slot downloads
-it again to its stored path, and the new file replaces the old one only once it is
-complete, so a failed or paused run leaves the old file as it was.
+the slot's file, `skipped_existing`, without a download. With `download.overwrite_existing`
+on, every run (an add, a retry, the library monitor) downloads the track instead and
+replaces that file. A reset of a done slot downloads it again to its stored path whatever
+the key. Either way the new file replaces the old one only once it is complete, then its
+lyrics files, so a failed or paused run leaves the old file as it was.
 
 A library track copy has one path per slot: the main slot takes the plain template name,
 and another quality of a downloaded track is named after it with a quality suffix,
