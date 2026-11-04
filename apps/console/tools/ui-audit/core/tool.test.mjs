@@ -8,13 +8,14 @@ import { fileURLToPath } from 'node:url';
 import { declarations, readScale, scanCss } from './css-scan.mjs';
 import { aggregate, compare, normalize } from './report.mjs';
 import { probeSource } from './probe.mjs';
+import { mergeResults, summarize } from './ci.mjs';
 import { readCsp, startMockServer } from '../console/mock-server.mjs';
 import { jobId, JOB_KEYS } from '../console/fixtures-worlds.mjs';
 
 const cli = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 
 test('the CLI exits 2 with usage on bad arguments', () => {
-  for (const args of [[], ['frobnicate'], ['run', '--out', 'x'], ['run', '--config', 'c', '--out', 'x', '--engine', 'firefox'], ['run', '--config', 'c', '--out', 'x', '--bogus'], ['run', '--config', '--out', 'x'], ['diff', 'one.json']]) {
+  for (const args of [[], ['frobnicate'], ['run', '--out', 'x'], ['run', '--config', 'c', '--out', 'x', '--engine', 'firefox'], ['run', '--config', 'c', '--out', 'x', '--bogus'], ['run', '--config', '--out', 'x'], ['diff', 'one.json'], ['merge', '--out', 'x'], ['merge', 'shard'], ['summary'], ['summary', 'r.json', '--max-high', 'many'], ['summary', 'r.json', '--retention', '-1']]) {
     const r = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
     assert.equal(r.status, 2, `args ${JSON.stringify(args)}`);
     assert.match(r.stderr, /usage:/);
@@ -99,4 +100,36 @@ test('the mock answers the console contract and moves jobs one step per tick', a
   } finally {
     await s.close();
   }
+});
+
+const shard = (widths, theme, high) => ({
+  project: 'p', startedAt: `2026-01-01T00:00:0${widths[0] % 10}Z`, ms: widths.length * 1000, scale: [4, 8], static: [],
+  options: { engines: ['chrome'], widths, themes: [theme], only: null, states: true },
+  timings: Object.fromEntries(widths.map((w) => [`chrome-${w}-${theme}`, 5])),
+  runs: widths.map((w) => ({ scenario: 'queue', variant: `chrome-${w}-${theme}`, width: w, theme, engine: 'chrome', transitions: [], metrics: {}, errors: [], findings: high ? [{ check: 'overflow', sig: 'a', sel: '.x', msg: `clipped at ${w}`, severity: 'high' }] : [] })),
+});
+
+test('merging shards keeps every run and the widest options', () => {
+  const m = mergeResults([shard([1440, 1280], 'light', false), shard([768], 'dark', false)]);
+  assert.equal(m.runs.length, 3);
+  assert.deepEqual(m.options.widths, [1440, 1280, 768]);
+  assert.deepEqual(m.options.themes, ['light', 'dark']);
+  assert.equal(m.ms, 2000);
+  assert.equal(Object.keys(m.timings).length, 3);
+  assert.throws(() => mergeResults([]), /nothing to merge/);
+});
+
+test('the summary warns only past the threshold, on failed steps or on page errors', () => {
+  const clean = aggregate(mergeResults([shard([1440], 'light', false)]));
+  const ok = summarize(clean);
+  assert.equal(ok.warn, false);
+  assert.deepEqual(ok.annotations, []);
+  const bad = aggregate(mergeResults([shard([1440, 375], 'light', true)]));
+  const over = summarize(bad, { maxHigh: 0, artifact: 'ui-audit', retention: 14 });
+  assert.equal(over.warn, true);
+  assert.match(over.annotations[0], /^::warning title=ui-audit::1 high findings/);
+  assert.match(over.markdown, /artifact `ui-audit`, kept 14 days/);
+  assert.equal(summarize(bad, { maxHigh: 1 }).warn, false);
+  const stepFail = aggregate({ ...mergeResults([shard([1440], 'light', false)]), runs: [{ ...shard([1440], 'light', false).runs[0], setupError: 'no button' }] });
+  assert.equal(summarize(stepFail).warn, true);
 });

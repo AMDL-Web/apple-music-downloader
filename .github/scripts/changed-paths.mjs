@@ -28,7 +28,9 @@ export const light = [
 // `unless` when a changed path matches none (so a change to only light files
 // skips it). The guest boot runs for the code that builds the QEMU command and
 // every internal package it imports (tools/repocheck checks the list against
-// `go list -deps`), the pin, and its own files.
+// `go list -deps`), the pin, and its own files. The console audit runs for the
+// console, the API spec it is written against (the mock backend answers from
+// it), and its own files; apps/console includes the audit tool.
 export const rules = {
   go: { unless: light },
   guestboot: {
@@ -38,6 +40,14 @@ export const rules = {
       /^\.github\/scripts\/wrapper-pin/,
       /^\.github\/actions\/guestboot\//,
       /^\.github\/workflows\/(ci|guestboot|wrapper-pin)\.yml$/,
+      /^\.github\/scripts\/changed-paths\./,
+    ],
+  },
+  uiaudit: {
+    any: [
+      /^apps\/console\//,
+      /^internal\/api\/openapi\.yaml$/,
+      /^\.github\/workflows\/ci\.yml$/,
       /^\.github\/scripts\/changed-paths\./,
     ],
   },

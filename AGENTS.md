@@ -184,17 +184,17 @@ sit in front of it and adds the login API the console uses; a bare wrapper-lite 
 
 | Rule | Enforced by |
 | --- | --- |
-| gofmt, build, vet, tests, race detector, govulncheck, Node tests | CI, one step per `make` target; the race detector is three parallel `make race-*` jobs covering every package |
+| gofmt, build, vet, tests, race detector, govulncheck, Node tests | CI, one step per `make` target; the race detector is three parallel `make race-*` jobs |
 | The Docker image builds | CI docker build job |
 | Config example key set and defaults match the struct | tests in `internal/config` |
 | Routes, error codes and runtime config keys match `internal/api/openapi.yaml` | parity tests in `internal/api` |
 | Output paths | golden tests in `internal/media` |
 | `internal/fairplay` decrypts like upstream Temari, and `internal/fairplay/rounds_gen.go` is the pinned version's translation | CI Temari parity job (`make temaridiff`); Renovate opens a PR per Temari release |
-| Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `apps/console` |
+| Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `apps/console`; layout: CI `ui-audit` jobs (warns only) |
 | Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md size, CLAUDE.md pairs, docs types and index | `tools/repocheck` tests |
 | DCO sign-off | DCO GitHub App on PRs; `.claude/hooks/guard-commands.mjs` on `git commit` |
 | `main` only through a PR | branch protection; guard hook on `git push` |
-| No `--admin` merge without approval | guard hook on `gh pr merge` (Claude Code only) |
+| No `--admin` merge without approval | guard hook on `gh pr merge` |
 | Never commit config, keys or data | `.gitignore`; guard hook on `git add -f` |
 | Upgrades from the last release | CI Upgrade check job |
 | No auth, breaking-change marking, clients updated with the API, full config comments, row-preserving migrations, optional amp-api reads degrade | text and `REVIEW.md` |

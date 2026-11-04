@@ -11,6 +11,9 @@ name: CI
 # A change to only documentation, rules, the website or the console skips the
 # Go jobs and runs the light one (changes job); Build and test still requires
 # whichever of the two the paths call for.
+#
+# The console ui-audit jobs sit beside them: they keep a screenshot matrix and a
+# layout report as an artifact and never gate a merge (see ui-audit below).
 
 on:
   push:
@@ -37,6 +40,7 @@ jobs:
     outputs:
       go: ${{ steps.paths.outputs.go }}
       guestboot: ${{ steps.paths.outputs.guestboot }}
+      uiaudit: ${{ steps.paths.outputs.uiaudit }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -145,7 +149,7 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/go
         with:
-          scope: test-${{ matrix.target }}-${{ strategy.job-index }}
+          scope: test-${{ matrix.target }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -200,7 +204,7 @@ jobs:
         uses: ./.github/actions/go
         with:
           name: race
-          scope: race-${{ matrix.target }}-${{ strategy.job-index }}
+          scope: race-${{ matrix.target }}
 
       # The media tests skip without ffmpeg, as in the test jobs.
       - name: Wait for ffmpeg
@@ -267,6 +271,123 @@ jobs:
 
       - name: Boot the guest
         uses: ./.github/actions/guestboot
+
+  # The console's ui-audit (apps/console/tools/ui-audit): every page and state
+  # of the console, driven against the tool's deterministic mock backend in
+  # headless Chrome, at each width and theme, measured for layout shift, flicker,
+  # overflow and alignment. One job per width and theme; the report job below
+  # joins them. It runs for a change to the console, the API spec or its own
+  # files, and for every push to dev. Records only: the build-and-test gate does
+  # not need it, and a finding past the threshold is a warning, not a failure.
+  # The console has one skin (music), so skin is not an axis.
+  ui-audit:
+    name: Console audit (${{ matrix.width }} ${{ matrix.theme }})
+    needs: changes
+    if: needs.changes.outputs.uiaudit == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        width: [1440, 1280, 768, 375, 320]
+        theme: [light, dark]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      # The tool takes playwright-core from outside the repository and drives
+      # the runner's own Google Chrome, so no browser is downloaded.
+      - name: Restore playwright-core
+        id: pw
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ui-audit-pw
+          key: ui-audit-pw-1.64.1
+
+      - name: Install playwright-core
+        if: steps.pw.outputs.cache-hit != 'true'
+        run: timeout 180 npm install --prefix ~/.cache/ui-audit-pw playwright-core@1.64.1
+
+      # Cover images come from Apple's CDN on first use and from this cache after.
+      - name: Restore cover images
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/amdl-ui-audit
+          key: ui-audit-covers-1
+
+      - name: Audit the console
+        timeout-minutes: 25
+        run: |
+          google-chrome --version
+          export PLAYWRIGHT_CORE="$HOME/.cache/ui-audit-pw/node_modules/playwright-core"
+          timeout 1440 node apps/console/tools/ui-audit/core/cli.mjs run \
+            --config apps/console/tools/ui-audit/console/audit.config.mjs \
+            --widths ${{ matrix.width }} --themes ${{ matrix.theme }} --out ui-audit-out
+
+      # Screenshots, per-frame strips and the raw result; the merge job builds
+      # the report from every shard.
+      - name: Upload the shard
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-audit-shard-${{ matrix.width }}-${{ matrix.theme }}
+          path: ui-audit-out
+          retention-days: 1
+          if-no-files-found: error
+
+  # Joins the shards into one report (the consistency and rhythm checks compare
+  # across widths and themes), writes the job summary and keeps the result.
+  # Past the threshold (more than 0 high findings, a failed step or a page
+  # error) it only annotates a warning: the gate waits until the maintainer has
+  # read a few of these artifacts.
+  ui-audit-report:
+    name: Console audit report
+    needs: [changes, ui-audit]
+    if: ${{ !cancelled() && needs.ui-audit.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      - name: Download the shards
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ui-audit-shard-*
+          path: shards
+
+      - name: Merge and summarize
+        env:
+          SHARDS_RESULT: ${{ needs.ui-audit.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != success ]; then
+            echo "::warning title=ui-audit::not every shard finished ($SHARDS_RESULT); the report covers the shards that did"
+          fi
+          cli=apps/console/tools/ui-audit/core/cli.mjs
+          node "$cli" merge shards/* --out ui-audit-report
+          node "$cli" summary ui-audit-report/report.json --max-high 0 \
+            --artifact "console-ui-audit-$GITHUB_SHA" --retention 14 --md "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        uses: actions/upload-artifact@v7
+        with:
+          name: console-ui-audit-${{ github.sha }}
+          path: ui-audit-report
+          retention-days: 14
+          if-no-files-found: error
 
   # Branch protection on main requires a check named "Build and test". This job
   # carries that name and fails unless every needed job succeeded, so the

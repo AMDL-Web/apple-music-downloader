@@ -54,4 +54,6 @@ Then `make dev`, open `http://127.0.0.1:18080/console/`, and check the change at
 desktop width and 375 px, in light and dark. A view whose height changes with its
 state (loading, drawer, live queue, account panel) also gets a run of
 [tools/ui-audit](tools/ui-audit/README.md#run-it); read its layout-shift and
-flicker findings.
+flicker findings. CI runs the same audit on every console change and every push to `dev`
+(`ui-audit` jobs in `.github/workflows/ci.yml`) and keeps the screenshot matrix and report
+as the artifact `console-ui-audit-<commit>`; it warns and never fails a build.

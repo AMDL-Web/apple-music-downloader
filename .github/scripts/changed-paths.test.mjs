@@ -15,13 +15,22 @@ test('the guest boot skips a change that cannot reach it', () => {
   assert.equal(classify(['README.md', 'docs/cli.md', 'apps/console/web/app.js', 'internal/jobs/jobs.go', 'internal/configs/x.go']).guestboot, false);
 });
 
+test('the console audit runs for the console, the API spec and its own files', () => {
+  for (const f of ['apps/console/static/css/queue.css', 'apps/console/tools/ui-audit/core/run.mjs', 'apps/console/tools/ui-audit/console/audit.config.mjs',
+    'internal/api/openapi.yaml', '.github/workflows/ci.yml', '.github/scripts/changed-paths.mjs']) {
+    assert.equal(classify([f]).uiaudit, true, f);
+  }
+  assert.equal(classify(['README.md', 'docs/api.md', 'apps/site/build.mjs', 'internal/jobs/jobs.go', 'internal/api/events.go']).uiaudit, false);
+  assert.equal(classify(['internal/jobs/jobs.go', 'apps/console/static/js/api.js']).uiaudit, true);
+});
+
 test('one matching path among many is enough', () => {
   assert.equal(classify(['README.md', 'internal/wrapperhost/guest.go', 'docs/api.md']).guestboot, true);
 });
 
 test('an unknown change list runs every job', () => {
-  assert.deepEqual(classify([]), { go: true, guestboot: true });
-  assert.deepEqual(classify(['', '\n']), { go: true, guestboot: true });
+  assert.deepEqual(classify([]), { go: true, guestboot: true, uiaudit: true });
+  assert.deepEqual(classify(['', '\n']), { go: true, guestboot: true, uiaudit: true });
 });
 
 test('documentation, rules, the website and the console skip the Go jobs', () => {

@@ -3,7 +3,8 @@
 A repeatable hunt for small UI flaws: it drives a web app through every page
 and state at several widths, themes and engines, measures each screen, and
 writes one deduplicated list of findings with the element, the measured
-values and a crop. It is an on-demand tool, not a CI gate.
+values and a crop. It is an on-demand tool, and CI also runs it on every console
+change as a record that gates nothing ([In CI](#in-ci)).
 
 Two halves with a clean boundary:
 
@@ -37,7 +38,10 @@ Then open `/tmp/ui-audit/index.html`. Useful flags:
 | `--no-states` | skip the forced hover/focus/pressed pass |
 | `--engine webkit` | WebKit instead of Chrome (no state pass: it has no CDP) |
 
-`report <result.json> --out <dir>` rebuilds the page from a saved run;
+`merge <shard-dir>... --out <dir>` joins the output directories of several `--widths` or `--themes` runs
+into one report (the consistency and rhythm checks compare across runs, so they run on the merged result);
+`summary <report.json>` prints a markdown summary and a GitHub `::warning` line when there are more than
+`--max-high` high findings (default 0), a failed step or a page error. `report <result.json> --out <dir>` rebuilds the page from a saved run;
 `diff <before/report.json> <after/report.json>` prints per-check counts
 before → after and which findings went away or appeared.
 
@@ -67,6 +71,18 @@ that could not be read.
 
 WebKit runs on a Linux host with Playwright's WebKit installed: copy the
 repository there and run the same command with `--engine webkit`.
+
+## In CI
+
+The `ui-audit` jobs of `.github/workflows/ci.yml` run the whole matrix for each
+console change (paths in `.github/scripts/changed-paths.mjs`) and for every push to
+`dev`: one job per width × theme, in the runner's own Chrome,
+then a report job joins them with `merge`. The console has one skin, so skin is not an
+axis. The artifact `console-ui-audit-<commit>` (kept 14 days) holds `index.html`, `report.json`,
+`result.json` and the screenshots; the run's summary page lists the counts and the high
+findings. Nothing here fails a build: past the threshold the job only annotates a warning.
+Screenshots from the runner use Linux fonts, so pixels differ from a Mac run and a
+before → after `diff` is only meaningful between two CI runs.
 
 ## What it checks
 
