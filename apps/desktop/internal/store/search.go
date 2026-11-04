@@ -91,6 +91,8 @@ type Search struct {
 	sent map[string]string
 	// gone holds the jobs deleted while the app watched.
 	gone map[string]bool
+	// songWatch holds the songs submitted from here, by HitKey, with when.
+	songWatch map[string]time.Time
 }
 
 // ArtistPages is one artist and the pages of its albums read so far.
@@ -147,7 +149,7 @@ func (s *Store) WantSearch(term string) {
 	// A new term shows its own hits, not the artist opened from the last.
 	s.OpenArtist("")
 	if term == "" {
-		*q = Search{Region: q.Region, cache: q.cache, sent: q.sent, gone: q.gone, Starting: q.Starting, Artist: q.Artist, Album: q.Album, want: term, gen: q.gen}
+		*q = Search{Region: q.Region, cache: q.cache, sent: q.sent, gone: q.gone, songWatch: q.songWatch, Starting: q.Starting, Artist: q.Artist, Album: q.Album, want: term, gen: q.gen}
 		return
 	}
 	if s.showCachedSearch(term) {
@@ -470,6 +472,9 @@ func (s *Store) SubmitHit(h client.SearchHit, overrides *config.DownloadOverride
 		return
 	}
 	q.Starting[key] = s.now()
+	if h.Type == "song" {
+		s.watchSong(h)
+	}
 	s.submit([]string{h.URL}, overrides, func(res domain.BatchSubmitResponse, err error) {
 		delete(q.Starting, key)
 		for _, r := range res.Results {
