@@ -9,10 +9,13 @@
 import { html, useState } from '../ui/preact.js';
 import { loginWrapper, submitWrapperTwoStep, logoutWrapper } from '../api.js';
 import { wrapperErrorText, wrapperUnreachable, managedMode, WRAPPER_LOGS } from '../lib/settings-account.js';
-import { useApp, Button, Notice, Icon } from '../ui/components.js';
+import { useApp, Button, Notice, Icon, Badge } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { useStatus, refreshStatus } from '../ui/system-status.js';
 import { accountLabel, accountList } from '../lib/accounts.js';
+
+/** The badge of an account whose Apple session stopped working: log it in again below. */
+const NEEDS_LOGIN = { role: 'warning', icon: 'triangle-alert', label: 'Session expired', title: 'Its Apple session stopped working. Log in again with this Apple ID.' };
 
 /** A failed wrapper call as a notice: the message, then the server's text in mono. */
 function WrapperError({ error, step, role = 'danger' }) {
@@ -73,6 +76,7 @@ export function AccountPanel() {
                 ${accounts.map(
                   (a) => html`<li key=${a.id} class="account-row">
                     <span class="account-name mono">${accountLabel(a) || a.id}</span>
+                    ${a.needs_login ? html`<${Badge} view=${NEEDS_LOGIN} />` : null}
                     ${canLogin ? html`<${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout(a.name || '')}>Log out</${Button}>` : null}
                   </li>`,
                 )}

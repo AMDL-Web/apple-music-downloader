@@ -135,8 +135,8 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   const pending = new Set();
   const configBody = () => ({ config, persisted: true, pending_restart: [...pending].sort() });
   const accounts = [
-    { id: 'wm_demo_us', name: 'demo@example.com', region: STOREFRONT, position: 0, default: true, library_sync: true, apple_library: true, state: 'active', added_at: iso(now - 30 * 86400000), seen_at: iso(now - 60000) },
-    { id: 'wm_demo_jp', name: 'demo.jp@example.com', region: 'jp', position: 1, default: false, library_sync: false, apple_library: false, state: 'active', added_at: iso(now - 9 * 86400000), seen_at: iso(now - 60000) },
+    { id: 'wm_demo_us', name: 'demo@example.com', region: STOREFRONT, position: 0, default: true, library_sync: true, apple_library: true, state: 'active', added_at: iso(now - 30 * 86400000), seen_at: iso(now - 60000), needs_login: false },
+    { id: 'wm_demo_jp', name: 'demo.jp@example.com', region: 'jp', position: 1, default: false, library_sync: false, apple_library: false, state: 'active', added_at: iso(now - 9 * 86400000), seen_at: iso(now - 60000), needs_login: false },
   ];
   const sortAccounts = () => {
     accounts.sort((a, b) => a.position - b.position);

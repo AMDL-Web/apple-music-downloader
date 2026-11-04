@@ -10,6 +10,7 @@ import (
 
 	"amdl/internal/config"
 	"amdl/internal/domain"
+	"amdl/internal/usertoken"
 	"amdl/internal/wrapper"
 )
 
@@ -78,5 +79,21 @@ func TestARunStopsWaitingForTheWrapper(t *testing.T) {
 	_ = d.ProcessJob(ctx, job, &recordingReporter{}) // the cancelled run's error is not the point
 	if waited := time.Since(start); waited > 5*time.Second {
 		t.Errorf("a cancelled run waited %s for the wrapper", waited)
+	}
+}
+
+// A link of a region whose account's Apple session stopped working in the
+// wrapper names that account and says to log it in again, rather than that
+// no account serves the region.
+func TestALinkOfASignedOutAccountsRegionSaysToLogItIn(t *testing.T) {
+	status := wrapper.Status{Ready: true, LoggedIn: true, Regions: []string{"jp"}, Listed: true, Instances: []wrapper.Instance{
+		{ID: "cn-id", Name: "c@icloud.com"}, {ID: "jp-id", Region: "jp", Name: "j@icloud.com", Ready: true},
+	}}
+	d := waitTestDownloader(t, &fakeDownloaderWrapper{status: status})
+	d.tokens = usertoken.New()
+	d.tokens.SetAccounts([]usertoken.Account{{ID: "cn-id", Region: "cn", Active: true}, {ID: "jp-id", Region: "jp", Position: 1, Active: true}})
+	err := d.validateStorefront(context.Background(), "cn", "the link's storefront")
+	if err == nil || !strings.Contains(err.Error(), "c@icloud.com") || !strings.Contains(err.Error(), "log it in again") {
+		t.Fatalf("validateStorefront = %v, want it to name the account to log in again", err)
 	}
 }

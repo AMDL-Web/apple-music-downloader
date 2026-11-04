@@ -36,19 +36,22 @@ func (a *App) accountList(c *ui.Context, k *Tokens, canAdd bool) {
 			ui.Box(c).Size(28, 28)
 		})
 		for i := range list {
-			a.accountListRow(c, k, list[i], i == 0 && len(list) > 1)
+			a.accountListRow(c, k, list[i], i == 0 && len(list) > 1, canAdd)
 		}
 	})
 }
 
-func (a *App) accountListRow(c *ui.Context, k *Tokens, acc client.Account, isDefault bool) {
+func (a *App) accountListRow(c *ui.Context, k *Tokens, acc client.Account, isDefault, canAdd bool) {
 	s := a.Store
 	name := accountLabel(acc)
 	id := acc.ID
 	ui.Row(c.Key("account-" + id)).Height(52).Gap(12).AlignItems(ui.Center).Children(func() {
 		dot, state, fg := k.OK, "Active", k.Fg
-		if acc.State != client.AccountActive {
+		switch {
+		case acc.State != client.AccountActive:
 			dot, state, fg = k.Faint, "Missing", k.Muted
+		case acc.NeedsLogin:
+			dot, state = k.Warn, "Needs login"
 		}
 		ui.Box(c).Size(8, 8).Radius(radiusFull).Background(dot).Shrink(0).Label(state).Tooltip(state)
 		ui.Row(c).Grow(1).Shrink(1).MinWidth(0).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -58,6 +61,11 @@ func (a *App) accountListRow(c *ui.Context, k *Tokens, acc client.Account, isDef
 			}
 			if isDefault {
 				chip(c, k, "Default", ui.Color{}).Shrink(0)
+			}
+			if acc.NeedsLogin {
+				if canAdd && button(c, k, buttonPlain, "Log in again", nil).Label("Log in "+name+" again").Clicked() {
+					a.set.login.adding, a.set.login.user = true, acc.Name
+				}
 			}
 		})
 		ui.Row(c).Width(accountSwitchWidth).Justify(ui.Center).Children(func() {

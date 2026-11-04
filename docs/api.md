@@ -287,14 +287,16 @@ curl http://localhost:18080/api/v1/accounts
 ```json
 {"accounts":[{"id":"6f1c…","name":"a@icloud.com","region":"us","position":0,"default":true,
   "library_sync":true,"apple_library":true,"state":"active",
-  "added_at":"2026-11-02T08:30:00Z","seen_at":"2026-11-03T01:10:00Z"}]}
+  "added_at":"2026-11-02T08:30:00Z","seen_at":"2026-11-03T01:10:00Z","needs_login":false}]}
 ```
 
 The list is sorted by `position`; position 0 is the default account, which reads records
 with no pinned storefront and links whose storefront no account serves. `name` is the
 Apple ID, `""` when the wrapper does not say; `region` is the storefront, `""` while
 unknown. `state` is `active` or `missing` (the wrapper no longer reports it; its row
-and switches stay). The route makes no wrapper request: amdl reads the wrapper's accounts
+and switches stay). `needs_login` is an active account whose Apple session stopped
+working in the wrapper: the wrapper-manager lists it but routes nothing to it, so a
+download of its region fails, naming the account, until it logs in again. The route makes no wrapper request: amdl reads the wrapper's accounts
 at start, every 10 minutes and after a login, logout or delete, so refetch a second or two
 after a login. A new account starts with `library_sync` and `apple_library` off; the one
 that adopts the library state of a database from before accounts takes `library_sync` from

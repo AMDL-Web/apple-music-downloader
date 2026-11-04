@@ -165,3 +165,43 @@ func TestDelete(t *testing.T) {
 		t.Fatalf("delete gone = %v", err)
 	}
 }
+
+// An instance the manager stopped routing to, ready false and its region
+// dropped, keeps its account and region and says it needs to log in, and
+// the change is heard; logged in again, it no longer does.
+func TestAnAccountWhoseSessionWentNeedsLogin(t *testing.T) {
+	cn := wrapper.Instance{ID: "cn-id", Region: "cn", Name: "c@icloud.com", Ready: true}
+	jp := wrapper.Instance{ID: "jp-id", Region: "jp", Name: "j@icloud.com", Ready: true}
+	w := &fakeWrapper{status: manager(cn, jp)}
+	s, _, _ := newService(t, w, config.Default())
+	ctx := context.Background()
+	if err := s.Discover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	changed := 0
+	s.OnChange(func() { changed++ })
+	gone := cn
+	gone.Ready, gone.Region = false, ""
+	w.status = manager(gone, jp)
+	w.status.Regions = []string{"jp"}
+	if err := s.Discover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 || !list[0].NeedsLogin || list[0].Region != "cn" || list[0].State != domain.AccountActive || list[1].NeedsLogin {
+		t.Fatalf("accounts = %+v", list)
+	}
+	if changed != 1 {
+		t.Errorf("the session going was heard %d times, want 1", changed)
+	}
+	w.status = manager(cn, jp)
+	if err := s.Discover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ = s.List(ctx); list[0].NeedsLogin || changed != 2 {
+		t.Errorf("logged in again: %+v, heard %d", list[0], changed)
+	}
+}

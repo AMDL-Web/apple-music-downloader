@@ -3015,7 +3015,7 @@ components:
         with id wrapper. amdl
         reads the wrapper's accounts at start, every 10 minutes and after a
         login or logout.
-      required: [id, name, region, position, default, library_sync, apple_library, state, added_at]
+      required: [id, name, region, position, default, library_sync, apple_library, state, added_at, needs_login]
       properties:
         id:
           type: string
@@ -3056,6 +3056,13 @@ components:
           type: string
           format: date-time
           description: The last discovery that found the account.
+        needs_login:
+          type: boolean
+          description: >-
+            An active account whose Apple session stopped working in the
+            wrapper at the last discovery: the wrapper-manager lists it but
+            routes nothing to it, so its region's downloads fail until it
+            logs in again.
     AccountList:
       type: object
       required: [accounts]

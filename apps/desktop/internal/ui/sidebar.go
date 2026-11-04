@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -218,8 +219,8 @@ const (
 )
 
 // serverStatus is what the sidebar's connection card shows: where
-// downloads run and whether that place answers. The account's state is
-// left to Settings, which reads it while it shows.
+// downloads run, whether that place answers, and whether an account must
+// log in again; the rest of the accounts' state is left to Settings.
 type serverStatus struct {
 	icon       *ui.SVG
 	host, word string
@@ -250,6 +251,8 @@ func (a *App) serverState(k *Tokens) serverStatus {
 		st.word, st.tone = "Offline", toneBad
 	case a.Store.Conn.Phase == client.Connecting:
 		st.word, st.tone = "Connecting…", toneWait
+	case slices.ContainsFunc(a.Store.Server.Accounts, func(acc client.Account) bool { return acc.NeedsLogin }):
+		st.word, st.tone = "Account needs login", toneWait
 	}
 	st.fg, st.soft = k.OK, k.OKSoft
 	switch st.tone {

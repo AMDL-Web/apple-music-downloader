@@ -27,6 +27,9 @@ type Account struct {
 	State   string     `json:"state"`
 	AddedAt time.Time  `json:"added_at"`
 	SeenAt  *time.Time `json:"seen_at,omitempty"`
+	// NeedsLogin is an active account whose Apple session stopped working
+	// in the wrapper: it serves nothing until it logs in again.
+	NeedsLogin bool `json:"needs_login"`
 }
 
 // Account states.

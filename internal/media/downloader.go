@@ -1,6 +1,7 @@
 package media
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -247,6 +248,24 @@ func (d *Downloader) awaitWrapper(ctx context.Context) {
 // validateStorefront checks that the wrapper's account serves storefront,
 // which a run reads in; which names it in the error. A mismatch is
 // decryptor_unavailable naming both.
+// signedOut is the Apple ID (else the id) of an account of storefront that
+// the wrapper lists but no longer serves, its Apple session gone; such an
+// instance reports no region, so the account's own is the one discovery
+// stored (internal/accounts#Service.List says the same).
+func (d *Downloader) signedOut(status wrapper.Status, storefront string) (string, bool) {
+	for _, a := range d.tokens.Accounts() {
+		if !a.Active || !strings.EqualFold(a.Region, storefront) {
+			continue
+		}
+		for _, in := range status.Instances {
+			if in.ID == a.ID && !in.Ready && in.Region == "" {
+				return cmp.Or(in.Name, in.ID), true
+			}
+		}
+	}
+	return "", false
+}
+
 func (d *Downloader) validateStorefront(ctx context.Context, storefront, which string) error {
 	if d.cfg.Simulate.Enabled {
 		// Test mode never decrypts, so it must not depend on a running
@@ -270,6 +289,10 @@ func (d *Downloader) validateStorefront(ctx context.Context, storefront, which s
 		}
 	}
 	message := fmt.Sprintf("%s %q is not served by the wrapper's account (it serves: %s)", which, storefront, strings.Join(status.Regions, ", "))
+	if name, ok := d.signedOut(status, storefront); ok {
+		message = fmt.Sprintf("%s %q is the region of account %s, whose Apple session stopped working in the wrapper; log it in again (the wrapper serves: %s)",
+			which, storefront, name, strings.Join(status.Regions, ", "))
+	}
 	return &jobs.RequestError{
 		Code: "decryptor_unavailable", Message: message, Storefront: storefront,
 		SupportedStorefronts: append([]string(nil), status.Regions...),

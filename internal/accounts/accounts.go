@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 	"time"
 
@@ -75,6 +76,9 @@ type Service struct {
 	listeners []func()
 	// lastErr is the last discovery's failure, logged once per change.
 	lastErr string
+	// signedOut are the accounts the last discovery found listed but not
+	// ready, their Apple session gone (domain.Account.NeedsLogin).
+	signedOut map[string]bool
 }
 
 // New builds the service. It does no I/O; Run runs discovery.
@@ -168,10 +172,16 @@ func (s *Service) discoverLocked(ctx context.Context) error {
 	}
 	cfg := s.cfg()
 	d := db.AccountDiscovery{Complete: true, AdoptLibrarySync: cfg.LibrarySync.Enabled}
+	signedOut := map[string]bool{}
 	switch {
 	case status.Listed:
 		for _, in := range status.Instances {
 			d.Seen = append(d.Seen, db.SeenAccount{ID: in.ID, Name: in.Name, Region: in.Region})
+			// A manager drops the region of an instance it stopped routing
+			// to; one without the ready flag still reports its region.
+			if !in.Ready && in.Region == "" {
+				signedOut[in.ID] = true
+			}
 		}
 	case len(status.Regions) > 0:
 		d.Seen = []db.SeenAccount{{ID: domain.ImplicitAccountID, Name: status.Name, Region: status.Regions[0]}}
@@ -202,7 +212,16 @@ func (s *Service) discoverLocked(ctx context.Context) error {
 	for _, id := range res.Added {
 		s.logger.Info("new account", "account", id)
 	}
-	if !sameAccounts(before, after) {
+	s.lmu.Lock()
+	was := s.signedOut
+	s.signedOut = signedOut
+	s.lmu.Unlock()
+	for id := range signedOut {
+		if !was[id] {
+			s.logger.Warn("account needs to log in again: the wrapper no longer has a working Apple session for it", "account", id)
+		}
+	}
+	if !sameAccounts(before, after) || !maps.Equal(was, signedOut) {
 		s.changed()
 	}
 	return nil
@@ -222,9 +241,25 @@ func (s *Service) noteErr(err error) {
 	}
 }
 
-// List returns every account, the default first.
+// List returns every account, the default first, each with NeedsLogin as
+// the last discovery found it.
 func (s *Service) List(ctx context.Context) ([]domain.Account, error) {
-	return s.store.ListAccounts(ctx)
+	list, err := s.store.ListAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i] = s.withLogin(list[i])
+	}
+	return list, nil
+}
+
+// withLogin is a with NeedsLogin as the last discovery found it.
+func (s *Service) withLogin(a domain.Account) domain.Account {
+	s.lmu.Lock()
+	defer s.lmu.Unlock()
+	a.NeedsLogin = a.State == domain.AccountActive && s.signedOut[a.ID]
+	return a
 }
 
 // Update changes an account's switches or position (db.AccountPatch).
@@ -239,7 +274,7 @@ func (s *Service) Update(ctx context.Context, id string, p db.AccountPatch) (dom
 		return domain.Account{}, err
 	}
 	s.changed()
-	return a, nil
+	return s.withLogin(a), nil
 }
 
 // Delete logs an account out of the wrapper and forgets what amdl keeps for

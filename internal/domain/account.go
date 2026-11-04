@@ -38,4 +38,9 @@ type Account struct {
 	AddedAt      time.Time    `json:"added_at"`
 	// SeenAt is the last discovery that reported the account.
 	SeenAt *time.Time `json:"seen_at,omitempty"`
+	// NeedsLogin is an active account whose Apple session stopped working in
+	// the wrapper at the last discovery, which routes nothing to it until it
+	// logs in again. It is not stored: discovery sets it
+	// (internal/accounts#Service.List).
+	NeedsLogin bool `json:"needs_login"`
 }
