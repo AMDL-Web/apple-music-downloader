@@ -70,8 +70,8 @@ func TestMigration8DetachesRunsOfMissingRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open schema 7: %v", err)
 	}
-	if got := userVersion(t, store.db); got != 8 {
-		t.Fatalf("user_version = %d, want 8", got)
+	if got := userVersion(t, store.db); got != latestSchemaVersion() {
+		t.Fatalf("user_version = %d, want %d", got, latestSchemaVersion())
 	}
 	after := dumpAll(t, store.db)
 

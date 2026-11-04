@@ -37,6 +37,7 @@ var migrations = []migrationStep{
 	{1, 6, migrateTo6}, // 2.0: records, files, runs; imports the 1.x jobs
 	{6, 7, migrateTo7}, // accounts: per-account library state, record and pending-add storefronts
 	{7, 8, migrateTo8}, // runs that name a missing record name none
+	{8, 9, migrateTo9}, // rollups of records with a main slot no codec offers
 }
 
 // latestSchemaVersion is the user_version a database has after Open.

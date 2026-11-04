@@ -422,7 +422,7 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 
 Back up `amdl.db` first: the upgrade rewrites the 1.x tables and cannot be undone
 except from that copy. The first start runs the migrations, each in its own transaction
-(schema version 8, `PRAGMA user_version`):
+(schema version 9, `PRAGMA user_version`):
 
 - every 1.x job becomes a run in `runs`, keeping its id, type, values and
   timestamps; `started_at` and `finished_at` are backfilled from its events
@@ -460,6 +460,10 @@ except from that copy. The first start runs the migrations, each in its own tran
   deleted their record. A run whose paused add (a job the upgrade stopped) will still make
   its record keeps it. Such a run is shown, retried and removed as a run of no record; the
   row and its items and events stay.
+- migration 9 recomputes the counts and state (`tracks_*`, `state`, `completed_at`) of
+  each album or playlist record that holds a track no codec offers: that track no
+  longer counts as wanted, so a record whose other tracks are all downloaded reads
+  `complete` instead of staying `partial`. No row is added or removed.
 
 A database written by a 2.0 release candidate (schema 2 to 5) is refused with a
 message; move it aside and start again. A 1.x build opening the migrated file finds no
