@@ -194,6 +194,21 @@ func (a *App) appleOpen(kind string, it domain.AppleLibraryItem) func() {
 	return nil
 }
 
+// appleHit is the search hit an Apple album or playlist with a catalog page
+// stands for, carrying its record's mark as the last read had it; false for
+// an item amdl cannot download as a hit.
+func (a *App) appleHit(kind string, it domain.AppleLibraryItem) (client.SearchHit, bool) {
+	if it.CatalogID == "" || it.URL == "" {
+		return client.SearchHit{}, false
+	}
+	typ, rk := "album", domain.ResourceAlbum
+	if kind == "playlists" {
+		typ, rk = "playlist", domain.ResourcePlaylist
+	}
+	return client.SearchHit{Type: typ, ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL, URL: it.URL,
+		TrackCount: it.TrackCount, Resource: a.Store.Library.Mark(rk, it.CatalogID)}, true
+}
+
 func (a *App) openAppleAlbum(it domain.AppleLibraryItem) {
 	a.OpenAlbum(client.SearchHit{Type: "album", ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL,
 		Resource: a.Store.RecordMark(domain.ResourceAlbum, it.CatalogID)})
@@ -215,6 +230,14 @@ func (a *App) appleControl(c *ui.Context, k *Tokens, kind string, it domain.Appl
 	s := a.Store
 	l := &s.Library
 	done := markLook{bg: k.OK, fg: ui.RGB(255, 255, 255), ic: icCheck}
+	if h, ok := a.appleHit(kind, it); ok {
+		// The record's own mark, as a search tile's: queued, paused, partly
+		// downloaded (its click adds the rest) or downloaded.
+		if mark, _ := s.HitMark(h); mark != store.MarkNone {
+			a.tileControl(c, k, h, hover)
+			return
+		}
+	}
 	switch {
 	case it.CatalogID != "" && l.Kept[it.CatalogID]:
 		b := tileCorner(c).Tooltip("In Library")

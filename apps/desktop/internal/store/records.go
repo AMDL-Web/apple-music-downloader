@@ -79,6 +79,7 @@ func (s *Store) forgetRecord(ref domain.ResourceRef) {
 	delete(s.Records.marks, ref)
 	s.Records.gone[ref] = true
 	delete(s.Library.Kept, ref.ID)
+	delete(s.Library.Marks, ref)
 	s.Queue.dropRecord(ref)
 	if ref.Kind == domain.ResourceAlbum {
 		s.albumMoved(ref.ID)

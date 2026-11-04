@@ -296,3 +296,70 @@ func TestAnAppleTileInTheQueueOpensItsAlbum(t *testing.T) {
 		t.Errorf("a click on the queued mark left screen %v, want the album's page", a.Screen)
 	}
 }
+
+// An album whose record wants only the one track added by hand (1 of 6
+// done, the record complete) reads on the Library tile as it does on the
+// album's page and in the search: not fully downloaded, and one click adds
+// the rest. Only the record decides; nothing reads the disk.
+func TestAnAppleTileOfAPartRecordOffersTheRest(t *testing.T) {
+	a, run := demoApp(t)
+	s := a.Store
+	run(func() bool { return s.Loaded })
+	a.Go(ScreenLibrary)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.Frame()
+	run(func() bool { return s.Library.AppleStatus == store.SearchReady })
+	it := appleItem(s, "Salt & Static")
+	for i := range s.Library.Apple.Items {
+		if s.Library.Apple.Items[i].ID == it.ID {
+			s.Library.Apple.Items[i].TrackCount = 6
+		}
+	}
+	s.Library.Kept[it.CatalogID] = true
+	s.Library.Marks[domain.ResourceRef{Kind: domain.ResourceAlbum, ID: it.CatalogID}] = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: it.CatalogID,
+		State: domain.RecordComplete, TracksDone: 1, TracksWanted: 1}
+	tt.Frame()
+	if _, ok := tt.Find("In Library: open it"); ok {
+		t.Fatal("a part record shows the plain check")
+	}
+	r, ok := tt.Find("Salt & Static: 1 of 6 tracks downloaded, download the rest")
+	if !ok {
+		t.Fatalf("no partial mark on the tile: %q", tt.Texts())
+	}
+	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+	if _, on := s.Search.Starting[store.HitKey(client.SearchHit{Type: "album", ID: it.CatalogID})]; !on {
+		t.Error("the click started no download of the album")
+	}
+	if a.asking != nil {
+		t.Errorf("a record that wants only some tracks asked about the library: %+v", a.asking)
+	}
+}
+
+// A downloaded album's tile marks it as the search does: a click offers to
+// download it again.
+func TestAnAppleTileOfADownloadedRecordOffersItAgain(t *testing.T) {
+	a, run := demoApp(t)
+	s := a.Store
+	run(func() bool { return s.Loaded })
+	a.Go(ScreenLibrary)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.Frame()
+	run(func() bool { return s.Library.AppleStatus == store.SearchReady })
+	it := appleItem(s, "Salt & Static")
+	s.Library.Kept[it.CatalogID] = true
+	s.Library.Marks[domain.ResourceRef{Kind: domain.ResourceAlbum, ID: it.CatalogID}] = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: it.CatalogID,
+		State: domain.RecordComplete, TracksDone: 6, TracksWanted: 6, WantedAll: true}
+	tt.Frame()
+	r, ok := tt.Find("Salt & Static is in your library: download again")
+	if !ok {
+		t.Fatalf("no downloaded mark on the tile: %q", tt.Texts())
+	}
+	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+	if a.asking == nil || !a.asking.open {
+		t.Errorf("a click on a downloaded album's mark asked nothing")
+	}
+}

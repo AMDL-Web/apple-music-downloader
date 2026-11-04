@@ -91,6 +91,9 @@ type Library struct {
 	AppleAccount string
 	// Kept are the catalog ids amdl has a record of, marking Apple's items.
 	Kept map[string]bool
+	// Marks are the records' marks as the last read of them had them, by
+	// record: the Apple items' marks (Mark), under the feed's newer news.
+	Marks map[domain.ResourceRef]*domain.ResourceMark
 	// Added are the Apple items added here, by URL.
 	Added map[string]domain.SubmitStatus
 	// Tracks are the tracks of the Apple playlists opened, by library id.
@@ -101,7 +104,7 @@ type Library struct {
 }
 
 func (l *Library) reset() {
-	*l = Library{AppleKind: AppleKinds[0], Kept: map[string]bool{}, Added: map[string]domain.SubmitStatus{},
+	*l = Library{AppleKind: AppleKinds[0], Kept: map[string]bool{}, Marks: map[domain.ResourceRef]*domain.ResourceMark{}, Added: map[string]domain.SubmitStatus{},
 		Tracks: map[string][]domain.AppleLibraryTrack{}}
 }
 
@@ -218,6 +221,13 @@ func (s *Store) SetAppleAccount(id string) {
 	l.refresh(s)
 }
 
+// Mark is the mark of the record of the Apple item with catalog id, as
+// the last read of the records had it; nil when none had one. A hit
+// carrying it reads the feed's newer news over it (HitMark).
+func (l *Library) Mark(kind domain.ResourceKind, catalogID string) *domain.ResourceMark {
+	return l.Marks[domain.ResourceRef{Kind: kind, ID: catalogID}]
+}
+
 // recordMoved notes that amdl keeps record ref, marking its Apple item.
 func (l *Library) recordMoved(ref domain.ResourceRef) { l.Kept[ref.ID] = true }
 
@@ -275,11 +285,13 @@ func (l *Library) readApple(s *Store, gen int) {
 		}
 		page, err := readAppleList(ctx, c, kind, account)
 		kept := map[string]bool{}
+		marks := map[domain.ResourceRef]*domain.ResourceMark{}
 		for _, kind := range []domain.ResourceKind{domain.ResourceAlbum, domain.ResourcePlaylist} {
 			for p := 0; p < appleMarkPages; p++ {
 				rows, total, err := readRecords(ctx, c, kind, client.RecordQuery{Limit: appleMarkPerPage, Offset: p * appleMarkPerPage})
 				for _, r := range rows {
 					kept[r.Ref.ID] = true
+					marks[r.Ref] = r.Mark()
 				}
 				if err != nil || (p+1)*appleMarkPerPage >= total {
 					break
@@ -301,7 +313,7 @@ func (l *Library) readApple(s *Store, gen int) {
 			for ref := range s.Records.marks {
 				kept[ref.ID] = true
 			}
-			l.Kept = kept
+			l.Kept, l.Marks = kept, marks
 			if err != nil {
 				l.AppleStatus, l.AppleErr = SearchFailed, Reason(err)
 				return

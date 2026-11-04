@@ -20,7 +20,8 @@ func TestTheLibraryAddsFromTheAppleLibrary(t *testing.T) {
 	tt.Frame()
 	run(func() bool { return s.Library.AppleStatus == store.SearchReady })
 	tt.Frame()
-	if !tt.HasText("In Library") {
+	// A kept album is marked as the search marks it: by its record.
+	if !tt.HasText("Orchard Lights is in your library: download again") || !tt.HasText("Glass Weather is in the queue") {
 		t.Errorf("no album marked: %q", tt.Texts())
 	}
 	if _, ok := tt.Find("Add Salt & Static"); ok {

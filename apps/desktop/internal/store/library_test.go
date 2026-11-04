@@ -120,6 +120,10 @@ type appleKeep struct {
 	hold chan struct{}
 	mu   sync.Mutex
 	kept bool
+	// part serves the album's record as one wanting only the track added
+	// by hand, done: the record of an album a 1.x install downloaded one
+	// song of.
+	part bool
 }
 
 const keepAlbum = "1490555698"
@@ -138,6 +142,11 @@ func (f *appleKeep) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case <-f.hold:
 			case <-r.Context().Done():
 			}
+		}
+		if f.part && r.URL.Path == "/api/v1/library/albums" {
+			reply(map[string]any{"items": []any{map[string]any{"id": keepAlbum, "name": "nameless story", "state": "complete",
+				"tracks_wanted": 1, "tracks_done": 1, "release_track_count": 6, "wanted_all": false}}, "total": 1})
+			return
 		}
 		reply(map[string]any{"items": []any{}, "total": 0})
 	case r.URL.Path == "/api/v1/downloads" && r.Method == http.MethodPost:
@@ -187,5 +196,26 @@ func TestAReadOutBeforeARecordAppearedKeepsItKept(t *testing.T) {
 	settle(func() bool { return l.AppleStatus == SearchReady })
 	if !l.Kept[keepAlbum] {
 		t.Errorf("the read took the keep away: %v", l.Kept)
+	}
+}
+
+// The Library keeps the mark of each record it read, so an Apple item's
+// tile reads the record's state, the part of the album a record that wants
+// only some tracks holds included.
+func TestTheLibraryKeepsTheMarksOfTheRecordsItRead(t *testing.T) {
+	s, settle := live(t, &appleKeep{part: true})
+	l := &s.Library
+	s.OpenLibrary()
+	settle(func() bool { return l.AppleStatus == SearchReady && l.Kept[keepAlbum] })
+	m := l.Mark(domain.ResourceAlbum, keepAlbum)
+	if m == nil {
+		t.Fatalf("no mark of the record read: %v", l.Marks)
+	}
+	hit := client.SearchHit{Type: "album", ID: keepAlbum, TrackCount: 6, Resource: m}
+	if mark, _ := s.HitMark(hit); mark != MarkPartial {
+		t.Errorf("1 of the 6 tracks, the record wanting only that one, reads %v, want partial", mark)
+	}
+	if got := l.Mark(domain.ResourceAlbum, "nothing"); got != nil {
+		t.Errorf("an item with no record has the mark %+v", got)
 	}
 }
