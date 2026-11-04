@@ -143,9 +143,13 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 		if lift > 0.01 {
 			frame.Shadow(0, 10*lift, 24*lift, 0, ui.RGBA(0, 0, 0, 0.45*lift))
 		}
-		frame.Children(func() {
+		cover := func() {
 			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: jobPalette(j, false).Bg, Size: size, Radius: radiusControl, Color: 1, Video: video}.Show(c)
-		})
+		}
+		frame.Children(cover)
+		if f := &a.fly; f.moving && !f.grow && strings.HasPrefix(f.from, "hero:") && lift <= 0.01 {
+			f.wall = append(f.wall, flightWall{box: frame.Bounds(), build: cover})
+		}
 	})
 }
 

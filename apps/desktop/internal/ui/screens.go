@@ -23,11 +23,13 @@ func (a *App) screens(c *ui.Context, k *Tokens, page float32) {
 	if under != ScreenAlbum && (!inPage || f.moving) {
 		l := layer(under)
 		if f.moving && !f.growing() {
-			if f.out {
-				// Coming back to the front, the screen is not blurred.
-				l.Opacity(f.underShown())
-			} else {
-				f.fade(l, f.underShown())
+			if op := f.underShown(); op < 1 {
+				if f.out {
+					// Coming back to the front, the screen is not blurred.
+					l.Opacity(op)
+				} else {
+					f.fade(l, op)
+				}
 			}
 		}
 		l.Children(func() { a.screen(c, k, under, page) })

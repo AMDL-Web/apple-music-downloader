@@ -503,3 +503,53 @@ func TestTheFlightAtRestAsksForNoFrames(t *testing.T) {
 		t.Errorf("a second after the page went out, the window still asks for frames")
 	}
 }
+
+// The queue's recent covers keep their colors while the hero's page goes
+// back: at rest they are drawn over the hero cover's shadow, and the page's
+// cover, flying back over them, casts none on them either, so their white
+// edges do not show grey all the way and turn white as it lands.
+func TestTheRecentCoversKeepTheirColorsUnderTheHerosWayBack(t *testing.T) {
+	a, tt, j := flightApp(t)
+	a.Theme = "light"
+	tt.SetScale(1)
+	tt.Frame()
+	var wall ui.Rect
+	for _, r := range a.Store.Finished() {
+		if r.ID == j.ID {
+			continue
+		}
+		if b, ok := tt.Find(r.Name()); ok && b.W < 120 {
+			wall = b
+			break
+		}
+	}
+	if wall.W == 0 {
+		t.Fatalf("no recent cover beside the hero in %q", tt.Texts())
+	}
+	x, y := int(wall.X+wall.W/2), int(wall.Y+wall.H/4)
+	rest := tt.Image().RGBAAt(x, y)
+	if err := tt.Click("Open " + j.Name()); err != nil {
+		t.Fatal(err)
+	}
+	flyFrames(a, tt, 200)
+	a.Back()
+	tt.Frame()
+	seen := 0
+	for range 60 {
+		tt.Advance(refresh)
+		if !a.fly.moving {
+			break
+		}
+		if a.fly.underShown() < 1 {
+			continue
+		}
+		seen++
+		p := tt.Image().RGBAAt(x, y)
+		if d := max(absDiff(p.R, rest.R), absDiff(p.G, rest.G), absDiff(p.B, rest.B)); d > 2 {
+			t.Fatalf("at q %.2f the recent cover shows %v, at rest %v", a.fly.q, p, rest)
+		}
+	}
+	if seen < 4 {
+		t.Fatalf("the queue showed whole in %d frames of the way back: the film measures nothing", seen)
+	}
+}

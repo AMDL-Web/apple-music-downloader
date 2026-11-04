@@ -223,11 +223,22 @@ type flight struct {
 	// frame before laid it out; ride is how far the surface carries the page
 	// from its place in this frame, ridePrev in the frame before; growFrom
 	// and growRadius the cover's box and corners it grows from, as last seen.
-	grow           bool
-	main           ui.Rect
+	grow bool
+	main ui.Rect
+	// wall are the queue's recent covers as this frame builds them under
+	// a page flying from or to the hero: drawn again over the page's cover
+	// (flightCopies), as at rest they are over the hero cover's shadow.
+	wall           []flightWall
 	ride, ridePrev ui.Point
 	growFrom       ui.Rect
 	growRadius     float32
+}
+
+// flightWall is a recent cover of the queue: its box in the window and
+// what builds it.
+type flightWall struct {
+	box   ui.Rect
+	build func()
 }
 
 // openingFrom names the element the next OpenAlbum or OpenJob opens from,
@@ -256,6 +267,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
 	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	f.viewsPrev, f.views = f.views, f.viewsPrev[:0]
+	f.wall = f.wall[:0]
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.
 	f.next = ""

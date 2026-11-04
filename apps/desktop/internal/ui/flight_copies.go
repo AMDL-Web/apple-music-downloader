@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -52,6 +53,19 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 			})
 		}
 		a.flyBadges(c, o, f.lead())
+		// The recent covers under a hero's page: at rest they are drawn
+		// over the hero cover's shadow, so the page's cover, flying to or
+		// from the hero, casts none on them either. It is above them by the
+		// time they show (underShown).
+		for i, w := range f.wall {
+			el := ui.Box(c.Key(fmt.Sprint("wall", i))).Absolute().Left(w.box.X-o.X).Top(w.box.Y-o.Y).Size(w.box.W, w.box.H)
+			if op := f.underShown(); f.out || f.still {
+				el.Opacity(op)
+			} else {
+				f.fade(el, op)
+			}
+			el.Children(w.build)
+		}
 		if f.paired[partKicker] == swaps {
 			src, dst := f.src[partKicker], f.label
 			at := func(el ui.Element, w float32) ui.Element {
