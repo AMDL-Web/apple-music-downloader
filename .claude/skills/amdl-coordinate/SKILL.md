@@ -45,7 +45,10 @@ the only status board. Each item:
 - The brief carries the item (words, reading, surfaces, rows), the standing rules
   in `HUMAN.md`, and what the writer must not touch. The writer finishes with
   [amdl-verify](../amdl-verify/SKILL.md), then sets the item to accepting.
-- The verifier is dispatched with the item only, not the writer's report.
+- The verifier is a separate linked session in fresh context, dispatched with the
+  item only, not the writer's report ([amdl-accept](../amdl-accept/SKILL.md#who)).
+- Nothing is installed on the maintainer's machine or shown to them until the
+  verifier has recorded that build with `accept.sh`.
 - A message to another session counts as sent only after its transcript shows it.
 
 ## Release freeze

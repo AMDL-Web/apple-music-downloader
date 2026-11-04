@@ -34,14 +34,15 @@ link, then download, decrypt, remux and tag each track. Code map: the
 - Every wait and every outbound call is bounded: `timeout` on shell waits, a context
   deadline or client timeout in Go. A step that runs longer than expected goes to the
   background, and the report says what it is waiting on.
-- User-facing work is done once a verifier who did not write it accepts it
+- User-facing work is done, and installed for the maintainer, only once a verifier
+  in another session accepts that build
   ([amdl-accept](.claude/skills/amdl-accept/SKILL.md)); batches go through
   [amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md).
+- A regression is reverted to the last accepted build before it is root-caused or fixed.
 - Docs change in the commit that changes the behavior. `rg` the changed symbols,
-  keys and rule words across `README.md`, `README.zh-CN.md`, `docs/`, the AGENTS.md
-  files, `REVIEW.md`, `GLOSSARY.md`, `.claude/`, `internal/api/openapi.yaml`,
-  `configs/config.example.yaml` and the website's `apps/site/content/`. When a doc
-  and the code disagree, fix the doc.
+  keys and rule words across every Markdown file, `.claude/`, `internal/api/openapi.yaml`,
+  `configs/config.example.yaml` and `apps/site/content/`. When a doc and the code
+  disagree, fix the doc.
 - Reports keep changed, tested, pushed and released apart, and label behavior
   inferred from reading code as inference.
 - Path rules live in `.claude/rules/` and the `AGENTS.md` files under `apps/` and
@@ -174,11 +175,10 @@ conversations block a merge, report what blocks it and wait.
 ## Related repositories
 
 [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/amdl), AMDL-Web's fork of upstream's
-(patch: [The wrapper](docs/deployment.md#the-wrapper)), holds the Apple Music account session and serves manifests, licenses, lyrics and per-key
-decryption templates over HTTP (`internal/wrapper`); the backend decrypts in-process.
+(patch: [The wrapper](docs/deployment.md#the-wrapper)), holds the Apple Music session and serves manifests, licenses, lyrics and decryption
+templates (`internal/wrapper`); the backend decrypts in-process.
 [wrapper-manager v2](https://github.com/AMDL-Web/wrapper/tree/amdl/manager) may
-sit in front of it and adds the login API the console uses; a bare wrapper-lite answers
-`501 login_unsupported`.
+sit in front and adds the console's login API; bare wrapper-lite answers `501 login_unsupported`.
 
 ## Rule -> enforced by
 
@@ -199,8 +199,7 @@ sit in front of it and adds the login API the console uses; a bare wrapper-lite 
 | Upgrades from the last release | CI Upgrade check job |
 | No auth, breaking-change marking, clients updated with the API, full config comments, row-preserving migrations, optional amp-api reads degrade | text and `REVIEW.md` |
 
-The guard hook runs where Claude Code loads `.claude/settings.json`; other agents
-follow the text.
+The guard hook runs only under Claude Code; other agents follow the text.
 
 ## Code review rules
 

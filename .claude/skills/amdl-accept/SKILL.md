@@ -1,6 +1,6 @@
 ---
 name: amdl-accept
-description: Independent acceptance of an amdl change - a verifier that did not write it checks one checklist item against the acceptance rows for its change type (entry points x surfaces, state combinations, filmed motion, ui-audit, real runs over an existing install) and returns PASS/FAIL with evidence. Only an accepted item counts as done. Use when a checklist item is ready, when dispatching or acting as the verifier, and before telling the maintainer something user-facing is finished.
+description: Independent acceptance of an amdl change - a verifier in its own linked session, which did not write the change, writes its criteria before reading the diff, checks the real app build on real-scale data against the acceptance rows for its change type (entry points x surfaces, state combinations, filmed motion, ui-audit, real runs over an existing install), returns PASS/FAIL with evidence, and records an accepted build with accept.sh. Only an accepted build counts as done or is installed for the maintainer. Use when a checklist item is ready, when dispatching or acting as the verifier, and before telling the maintainer something user-facing is finished.
 ---
 
 # Accept a change
@@ -11,13 +11,31 @@ surface the maintainer will touch. It is a separate step run by someone else.
 
 ## Who
 
-- A verifier that did not write the change: a fresh subagent or linked session with
-  no access to the author's reasoning. One verifier, not a panel.
+- A verifier that did not write the change: a separate linked session started in
+  fresh context, never a subagent of the author or a session forked from it. One
+  verifier, not a panel.
 - It gets the checklist item only: the maintainer's words, the restatement, the
-  surfaces, the acceptance rows, and the commit or build. Not the author's report.
+  surfaces, the acceptance rows, and the commit. Not the author's report.
 - Sonnet at high effort by default; Opus for motion and record/queue state changes.
 - The verifier may read code to find entry points but changes none. It reports gaps;
-  the author fixes them; the verifier runs the failed rows again.
+  the author fixes them; the verifier runs the failed rows again on the new build.
+
+## Order
+
+1. Write the criteria first, from the item alone: what the maintainer should see,
+   on which surfaces, in which states. Only then read the diff, and only to find
+   entry points; a criterion is never dropped because the diff makes it look safe.
+2. Build the real app from the commit with the development machine's fast loop
+   (agent memory). Demo data, a mock backend or a dev server stand in for nothing
+   the maintainer touches.
+3. Run it on real-scale data: a library and queue the size of the maintainer's,
+   with long titles and missing artwork, started from a copy of an existing install.
+4. Judge UI on frames, not on code or a single screenshot. For a motion or flicker
+   complaint that came with the maintainer's recording, extract the frames they
+   point at first and reproduce that in a film before checking the fix.
+5. Record the verdict (Evidence below). On PASS, run `accept.sh` on the development
+   machine for that exact build; its installer refuses any binary without the
+   record. A FAIL records nothing.
 
 Copy, a single style value or a doc fix needs no acceptance: the author's checks are
 enough.
@@ -109,4 +127,11 @@ Not covered: <each gap and why>.
 ```
 
 The verifier writes the verdict into the checklist item. Only a PASS with no
-unaccepted gaps marks it done.
+unaccepted gaps marks it done, and only a build with an `accept.sh` record is installed.
+
+## Regressions
+
+When the maintainer reports a regression, first reinstall the last accepted build
+(its record and binary are kept with the acceptance records), then root-cause, then
+fix. A fix goes through acceptance like any change; it is never stacked on an
+unaccepted one.
