@@ -603,7 +603,9 @@ func TestStuckAndUnseenStatesClear(t *testing.T) {
 		t.Errorf("album 500 = %+v (%v), want a record with nothing downloaded", a, ok)
 	}
 	r.catalog.setAlbum("500", []string{"51"})
-	r.call(http.MethodPost, "/library/albums/500/download", "", http.StatusAccepted, nil)
+	if code := r.status(http.MethodPost, "/library/albums/500/download", ""); code != http.StatusAccepted {
+		t.Errorf("Download of the album its storefront has now = %d, want 202 with a run", code)
+	}
 	s = r.check("downloaded once the storefront has it")
 	if a := s.albums["500"]; a.State != domain.RecordComplete {
 		t.Errorf("album 500 after Download = %+v, want complete", a)
