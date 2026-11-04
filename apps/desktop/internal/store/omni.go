@@ -205,12 +205,23 @@ func (s *Store) LookupOne(url string, then func(client.Lookup)) {
 // newest news; nil for none.
 func (s *Store) ResourceFor(l client.Lookup) *domain.ResourceMark { return s.Latest(l.Resource) }
 
-// Startable returns the links a submit would start: previewed, supported
-// and not already running.
+// Held reports whether amdl's record already holds what the preview names:
+// the song downloaded, or the album or playlist whole. A submit of it
+// starts nothing.
+func (s *Store) Held(l *Link) bool {
+	if l.State != LinkReady {
+		return false
+	}
+	mark, _ := MarkOf(s.ResourceFor(l.Lookup), l.Lookup.Type == "song", l.Lookup.TrackCount)
+	return mark == MarkDone
+}
+
+// Startable returns the links a submit would start: previewed, supported,
+// not already running and not already downloaded.
 func (s *Store) Startable() []*Link {
 	var out []*Link
 	for _, l := range s.Omni.Links {
-		if l.State == LinkReady && s.Running(l) == nil {
+		if l.State == LinkReady && s.Running(l) == nil && !s.Held(l) {
 			out = append(out, l)
 		}
 	}

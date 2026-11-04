@@ -72,6 +72,8 @@ func (a *App) linkCard(c *ui.Context, k *Tokens, l *store.Link, width float32) {
 			pill(c, k, pillBad, icCross, "Not found")
 		case s.Running(l) != nil:
 			pill(c, k, pillWarn, icWarn, "Already running")
+		case s.Held(l):
+			pill(c, k, pillOK, icCheck, "In your library")
 		case refused(s, l) != "":
 			pill(c, k, pillBad, icCross, "Refused")
 		default:
@@ -170,13 +172,15 @@ func (a *App) dock(c *ui.Context, k *Tokens, width float32) {
 		tracks += l.Lookup.TrackCount
 		kinds[l.Lookup.Type]++
 	}
-	var running, unsupported int
+	var running, unsupported, held int
 	for _, l := range s.Omni.Links {
 		switch {
 		case l.State == store.LinkUnsupported || l.State == store.LinkFailed:
 			unsupported++
 		case s.Running(l) != nil:
 			running++
+		case s.Held(l):
+			held++
 		}
 	}
 	ui.Row(c.Key("dock-lane")).Absolute().Left(0).Right(0).Bottom(dockBottom).Justify(ui.Center).PassThrough().Children(func() {
@@ -203,10 +207,13 @@ func (a *App) dock(c *ui.Context, k *Tokens, width float32) {
 				if running > 0 {
 					notes = append(notes, fmt.Sprintf("%d already running", running))
 				}
+				if held > 0 {
+					notes = append(notes, fmt.Sprintf("%d in your library", held))
+				}
 				if unsupported > 0 {
 					notes = append(notes, fmt.Sprintf("%d not supported", unsupported))
 				}
-				if pending := len(s.Omni.Links) - len(start) - running - unsupported; pending > 0 {
+				if pending := len(s.Omni.Links) - len(start) - running - unsupported - held; pending > 0 {
 					notes = append(notes, fmt.Sprintf("%d not ready", pending))
 				}
 				if len(notes) > 0 {
