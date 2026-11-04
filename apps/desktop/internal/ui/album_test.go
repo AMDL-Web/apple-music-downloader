@@ -130,6 +130,19 @@ func TestSidebarLightsWhereAPageOpened(t *testing.T) {
 	}
 }
 
+func TestBackFromTheLibraryNamesTheLibrary(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	a.Go(ScreenLibrary)
+	a.OpenJob("j")
+	if a.backLabel() != "Library" || a.navScreen() != ScreenLibrary {
+		t.Errorf("from the library, Back says %q and the sidebar lights %v", a.backLabel(), a.navScreen())
+	}
+	a.Back()
+	if a.Screen != ScreenLibrary {
+		t.Errorf("Back from a page opened in the library shows %v", a.Screen)
+	}
+}
+
 func TestBackFromAJobReturnsWhereItOpened(t *testing.T) {
 	a, _ := newTestApp(remoteSettings())
 	a.Go(ScreenQueue)
