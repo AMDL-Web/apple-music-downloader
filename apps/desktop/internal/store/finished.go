@@ -20,19 +20,32 @@ func (s *Store) Finished() []*Job {
 	// The feed lists jobs by creation, so a job retried long after it was
 	// added would otherwise sit far down.
 	sort.SliceStable(out, func(a, b int) bool { return finishedAt(out[a]).After(finishedAt(out[b])) })
-	seen := map[string]bool{}
+	// The queue reads this every frame: the runs are compared in place
+	// rather than by a key built for each.
 	kept := out[:0]
+next:
 	for _, j := range out {
-		if t := j.Target(); !seen[t] {
-			seen[t] = true
-			kept = append(kept, j)
+		for _, k := range kept {
+			if sameTarget(j, k) {
+				continue next
+			}
 		}
+		kept = append(kept, j)
 	}
 	return kept
 }
 
+// sameTarget reports whether runs a and b download the same thing: one
+// record, or, for runs of no record, the same run.
+func sameTarget(a, b *Job) bool {
+	if a.ResourceID != "" {
+		return a.ResourceKind == b.ResourceKind && a.ResourceID == b.ResourceID
+	}
+	return a.ID == b.ID
+}
+
 // Target is what the run downloads: its record, or a station run itself,
-// so the runs of one record count, and notify, once.
+// so the runs of one record notify once.
 func (j *Job) Target() string {
 	if j.ResourceID != "" {
 		return string(j.ResourceKind) + ":" + j.ResourceID

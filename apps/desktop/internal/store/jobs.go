@@ -593,7 +593,7 @@ func (s *Store) Summary() Summary {
 	now := s.now()
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	weighted := 0.0
-	today := map[string]*Job{}
+	var today []*Job
 	for _, j := range s.Jobs {
 		switch j.Status {
 		case domain.JobRunning:
@@ -607,8 +607,18 @@ func (s *Store) Summary() Summary {
 			if j.FinishedAt == nil || j.FinishedAt.Before(midnight) {
 				continue
 			}
-			if t := j.Target(); today[t] == nil || j.FinishedAt.After(*today[t].FinishedAt) {
-				today[t] = j
+			at := -1
+			for i, k := range today {
+				if sameTarget(j, k) {
+					at = i
+					break
+				}
+			}
+			switch {
+			case at < 0:
+				today = append(today, j)
+			case j.FinishedAt.After(*today[at].FinishedAt):
+				today[at] = j
 			}
 		}
 	}
