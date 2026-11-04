@@ -20,7 +20,7 @@ type growFrame struct {
 	q   float32
 }
 
-// growFilm opens albums[0] from its search tile in theme and films the way
+// growFilm opens albums[0], in its colors, from its search tile in theme and films the way
 // in until the page lands, then the way back until it is in its tile
 // again: rest is the screen before the click, after the one once back,
 // cover the tile's cover in the window, and other how far albums[2]'s tile
@@ -29,6 +29,10 @@ func growFilm(t *testing.T, theme string) (in, out []growFrame, rest, after *ima
 	t.Helper()
 	a, albums := searchApp(t)
 	a.PageMotion, a.Theme = true, theme
+	// Its colors light the page (paletteBackdrop), which draws a ground of
+	// its own.
+	albums[0].ArtworkBgColor = "203040"
+	a.Store.Search.Result.Albums.Items[0] = albums[0]
 	tt := ui.NewTester(a.View, 1280, 800)
 	tt.SetScale(1)
 	for range 10 {

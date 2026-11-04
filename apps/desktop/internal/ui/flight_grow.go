@@ -115,7 +115,13 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 				plain := paletteBackdrop(k, Palette{}, false)
 				b.From, b.Mix = &plain, t
 			}
-			b.Show(c)
+			// The light draws the ground under it too, so it comes in with
+			// the surface's.
+			light := ui.Box(c.Key("light")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough()
+			if ground < 1 {
+				light.Opacity(ground)
+			}
+			light.Children(func() { b.Show(c) })
 			content := ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0)
 			a.growEdges(content, box, main)
 			content.Children(func() {
