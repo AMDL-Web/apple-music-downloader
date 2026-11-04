@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -239,22 +240,32 @@ func TestAPartAlbumOpensItsRecordsPageNotItsRun(t *testing.T) {
 		name string
 		mark domain.ResourceMark
 		part bool
+		run  domain.JobStatus
 	}{
-		{"part", domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "7", State: domain.RecordComplete, TracksDone: 1, TracksWanted: 1}, true},
-		{"whole", domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "7", State: domain.RecordComplete, TracksDone: 6, TracksWanted: 6, WantedAll: true}, false},
+		{"part, its song's run queued", domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "7", State: domain.RecordNone, TracksWanted: 1, ActiveJobID: "r"}, true, domain.JobQueued},
+		{"part", domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "7", State: domain.RecordComplete, TracksDone: 1, TracksWanted: 1}, true, ""},
+		{"whole", domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "7", State: domain.RecordComplete, TracksDone: 6, TracksWanted: 6, WantedAll: true}, false, ""},
 	} {
 		a, _ := newTestApp(remoteSettings())
-		a.Store.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "r", Type: "album", Status: domain.JobCompleted, Title: "Glass Weather",
-			ResourceKind: domain.ResourceAlbum, ResourceID: "7", TotalItems: 1, CreatedAt: now, FinishedAt: &now}}})
+		run := domain.Job{ID: "r", Type: "album", Status: domain.JobCompleted, Title: "Glass Weather",
+			ResourceKind: domain.ResourceAlbum, ResourceID: "7", TotalItems: 1, CreatedAt: now, FinishedAt: &now}
+		if tc.run != "" {
+			run.Status, run.FinishedAt = tc.run, nil
+		}
+		a.Store.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{run}})
 		mark := tc.mark
 		a.OpenAlbum(client.SearchHit{Type: "album", ID: "7", Name: "Glass Weather", URL: "https://music.apple.com/us/album/x/7", TrackCount: 6, Resource: &mark})
 		tt := ui.NewTester(a.View, 1280, 800)
 		tt.Frame()
-		if got := tt.HasText("Delete this download"); got == tc.part {
+		if got := tt.HasText("Delete this download") || tt.HasText("Cancel"); got == tc.part {
 			t.Errorf("%s: the run's page shows %v, want %v: %q", tc.name, got, !tc.part, tt.Texts())
 		}
-		if got := tt.HasText("1 of 6 downloaded"); got != tc.part {
-			t.Errorf("%s: the share shows %v: %q", tc.name, got, tt.Texts())
+		share := false
+		for _, txt := range tt.Texts() {
+			share = share || strings.HasSuffix(txt, " of 6 downloaded")
+		}
+		if share != tc.part {
+			t.Errorf("%s: the share shows %v: %q", tc.name, share, tt.Texts())
 		}
 		if _, ok := tt.Find("Download the rest of Glass Weather"); ok != tc.part {
 			t.Errorf("%s: the rest's button shows %v: %q", tc.name, ok, tt.Texts())

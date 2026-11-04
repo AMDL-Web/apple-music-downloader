@@ -21,10 +21,11 @@ import (
 func (a *App) OpenAlbum(h client.SearchHit) {
 	s := a.Store
 	job := s.AlbumJob(h.ID)
-	// A finished run is the page only of an album it left whole: of one
-	// downloaded in part, the run holds just the songs added by hand (1 of 1
-	// finished), so the page shows the album and its record's share.
-	if j := s.Job(job); j != nil && j.Status == domain.JobCompleted {
+	// A run is the page only of an album whose record wants it whole: of one
+	// downloaded in part, the run holds just the songs added by hand, queued
+	// or finished (1 of 1), so the page shows the album and its record's
+	// share, with the rest to add.
+	if s.Job(job) != nil {
 		if mark, _ := s.HitMark(h); mark == store.MarkPartial {
 			job = ""
 		}
