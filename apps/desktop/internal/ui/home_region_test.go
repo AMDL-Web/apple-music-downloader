@@ -71,6 +71,54 @@ func TestChoosingARegionSearchesThere(t *testing.T) {
 	}
 }
 
+// The region sits at the right end of the group tabs' row, its label on
+// their line, appears only once there is a search, and stays reachable
+// when the search found nothing.
+func TestTheRegionRidesTheGroupTabs(t *testing.T) {
+	_, tt := searchWithRegions("dark", 1280, 800, "us", "jp")
+	tab, ok1 := tt.Find("Artists")
+	jp, ok2 := tt.Find("Japan")
+	if !ok1 || !ok2 {
+		t.Fatalf("no tabs or region in %q", tt.Texts())
+	}
+	if d := (tab.Y + tab.H/2) - (jp.Y + jp.H/2); d > 1 || d < -1 || jp.X <= tab.X+tab.W {
+		t.Errorf("region at %v, last tab at %v: not on the tabs' line at their right", jp, tab)
+	}
+
+	a, _ := newTestApp(remoteSettings())
+	a.Store.Server.Accounts = regionAccounts("us", "jp")
+	home := ui.NewTester(a.View, 1280, 800)
+	home.Frame()
+	if home.HasText("Japan") {
+		t.Error("a region before any search")
+	}
+
+	a, tt = searchWithRegions("dark", 1280, 800, "us", "jp")
+	a.Store.Search.Result = &client.SearchResult{}
+	tt.Frame()
+	if !tt.HasText("Japan") {
+		t.Errorf("no region on a search that found nothing: %q", tt.Texts())
+	}
+}
+
+func TestThreeRegionsAreAMenu(t *testing.T) {
+	a, tt := searchWithRegions("dark", 1280, 800, "us", "jp", "gb")
+	if tt.HasText("Japan") {
+		t.Errorf("more than two regions laid out side by side: %q", tt.Texts())
+	}
+	if err := tt.Click("Region"); err != nil {
+		t.Fatalf("no region menu: %v in %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if err := tt.Click("United Kingdom"); err != nil {
+		t.Fatalf("no United Kingdom in the menu: %v in %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if a.Store.Search.Region != "gb" {
+		t.Errorf("chosen %q after picking United Kingdom", a.Store.Search.Region)
+	}
+}
+
 // TestRenderSearchRegionShots writes the search page with the switch into
 // $RENDER_DIR, to look at without running the app.
 func TestRenderSearchRegionShots(t *testing.T) {
@@ -83,18 +131,32 @@ func TestRenderSearchRegionShots(t *testing.T) {
 	}
 	for _, theme := range []string{"dark", "light"} {
 		for _, size := range [][2]int{{1280, 800}, {820, 560}} {
-			a, tt := searchWithRegions(theme, size[0], size[1], "us", "jp", "gb")
-			a.Store.Search.Region = "jp"
-			tt.SetScale(2)
-			tt.Frame()
-			f, err := os.Create(filepath.Join(dir, fmt.Sprintf("search-region-%s-%d.png", theme, size[0])))
-			if err != nil {
-				t.Fatal(err)
+			for _, v := range []struct {
+				name    string
+				regions []string
+				none    bool
+			}{{"pair", []string{"cn", "jp"}, false}, {"menu", []string{"us", "jp", "gb"}, false}, {"none", []string{"cn", "jp"}, true}} {
+				a, tt := searchWithRegions(theme, size[0], size[1], v.regions...)
+				a.Store.Search.Region = "jp"
+				if v.none {
+					a.Store.Search.Result = &client.SearchResult{}
+				}
+				tt.SetScale(2)
+				tt.Frame()
+				shot(t, tt, filepath.Join(dir, fmt.Sprintf("search-region-%s-%s-%d.png", v.name, theme, size[0])))
 			}
-			if err := png.Encode(f, tt.Image()); err != nil {
-				t.Fatal(err)
-			}
-			f.Close()
 		}
+	}
+}
+
+func shot(t *testing.T, tt *ui.Tester, path string) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, tt.Image()); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -56,11 +56,13 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 			case q.Artist.ID != "":
 				a.artistView(c, k, sel, width)
 			case q.Status == store.SearchFailed:
+				a.regionRow(c, k)
 				searchFailed(c, k, q.Err, s.RetrySearch)
 			case q.Result == nil:
 				a.groupTabs(c, k)
 				skeletonGroups(c, k, width)
 			case store.NoHits(q.Result):
+				a.regionRow(c, k)
 				searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "")
 			default:
 				a.groupTabs(c, k)
@@ -345,9 +347,30 @@ func (a *App) focusGroup(group string) {
 const groupGlideMax = 400
 
 // groupTabs are Overview and the four groups as pills, the one shown
-// filled.
+// filled, and the search's region at the right (searchRegion).
 func (a *App) groupTabs(c *ui.Context, k *Tokens) {
 	q := &a.Store.Search
+	ui.Row(c.Key("tabs-row")).FillWidth().Height(groupRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		a.groupPills(c, k, q)
+		ui.Spacer(c)
+		a.searchRegion(c, k)
+	})
+}
+
+// regionRow is the region alone at the right of where the tabs go, for a
+// search with no results to show: another region may have them.
+func (a *App) regionRow(c *ui.Context, k *Tokens) {
+	if len(a.Store.SearchRegions()) < 2 {
+		return
+	}
+	ui.Row(c.Key("tabs-row")).FillWidth().Height(groupRow).AlignItems(ui.Center).Children(func() {
+		ui.Spacer(c)
+		a.searchRegion(c, k)
+	})
+}
+
+// groupPills are the tabs of groupTabs.
+func (a *App) groupPills(c *ui.Context, k *Tokens, q *store.Search) {
 	ui.Row(c.Key("tabs")).Height(groupRow).Gap(8).AlignItems(ui.Center).Children(func() {
 		for _, g := range append([]string{""}, store.SearchGroups...) {
 			on := g == q.Focus
