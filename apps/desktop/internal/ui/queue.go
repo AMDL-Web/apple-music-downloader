@@ -60,8 +60,8 @@ func (a *App) screenPalette(c *ui.Context, s Screen) Palette {
 		return a.homePalette()
 	case ScreenQueue:
 		if j := a.heroJob(); j != nil {
-			// A narrow window's queue hero shows the still cover.
-			return jobPalette(j, !a.compact && a.motionShown(c, j.MotionArtworkURL))
+			// A compact queue hero shows the still cover.
+			return jobPalette(j, !a.heroCompact(c) && a.motionShown(c, j.MotionArtworkURL))
 		}
 	}
 	return Palette{}
@@ -142,6 +142,18 @@ func jobQuality(j *store.Job) string {
 // 24/48 included.
 func isHiRes(q string) bool { return strings.HasPrefix(q, "ALAC 24/") }
 
+// heroShort is the window height, in DIPs, below which the queue's hero
+// takes its compact form, as in a narrow window, so the list under it
+// keeps the most of the window.
+const heroShort = 700
+
+// heroCompact reports whether the queue's hero takes its compact form: in
+// a narrow window or a short one.
+func (a *App) heroCompact(c *ui.Context) bool {
+	_, h := c.Size()
+	return a.compact || h < heroShort
+}
+
 // queueScreen is the main screen: the album downloading now, or else the
 // one that finished last, the covers of those before it, then the queue:
 // what runs and waits, then amdl's records and the stations' runs, one row
@@ -170,10 +182,10 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	finished := s.Finished()
 	var latest *store.Job
 	if j := s.Now(); j != nil {
-		a.hero(c, k, j, compact)
+		a.hero(c, k, j, a.heroCompact(c))
 	} else if len(finished) > 0 {
 		latest = finished[0]
-		a.latestHero(c, k, latest, compact)
+		a.latestHero(c, k, latest, a.heroCompact(c))
 	}
 	a.recentWall(c, k, finished, latest, compact)
 	tabs := []string{"All", fmt.Sprintf("Active · %d", s.QueueCount(store.TabActive)), fmt.Sprintf("Done · %d", s.QueueCount(store.TabDone)),
