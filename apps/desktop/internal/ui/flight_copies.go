@@ -87,6 +87,10 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 			at(label(c, k, dst.text).TextColor(dst.color), dst.box.W).Opacity(unit((t - 0.4) / 0.4))
 		}
 		for part, src := range f.src {
+			if w := f.words[part]; w != nil {
+				drawWords(c, flightPart(part), w, src, f.texts[part], o, t)
+				continue
+			}
 			if f.paired[part] != morphs || f.own[part] || src.build == nil {
 				continue
 			}

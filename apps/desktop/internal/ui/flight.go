@@ -200,6 +200,9 @@ type flight struct {
 	// copy in its match's.
 	texts [flightParts]flightText
 	own   [flightParts]bool
+	// words are the texts that morph word by word, as their match and the
+	// page break them into lines differently (wordMorph).
+	words [flightParts]*wordFlight
 	// tag is the page's quality tag, as this frame lays it out, when it
 	// morphs, and label its label, when it swaps.
 	tag   flightTag
@@ -272,7 +275,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	f.out = target == 0 && !f.still && a.PageMotion
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
 	f.srcWas = f.src
-	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
+	f.src, f.texts, f.words, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, [flightParts]*wordFlight{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	f.viewsPrev, f.views = f.views, f.viewsPrev[:0]
 	f.wall = f.wall[:0]
 	// A click names what it opens from in the frame it opens; one that
