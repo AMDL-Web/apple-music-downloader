@@ -68,10 +68,23 @@ it was last updated.
 ## Motion and look
 
 A motion or look complaint is not a checklist item and is not relayed to a writer.
-The session the maintainer is talking to opens their recording, finds the frames
-they point at, restates the complaint in their words, fixes it, checks its own frames for
-regressions (a pop, flash, blank or vanishing frame, never timing or taste),
-installs it and lets them judge and tune. No verifier session.
+The session the maintainer is talking to handles it:
+
+1. Measure the recording at its native frame rate, never downsampled or shrunk into
+   a contact sheet: track the position of the element they name, and of its
+   neighbours, frame by frame, and find the frame where it breaks (a step, a move
+   after it had settled, a jump). Restate it in their words plus the measurement
+   ("`2014)` settles at 0.43 s, then drops 5 pt at 0.62 s"). If nothing in the
+   numbers matches, ask which frame; never report a guessed defect.
+2. Fix it.
+3. Film the same interaction on the new build, both directions, at their window
+   size with a title that wraps like theirs, and run the same measurement:
+   nothing moves after it settles, no single-frame step, the end frame equals the
+   still page. Report only the directions and entries that were filmed, with the
+   before and after numbers.
+4. Install and let them judge and tune. No verifier session; timing and taste are
+   theirs.
+
 Before dispatching anything visual, ask whether the maintainer complained about it;
 if not, report the finding and leave the motion alone
 ([desktop-motion](../../rules/desktop-motion.md)).

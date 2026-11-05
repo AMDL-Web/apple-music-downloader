@@ -86,7 +86,13 @@ with long and scrolled data. It asserts on what the eye sees:
 
 - the hand-over frame (shadow, badges, text) changes no more than the frames before;
 - other targets take a click as soon as the motion looks finished;
-- nothing is drawn over the page it came from after the motion ends.
+- nothing is drawn over the page it came from after the motion ends;
+- each element's position, tracked frame by frame, never moves again once it has
+  settled and never takes a single-frame step out of line with its neighbours. A
+  "last frame equals the still page" check alone misses a settle-then-snap.
+
+Both directions of every transition are filmed; a direction not filmed is reported
+as not checked.
 
 A reported motion bug is reproduced in such a film before it is patched. Acceptance
 of motion checks regressions only: a pop, a flash, a blank or vanishing frame. It
