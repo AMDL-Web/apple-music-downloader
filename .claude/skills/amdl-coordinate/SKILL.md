@@ -9,9 +9,10 @@ The coordinator holds the checklist and the decisions. It does not write product
 code: every change except motion and look goes to a writer, and every finished item to a verifier
 ([amdl-accept](../amdl-accept/SKILL.md)). Motion and look are the exception
 ([Motion and look](#motion-and-look)). Because its state lives in the checklist, a
-fresh coordinator can take over at any time. A session that should end, after a
-compaction or a finished feature, writes its handoff file and starts the next
-session itself; the maintainer is not asked to switch.
+fresh coordinator can take over at any time. A session ends when its feature is
+done, not because it was compacted: it writes its handoff file and starts the next
+session itself; the maintainer is not asked to switch. After a compaction a session
+re-reads the rules and memories that govern its current work, then carries on.
 
 ## The checklist
 
@@ -20,7 +21,10 @@ the only status board. Each item:
 
 | Field | Holds |
 | --- | --- |
+| title | a short name for the item |
+| version | the release it belongs to (`2.0`, `2.0.1`), or `流程` for process items |
 | words | the maintainer's message, verbatim |
+| words_at | when the maintainer said it |
 | reading | the coordinator's one- or two-sentence restatement |
 | kind | add, change, or remove/replace |
 | surfaces | API, console, desktop, TUI, CLI, MCP, site: each one the item touches |
@@ -29,6 +33,10 @@ the only status board. Each item:
 | status | todo, doing, accepting, done, blocked |
 | decision | what was decided and why, with the maintainer's words when they decided |
 | evidence | the verifier's report |
+| commits, order, updated | the commits that landed it, its place in the queue, last change |
+
+A `meta/board` document holds the board's phase, the coordinator session and when
+it was last updated.
 
 - A batch becomes items before any work starts. The maintainer reviews the items,
   not the code; a wrong reading is fixed there.

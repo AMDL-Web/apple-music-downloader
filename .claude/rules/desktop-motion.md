@@ -21,6 +21,12 @@ The maintainer's rules for every transition in the desktop app:
   other.
 - One screen's switch (tabs, filters, option capsules) looks and moves as
   every other's.
+- An edge travels to the matching edge on the other page. Text that is the same
+  on both pages morphs continuously; one copy never fades out here while another
+  fades in there. Only content that really differs cross-fades, and it moves with
+  its row. No blurred band fades in or out on its own.
+- Where the desktop asks for less motion the window shows stills; the
+  verification renders still play motion.
 - A page's color arrives gradually: the background cross-fades as a whole page,
   directly from one page's colors to the other's, never as a strip and never
   through a darker ground in between.

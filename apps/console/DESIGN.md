@@ -35,6 +35,10 @@ wins and this page is fixed in the same change. Sources are listed in
    the column outgrows the cover. Page actions sit in the page's top bar, not
    floating beside the hero. A row that leads to a detail opens it on click, with
    no menu in between.
+8. **Fewer, bigger, standard.** A big icon replaces an icon plus a label; pages
+   that show the same thing merge into one; platform conventions (one sidebar
+   that collapses whole when narrow, traffic lights, the settings icon) follow
+   the platform's standard form.
 
 ## Information architecture
 
@@ -316,6 +320,8 @@ drawer and the log view quiet it (`[data-stale]`) only after 300 ms, and
 an artist's own skeleton shows only after the same hold. New download
 looks links up once typing pauses, but a paste (more than a character at
 once) at once.
+
+Edges of scrolling content fade inward (an opacity ramp toward the content), never an outward blur, with one shared implementation.
 
 Motion: 120 ms hover color fades, 200 ms drawer/palette/toast/insert,
 `--ease-out` in. Movement uses only `transform` and `opacity` (stage and meter
