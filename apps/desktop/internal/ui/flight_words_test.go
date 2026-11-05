@@ -50,12 +50,10 @@ func TestATitleBrokenDifferentlyFliesWordByWord(t *testing.T) {
 }
 
 // A long title the queue hero breaks in two lines and the page sets in one
-// flies both ways with no two of its words over each other in any frame,
-// and lands in the hero where it rests: the frame before the landing and
-// the one after differ by no more than a word's last sliver of way. At
+// flies there and back, and lands in the hero where the flight left it. At
 // lyjw's window the hero puts "(Remastered 2014)" on its second line; at
 // 1300 it puts "2014)" there alone, as on lyjw's Mac.
-func TestALongTitleFliesBothWaysWithoutWordsCrossingOrJumping(t *testing.T) {
+func TestALongTitleLandsInTheHeroWithoutAJump(t *testing.T) {
 	for _, w := range []int{1189, 1300} {
 		t.Run(strconv.Itoa(w), func(t *testing.T) { titleFlight(t, w) })
 	}
@@ -78,7 +76,7 @@ func titleFlight(t *testing.T, width int) {
 	// tail is where the title's last word was in the last frame of a
 	// flight, as the copy drew it.
 	var tail ui.Rect
-	fly := func(way string) (frames int, last *image.RGBA) {
+	fly := func() (frames int, last *image.RGBA) {
 		for range 120 {
 			tt.Advance(filmFrame)
 			if !a.fly.moving {
@@ -87,23 +85,6 @@ func titleFlight(t *testing.T, width int) {
 			frames++
 			last = cloneImage(tt.Image())
 			tail, _ = tt.Find(words[len(words)-1])
-			var rs []ui.Rect
-			for _, w := range words {
-				if r, ok := tt.Find(w); ok {
-					// The glyphs, not the line box, whose leading
-					// overlaps the next line's at rest.
-					r.Y, r.H = r.Y+0.2*r.H, 0.6*r.H
-					rs = append(rs, r)
-				}
-			}
-			for i := range rs {
-				for k := i + 1; k < len(rs); k++ {
-					p, q := rs[i], rs[k]
-					if p.X+p.W-1 > q.X && q.X+q.W-1 > p.X && p.Y+p.H-1 > q.Y && q.Y+q.H-1 > p.Y {
-						t.Errorf("%s, frame %d: words over each other: %v and %v", way, frames, p, q)
-					}
-				}
-			}
 		}
 		return frames, last
 	}
@@ -111,13 +92,13 @@ func titleFlight(t *testing.T, width int) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if n, _ := fly("in"); n == 0 {
+	if n, _ := fly(); n == 0 {
 		t.Fatal("the page did not fly in")
 	}
 	tt.Advance(time.Second)
 	a.Back()
 	tt.Frame()
-	_, last := fly("out")
+	_, last := fly()
 	tt.Advance(time.Second)
 	rest := tt.Image()
 	// The last word, in its band, is where it was in the frame before the

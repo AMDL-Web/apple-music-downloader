@@ -105,12 +105,9 @@ func wordMorph(c *ui.Context, src flightSrc, span ui.Span, dst ui.Rect) (*wordFl
 
 // drawWords draws a title morphing word by word t of the way, each word
 // from its place in its match's lines to its place in the page's, its size
-// and color turning to the page's; o is the copies' layer. A word that
-// changes lines goes along the lower line, which the other words leave
-// clear, never across the upper one: going down it drops first and then
-// slides, going up it slides first and then rises.
+// and color turning to the page's; o is the copies' layer.
 func drawWords(c *ui.Context, part flightPart, w *wordFlight, src flightSrc, dst flightText, o ui.Rect, t float32) {
-	color := src.color.Mix(dst.color, t)
+	size, color := lerp(src.size, dst.size, t), src.color.Mix(dst.color, t)
 	// Each side's lines are as far apart as its text lays them out: its
 	// height over its lines, not a line height worked out from its size,
 	// which a font's leading makes miss and a word would jump as it lands.
@@ -119,25 +116,10 @@ func drawWords(c *ui.Context, part flightPart, w *wordFlight, src flightSrc, dst
 		s, d := w.src[i], w.dst[i]
 		sx, sy := src.box.X+s.x, src.box.Y+float32(s.line)*srcLine
 		dx, dy := dst.box.X+d.x, dst.box.Y+float32(d.line)*dstLine
-		tx, ty := t, t
-		switch {
-		case d.line > s.line:
-			ty, tx = smoothstep(0, lineLead, t), smoothstep(1-lineLead, 1, t)
-		case d.line < s.line:
-			tx, ty = smoothstep(0, lineLead, t), smoothstep(1-lineLead, 1, t)
-		}
-		// A word's size goes with its x, so that the words along a line,
-		// all as far on their way, keep the room between them.
-		size := lerp(src.size, dst.size, tx)
 		display(c.Key(string(rune('a'+int(part)))+strconv.Itoa(i)), strings.TrimRight(s.text, " "), size).SingleLine().TextColor(color).
-			Absolute().Left(lerp(sx, dx, tx) - o.X).Top(lerp(sy, dy, ty) - o.Y)
+			Absolute().Left(lerp(sx, dx, t) - o.X).Top(lerp(sy, dy, t) - o.Y)
 	}
 }
-
-// lineLead is the share of the way a word changing lines takes to make
-// its first move, along the lower line or down to it; its second move
-// takes the last lineLead, the two overlapping in the middle.
-const lineLead = 0.6
 
 // lines is how many lines words take.
 func lines(words []wordAt) int {
