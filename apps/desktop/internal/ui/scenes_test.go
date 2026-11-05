@@ -52,6 +52,7 @@ var scenes = []struct {
 	{name: "head-playlist", run: sceneHeadPlaylist},
 	{name: "head-queued", run: sceneHeadQueued},
 	{name: "head-downloading", run: sceneHeadDownloading, rename: longTitle},
+	{name: "head-latest", run: sceneHeadLatest, rename: latestLongTitle},
 	{name: "head-failed", run: sceneHeadFailed},
 	{name: "artist-album", run: sceneArtistAlbum},
 	{name: "second-album", run: sceneSecondAlbum},
@@ -180,6 +181,13 @@ func newSceneRig(t *testing.T, dir, theme string, rename map[string]string) *sce
 // hero and not on the album page, at the maintainer's window size: its
 // words move between lines as the page flies, both ways.
 var longTitle = map[string]string{"Low Tide Signals": "First Love (Remastered 2014)"}
+
+// latestLongTitle names the demo's latest finished download, which the
+// queue shows large while nothing downloads, with a title that, broken
+// where a word runs out of room, splits its qualifier in the hero on the
+// scene's font, "Love (Remastered / 2014)", as "First Love (Remastered
+// 2014)" does on the maintainer's Mac.
+var latestLongTitle = map[string]string{"Orchard Lights": "Love (Remastered 2014)"}
 
 // pump hands the answers that arrived to the UI thread and reports
 // whether there were any: once every answer is read and nothing more has
@@ -516,6 +524,26 @@ func sceneHeadNone(r *sceneRig) {
 func sceneHeadPartial(r *sceneRig) {
 	r.search("late bloom")
 	r.open("Late Bloom", "partial")
+	r.back()
+}
+
+// sceneHeadLatest stops every download, so the queue's hero is the latest
+// one that finished, with a title the hero wraps, and opens it and goes
+// back.
+func sceneHeadLatest(r *sceneRig) {
+	s := r.a.Store
+	for _, j := range s.Jobs {
+		if j.Status == domain.JobRunning || j.Status == domain.JobQueued {
+			s.Cancel(j.ID)
+		}
+	}
+	r.until("nothing downloading", func() bool { return s.Now() == nil })
+	r.queueOn(store.TabAll)
+	j := r.a.heroJob()
+	if j == nil || j.Name() != latestLongTitle["Orchard Lights"] {
+		r.t.Fatalf("the queue's hero is %v, not the latest download renamed", j)
+	}
+	r.open("Open "+j.Name(), "complete")
 	r.back()
 }
 
