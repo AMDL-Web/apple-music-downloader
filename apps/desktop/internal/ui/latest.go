@@ -34,12 +34,16 @@ func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		a.heroCover(c, j, func() ui.Element {
 			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: 1, Video: video}.Show(c)
 		})
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
+		names := ui.Column(c.Key("latest-names")).Grow(1).Shrink(1).MinWidth(0).Gap(10)
+		if w := names.LayoutBounds().W; w > 0 {
+			a.heroNamesW[heroLatest] = w
+		}
+		names.Children(func() {
 			when := ""
 			if j.FinishedAt != nil {
 				when = " · finished " + dayClock(*j.FinishedAt, c.Now())
 			}
-			a.heroNames(c, k, j, "Latest download"+when, hc, compact)
+			a.heroNames(c, k, j, "Latest download"+when, hc, compact, a.heroNamesW[heroLatest])
 		})
 		if compact {
 			return

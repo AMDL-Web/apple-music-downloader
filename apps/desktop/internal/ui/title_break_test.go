@@ -3,6 +3,9 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"amdl/internal/domain"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -44,5 +47,33 @@ func TestALongTitleBreaksBeforeItsQualifiers(t *testing.T) {
 	}
 	if !strings.Contains(even, "\n") || evenA > room+1 || evenB > room+1 || min(evenA, evenB) < max(evenA, evenB)/2 {
 		t.Errorf("a title with nothing to break before is not in two even lines: %q (%.0f and %.0f in %.0f)", even, evenA, evenB, room)
+	}
+}
+
+// Each queue hero breaks a long title before its qualifiers at rest, the
+// latest download's too, which shows while nothing downloads.
+func TestBothQueueHeroesBreakALongTitleBeforeItsQualifiers(t *testing.T) {
+	for _, latest := range []bool{false, true} {
+		a, run := demoApp(t)
+		s := a.Store
+		run(func() bool { return s.Loaded && s.Now() != nil })
+		if latest {
+			for _, j := range s.Jobs {
+				if j.Status == domain.JobRunning || j.Status == domain.JobQueued {
+					s.Cancel(j.ID)
+				}
+			}
+			run(func() bool { return s.Now() == nil && len(s.Finished()) > 0 })
+		}
+		a.Go(ScreenQueue)
+		j := a.heroJob()
+		j.Title = "First Love (Remastered 2014)"
+		tt := ui.NewTester(a.View, 1189, 838)
+		for range 20 {
+			tt.Advance(50 * time.Millisecond)
+		}
+		if _, ok := tt.Find("First Love\n(Remastered 2014)"); !ok {
+			t.Errorf("latest %v: the hero's title is not broken before its qualifiers; the window shows %q", latest, tt.Texts())
+		}
 	}
 }

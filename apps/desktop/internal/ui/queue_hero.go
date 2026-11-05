@@ -33,13 +33,13 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		// to spare: they spread over its height.
 		names := ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Justify(ui.SpaceBetween)
 		if w := names.LayoutBounds().W; w > 0 {
-			a.heroNamesW = w
+			a.heroNamesW[heroNow] = w
 		}
 		if compact {
 			names.Height(size)
 		}
 		names.Children(func() {
-			ui.Column(c).Gap(10).Children(func() { a.heroNames(c, k, j, "", hc, compact) })
+			ui.Column(c).Gap(10).Children(func() { a.heroNames(c, k, j, "", hc, compact, a.heroNamesW[heroNow]) })
 			ui.Column(c).MaxWidth(600).Gap(6).Margin(6, 0, 0, 0).Children(func() {
 				widgets.StageBar{Stages: j.Stages, Color: hc.accent, Track: k.Track, Height: 10, Gap: 3, Running: true, Still: a.scrolling(c)}.Show(c, "hero-bar")
 				ui.Row(c).Children(func() {
@@ -97,6 +97,13 @@ const (
 	heroBy                      = 15
 )
 
+// The queue's two heroes: the download running now and, while nothing
+// runs, the latest one that finished (heroNamesW).
+const (
+	heroNow = iota
+	heroLatest
+)
+
 // heroFrom names the queue hero showing j, which the album page opens from
 // (openingFrom).
 func heroFrom(j *store.Job) string { return "hero:" + j.ID }
@@ -114,13 +121,18 @@ func (a *App) heroInk(c *ui.Context, pal Palette, k *Tokens) heroColors {
 
 // heroNames are the queue hero's label, if it has one, title, artists and
 // tags, which fly to the album page's as it opens from the hero
-// (flySource).
-func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, hc heroColors, compact bool) {
+// (flySource); the title breaks at width (titleBreak).
+func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, hc heroColors, compact bool, width float32) {
 	from := heroFrom(j)
 	if kicker != "" {
 		a.flySourceLabel(label(c, k, kicker).TextColor(hc.label), from, partKicker, kicker, hc.label)
 	}
-	size, lines, title := float32(heroTitle), 2, titleBreak(c, j.Name(), heroTitle, a.heroNamesW)
+	size, lines, title := float32(heroTitle), 2, titleBreak(c, j.Name(), heroTitle, width)
+	if width <= 0 {
+		// Not laid out yet: the title breaks once it is, and a hero with
+		// nothing moving would else not be built again.
+		c.AnimationFrame()
+	}
 	if compact {
 		size, lines, title = heroTitleCompact, 1, j.Name()
 	}
