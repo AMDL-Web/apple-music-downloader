@@ -8,7 +8,9 @@
 # arguments.
 #
 # LOOKROUND_JOBS sets how many processes run at once (default: a quarter of
-# the CPUs, at least 2): a scene keeps about three busy.
+# the CPUs, at least 2): a scene keeps about three busy. LOOKROUND_SCENES,
+# names of scenes (head-latest) or scenes and themes (head-latest/dark)
+# split by spaces, films only those; a name that matches none fails.
 set -uo pipefail
 
 usage() { echo "usage: host.sh <out> [<package>...]" >&2; exit 2; }
@@ -22,6 +24,8 @@ done
 jobs=${LOOKROUND_JOBS:-$(( $(getconf _NPROCESSORS_ONLN) / 4 ))}
 case "$jobs" in ''|*[!0-9]*) echo "host.sh: LOOKROUND_JOBS must be a number" >&2; exit 2;; esac
 [ "$jobs" -ge 2 ] || jobs=2
+want=${LOOKROUND_SCENES:-}
+case "$want" in *[!A-Za-z0-9/_\ -]*) echo "host.sh: LOOKROUND_SCENES takes scene names split by spaces" >&2; exit 2;; esac
 { [ -f go.mod ] && [ -d apps/desktop/internal/ui ]; } || { echo "host.sh: run from a workspace's root" >&2; exit 2; }
 
 . "$HOME/amdl-dev/env.sh"
@@ -36,6 +40,14 @@ if ! { go test -c -o "$out/ui.test" "./$uipkg" && go build -o "$out/framecheck" 
 fi
 if ! (cd "$uipkg" && SCENE_LIST="$out/scenes.txt" "$out/ui.test" -test.run '^TestScenes$' > /dev/null 2>&1) || [ ! -s "$out/scenes.txt" ]; then
   echo "FAIL: the scene set does not list its scenes"; exit 1
+fi
+if [ -n "$want" ]; then
+  for w in $want; do
+    awk -v w="$w" '$0 == w || substr($0, 1, length(w) + 1) == w "/" { found = 1 } END { exit !found }' "$out/scenes.txt" ||
+      { echo "host.sh: no scene $w; the set has: $(sed 's|/.*||' "$out/scenes.txt" | sort -u | tr '\n' ' ')" >&2; exit 2; }
+  done
+  awk -v want="$want" 'BEGIN { n = split(want, ws, " ") } { for (i = 1; i <= n; i++) if ($0 == ws[i] || substr($0, 1, length(ws[i]) + 1) == ws[i] "/") { print; next } }' \
+    "$out/scenes.txt" > "$out/scenes.want" && mv "$out/scenes.want" "$out/scenes.txt"
 fi
 t1=$(date +%s)
 

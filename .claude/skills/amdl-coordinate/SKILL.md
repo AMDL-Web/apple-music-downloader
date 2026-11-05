@@ -101,7 +101,11 @@ The session the maintainer is talking to handles it:
    moves after it settles, no single-frame step, the end frame equals the still
    page. A change to a part that several screens or variants draw films each of
    them. Report only the directions and entries that were filmed, with the before
-   and after numbers. `tools/lookround/round.sh` films the scene set this way; a
+   and after numbers. Before and after, film that scene alone,
+   `tools/lookround/round.sh --scene <name>` (under two minutes); the whole set
+   runs once, when the round is done, with `--install`. Wait for it in the
+   background and go on meanwhile; never sleep in a loop on its output.
+   `tools/lookround/round.sh` films the scene set this way; a
    screen, state or transition it lacks gets a scene in
    `apps/desktop/internal/ui/scenes_test.go`. To measure one of its findings,
    film the scene again with `SCENE_KEEP=all`, which keeps every frame.

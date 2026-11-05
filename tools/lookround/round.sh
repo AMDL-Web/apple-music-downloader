@@ -22,6 +22,9 @@
 #                      <commit>~1)
 #   --host <host>      rog or z16 (default: rog when it answers, else z16)
 #   --no-full          do not start the whole desktop suite in the background
+#   --scene <name>     film only this scene (as head-latest) or scene and theme
+#                      (head-latest/dark), repeatable, and nothing else: no
+#                      tests, no build, never reused for --install
 #   --recheck          check again a commit the host already passed (by
 #                      default a rerun, as to install after looking, reuses it)
 #
@@ -30,7 +33,7 @@
 set -euo pipefail
 
 usage() { echo "usage: round.sh [options] [<commit>]" >&2; awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
-build=0 install=0 session="" waive="" base="" host="" full=1 recheck=0 commit=""
+build=0 install=0 session="" waive="" base="" host="" full=1 recheck=0 commit="" scenes=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) build=1 ;;
@@ -41,6 +44,9 @@ while [ $# -gt 0 ]; do
     --host) [ $# -ge 2 ] || usage; host=$2; shift
       case "$host" in rog|z16) ;; *) echo "round.sh: --host is rog or z16" >&2; exit 2;; esac ;;
     --no-full) full=0 ;;
+    --scene) [ $# -ge 2 ] && [ -n "$2" ] || usage
+      case "$2" in *[!A-Za-z0-9/_-]*) echo "round.sh: --scene takes a scene name, as head-latest or head-latest/dark" >&2; exit 2;; esac
+      scenes+=("$2"); shift ;;
     --recheck) recheck=1 ;;
     -h|--help) usage ;;
     -*) echo "round.sh: unknown option $1" >&2; usage ;;
@@ -49,6 +55,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 if [ $install = 1 ] && [ -z "$session" ]; then echo "round.sh: --install needs --session <name>" >&2; exit 2; fi
+if [ ${#scenes[@]} -gt 0 ] && { [ $build = 1 ] || [ -n "$waive" ]; }; then echo "round.sh: --scene films scenes only; --build, --install and --waive need the whole set" >&2; exit 2; fi
 case "$session" in *[!A-Za-z0-9._-]*) echo "round.sh: --session takes letters, digits, . _ -" >&2; exit 2;; esac
 
 top=$(git rev-parse --show-toplevel)
@@ -66,6 +73,9 @@ home=$(echo 'echo $HOME' | hostsh "$host" 15) || { echo "round.sh: cannot reach 
 id=round-$short
 ws=$home/amdl-dev/ws/$id
 out=$home/amdl-dev/look/$short
+review=$top/dist/review/look-$short
+# A run of some scenes is kept apart, so that no install reuses it.
+if [ ${#scenes[@]} -gt 0 ]; then out=$out-scenes review=$review-scenes full=0 recheck=1; fi
 since() { echo $(( $(date +%s) - $1 )); }
 t0=$(date +%s)
 
@@ -92,7 +102,12 @@ while read -r d; do
 done < <(git -C "$top" diff --name-only "$base" "$sha" -- '*.go' | grep -v '^explore/' | xargs -r -n1 dirname | sort -u |
   while read -r d; do git -C "$top" ls-tree --name-only "$sha" "$d/" | grep -q '\.go$' && echo "$d"; done)
 if git -C "$top" diff --name-only "$base" "$sha" | grep -qx -e go.mod -e go.sum; then pkgs=(./apps/desktop/...); fi
-echo "round $(git -C "$top" rev-parse --short "$base")..$short on $host; tests of: ${pkgs[*]:-(no Go package touched)}"
+if [ ${#scenes[@]} -gt 0 ]; then
+  pkgs=()
+  echo "scenes ${scenes[*]} of $short on $host, nothing else"
+else
+  echo "round $(git -C "$top" rev-parse --short "$base")..$short on $host; tests of: ${pkgs[*]:-(no Go package touched)}"
+fi
 
 t_sync=0 t_check=0
 passed=$(printf 'head -1 %q/summary.txt 2>/dev/null | grep "^PASS" || true\n' "$out" | hostsh "$host" 15)
@@ -108,15 +123,14 @@ else
 
   s=$(date +%s)
   rc=0
-  printf 'mkdir -p ~/.trash && { [ ! -d %q ] || mv %q ~/.trash/look-%s-$(date +%%Y%%m%%d-%%H%%M%%S); } && cd %q && mkdir -p %q && bash tools/lookround/host.sh %q %s\n' \
-    "$out" "$out" "$short" "$ws" "$out" "$out" "${pkgs[*]:-}" | hostsh "$host" 1800 || rc=$?
+  printf 'mkdir -p ~/.trash && { [ ! -d %q ] || mv %q ~/.trash/look-%s-$(date +%%Y%%m%%d-%%H%%M%%S); } && cd %q && mkdir -p %q && LOOKROUND_SCENES=%q bash tools/lookround/host.sh %q %s\n' \
+    "$out" "$out" "$short" "$ws" "$out" "${scenes[*]:-}" "$out" "${pkgs[*]:-}" | hostsh "$host" 1800 || rc=$?
   t_check=$(since "$s")
   [ $rc -le 1 ] || { echo "round.sh: host.sh failed ($rc)" >&2; exit 1; }
 fi
 
 # What the author looks at.
 s=$(date +%s)
-review=$top/dist/review/look-$short
 mkdir -p "$review"
 echo "cd $out && tar cf - summary.txt sheet.jpg \$(ls findings.html 2>/dev/null) \$(cd scenes && find . -name 'bad-*.png' -o -name 'settled-*.jpg' | sed 's|^./|scenes/|')" |
   hostsh "$host" 120 | tar xf - -C "$review"

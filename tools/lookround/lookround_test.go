@@ -46,6 +46,11 @@ func TestRoundRefusesBadArguments(t *testing.T) {
 		{[]string{"--waive", ""}, "usage"},
 		{[]string{"HEAD", "HEAD~1"}, "usage"},
 		{[]string{"--install", "--session", "a b"}, "--session takes"},
+		{[]string{"--scene"}, "usage"},
+		{[]string{"--scene", "head;x"}, "--scene takes a scene name"},
+		{[]string{"--scene", "head-latest", "--install", "--session", "s"}, "need the whole set"},
+		{[]string{"--scene", "head-latest", "--build"}, "need the whole set"},
+		{[]string{"--scene", "head-latest", "--waive", "why"}, "need the whole set"},
 	} {
 		code, out := exitOf(t, t.TempDir(), nil, "round.sh", tc.args...)
 		if code != 2 || !strings.Contains(out, tc.says) {
@@ -76,6 +81,7 @@ func TestHostRefusesBadArguments(t *testing.T) {
 		{ws, nil, []string{t.TempDir(), "internal/api"}, "must start with ./"},
 		{ws, nil, []string{t.TempDir(), "./a;b"}, "odd characters"},
 		{ws, []string{"LOOKROUND_JOBS=many"}, []string{t.TempDir()}, "must be a number"},
+		{ws, []string{"LOOKROUND_SCENES=head;x"}, []string{t.TempDir()}, "takes scene names"},
 		{t.TempDir(), nil, []string{t.TempDir()}, "workspace's root"},
 	} {
 		code, out := exitOf(t, tc.dir, tc.env, "host.sh", tc.args...)

@@ -18,6 +18,7 @@ surface the maintainer will touch.
   from the Mac:
 
   ```bash
+  tools/lookround/round.sh --scene head-complete/light       # one scene, while fixing
   tools/lookround/round.sh                                   # check HEAD
   tools/lookround/round.sh --install --session <your session> # then install it
   ```
