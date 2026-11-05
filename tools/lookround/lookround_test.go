@@ -84,3 +84,64 @@ func TestHostRefusesBadArguments(t *testing.T) {
 		}
 	}
 }
+
+// A round's tests cover everything since the last accepted build. When no
+// accepted build is an ancestor, as after a rebase, the round is all the
+// branch adds to origin/dev; with no origin/dev, the commit alone. Both say
+// so. The host is a stand-in ssh that answers the probes and then fails.
+func TestRoundStartsWhereTheBranchLeavesDev(t *testing.T) {
+	bin := t.TempDir()
+	fake := "#!/bin/bash\nin=$(cat)\ncase \"$in\" in\n  *'echo $HOME'*) echo /nowhere ;;\n  *accepted*) ;;\n  *) exit 1 ;;\nesac\n"
+	if err := os.WriteFile(bin+"/ssh", []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin+"/gitconfig", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"PATH=" + bin + ":" + os.Getenv("PATH"), "GIT_CONFIG_GLOBAL=" + bin + "/gitconfig", "GIT_CONFIG_NOSYSTEM=1"}
+	for _, withDev := range []bool{true, false} {
+		repo := t.TempDir()
+		git := func(args ...string) string {
+			t.Helper()
+			cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"}, args...)...)
+			cmd.Dir = repo
+			cmd.Env = append(os.Environ(), env...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("git %q: %v\n%s", args, err, out)
+			}
+			return strings.TrimSpace(string(out))
+		}
+		commit := func(path string) string {
+			t.Helper()
+			if err := os.MkdirAll(repo+"/"+path[:strings.LastIndex(path, "/")], 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(repo+"/"+path, []byte("package x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			git("add", path)
+			git("commit", "-q", "-m", path)
+			return git("rev-parse", "--short=8", "HEAD")
+		}
+		git("init", "-q")
+		dev := commit("d/d.go")
+		if withDev {
+			git("update-ref", "refs/remotes/origin/dev", "HEAD")
+		}
+		commit("a/a.go")
+		tip := commit("b/b.go")
+
+		code, out := exitOf(t, repo, env, "round.sh", "--host", "z16")
+		if code == 0 {
+			t.Fatalf("round.sh passed against a host that fails: %q", out)
+		}
+		want, note := "tests of: ./a ./b", "where it leaves origin/dev"
+		if !withDev {
+			want, note = "tests of: ./b", "the round is "+tip
+		}
+		if !strings.Contains(out, want) || !strings.Contains(out, note) {
+			t.Errorf("origin/dev at %s: %v; round.sh said %q; want %q and %q", dev, withDev, out, want, note)
+		}
+	}
+}

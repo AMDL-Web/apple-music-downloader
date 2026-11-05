@@ -19,7 +19,7 @@ for p in "$@"; do
   case "$p" in ./*) ;; *) echo "host.sh: package $p must start with ./" >&2; exit 2;; esac
   case "$p" in *[!A-Za-z0-9._/-]*) echo "host.sh: package $p has odd characters" >&2; exit 2;; esac
 done
-jobs=${LOOKROUND_JOBS:-$(( $(nproc) / 4 ))}
+jobs=${LOOKROUND_JOBS:-$(( $(getconf _NPROCESSORS_ONLN) / 4 ))}
 case "$jobs" in ''|*[!0-9]*) echo "host.sh: LOOKROUND_JOBS must be a number" >&2; exit 2;; esac
 [ "$jobs" -ge 2 ] || jobs=2
 { [ -f go.mod ] && [ -d apps/desktop/internal/ui ]; } || { echo "host.sh: run from a workspace's root" >&2; exit 2; }

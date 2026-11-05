@@ -18,7 +18,8 @@
 #                      reason goes into the acceptance record
 #   --base <commit>    the round starts after this commit (default: the newest
 #                      accepted build on the host that <commit> descends from,
-#                      else <commit>~1)
+#                      else where <commit>'s branch leaves origin/dev, else
+#                      <commit>~1)
 #   --host <host>      rog or z16 (default: rog when it answers, else z16)
 #   --no-full          do not start the whole desktop suite in the background
 #   --recheck          check again a commit the host already passed (by
@@ -73,7 +74,16 @@ if [ -z "$base" ]; then
   for c in $(echo 'cd ~/amdl-dev/accepted 2>/dev/null && ls -t | grep -E "^[0-9a-f]{32}$" | head -40 | xargs -r sed -n "s/^commit=//p"' | hostsh "$host" 30); do
     if git -C "$top" merge-base --is-ancestor "$c" "$sha" 2>/dev/null && [ "$c" != "$sha" ]; then base=$c; break; fi
   done
-  [ -n "$base" ] || base=$sha~1
+  # A rebase leaves the accepted build off the branch: the round is then all
+  # the branch adds to origin/dev.
+  if [ -z "$base" ] && mb=$(git -C "$top" merge-base origin/dev "$sha" 2>/dev/null) && [ "$mb" != "$sha" ]; then
+    base=$mb
+    echo "round.sh: note: no accepted build on $host is an ancestor of $short; the round starts where it leaves origin/dev" >&2
+  fi
+  if [ -z "$base" ]; then
+    base=$sha~1
+    echo "round.sh: note: no accepted ancestor and nothing past origin/dev; the round is $short alone (--base widens it)" >&2
+  fi
 fi
 git -C "$top" rev-parse --verify --quiet "$base^{commit}" > /dev/null || { echo "round.sh: no commit $base" >&2; exit 2; }
 pkgs=()
