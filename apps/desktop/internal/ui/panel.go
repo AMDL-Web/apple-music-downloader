@@ -177,7 +177,7 @@ func (a *App) panelNow(c *ui.Context, k *Tokens, j *store.Job) {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(5).Children(func() {
 			ui.Text(c, j.Name()).FontSize(14).FontWeight(700).TextColor(t1).SingleLine().Ellipsis("…")
 			mono(c, j.By(), 10.5).TextColor(t2).Ellipsis("…")
-			albumProgress(c, k, j, "panel-now", 5, t1, t1.Alpha(0.18), accent, t2, 10.5)
+			albumProgress(c, k, j, "panel-now", 5, t1, t1.Alpha(0.18), accent, t2, 10.5, false)
 		})
 	})
 }

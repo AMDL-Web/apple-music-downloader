@@ -57,7 +57,7 @@ func TestADownloadStartedFromAnAlbumTakesItsPage(t *testing.T) {
 	if j := s.Detail(); j.Status.IsTerminal() || a.Screen != ScreenAlbum {
 		t.Fatalf("the page shows %v on screen %v", j.Status, a.Screen)
 	}
-	for _, want := range []string{"SIZE", "AVG SPEED", "ACTIVITY", "Pause", "Harbor Lights", "ALBUM · 9 TRACKS"} {
+	for _, want := range []string{"SIZE", "SPEED", "LEFT", "TRACKS", "ACTIVITY", "Pause", "Harbor Lights", "ALBUM"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q once the album downloads: %q", want, tt.Texts())
 		}
@@ -90,10 +90,10 @@ func TestAFailedAlbumDownloadOpensOnItsAlbum(t *testing.T) {
 	if tt.HasText("Download again") || tt.HasText("RELEASED") {
 		t.Errorf("a failed download's page offers %q", tt.Texts())
 	}
-	// Its two failed tracks are not finished, and a percent of a run that
-	// ended measures nothing.
-	if !tt.HasText("8 / 10 finished · 2 failed") || tt.HasText("83%") {
-		t.Errorf("a failed download's bar says %q", tt.Texts())
+	// Its two failed tracks are not on disk: the tracks figure says 8 of 10,
+	// and the bar says only its share.
+	if !tt.HasText("8 / 10") || tt.HasText("8 / 10 finished · 2 failed") {
+		t.Errorf("a failed download's tracks figure says %q", tt.Texts())
 	}
 	if a.backLabel() != "Queue" {
 		t.Errorf("from the queue, Back says %q", a.backLabel())
@@ -111,7 +111,7 @@ func TestAnAlbumDownloadedAgainShowsTheNewDownload(t *testing.T) {
 	}
 	a.OpenJob(done.ID)
 	tt := stillTester(a.View, 1280, 800)
-	if !tt.HasText("Download again") || !tt.HasText("FINISHED") {
+	if !tt.HasText("Download again") || !tt.HasText("REGION") {
 		t.Errorf("a finished download's page: %q", tt.Texts())
 	}
 	s.SubmitHit(s.Search.Album.Hit, nil)

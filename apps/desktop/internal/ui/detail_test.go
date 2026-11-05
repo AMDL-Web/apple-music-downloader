@@ -262,7 +262,7 @@ func TestAPartAlbumOpensItsRecordsPageNotItsRun(t *testing.T) {
 		}
 		share := false
 		for _, txt := range tt.Texts() {
-			share = share || strings.HasSuffix(txt, " of 6 downloaded")
+			share = share || strings.HasSuffix(txt, " / 6")
 		}
 		if share != tc.part {
 			t.Errorf("%s: the share shows %v: %q", tc.name, share, tt.Texts())

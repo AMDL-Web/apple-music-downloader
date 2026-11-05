@@ -21,7 +21,7 @@ import (
 // under its right, which a job that failed or was cancelled leaves out:
 // it no longer measures anything. ink is the text color the bar's live
 // fill is drawn from.
-func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32, ink, track, working, text ui.Color, size float32) {
+func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32, ink, track, working, text ui.Color, size float32, page bool) {
 	a := j.Album()
 	done, failed, total := a.OnDisk, a.Failed, a.Total
 	if total == 0 {
@@ -38,13 +38,17 @@ func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32
 			case resolving:
 				mono(c, "Resolving tracks", size).TextColor(text)
 			default:
-				count := fmt.Sprintf("%d / %d finished", done, total)
-				if failed > 0 {
-					count += fmt.Sprintf(" · %d failed", failed)
+				// The album page's figures say the count: its bar says the
+				// share, always.
+				if !page {
+					count := fmt.Sprintf("%d / %d finished", done, total)
+					if failed > 0 {
+						count += fmt.Sprintf(" · %d failed", failed)
+					}
+					mono(c, count, size).TextColor(text)
 				}
-				mono(c, count, size).TextColor(text)
 				ui.Spacer(c)
-				if !short {
+				if !short || page {
 					mono(c, fmt.Sprintf("%d%%", a.Percent), size).TextColor(text)
 				}
 			}

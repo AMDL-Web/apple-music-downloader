@@ -49,6 +49,10 @@ the backend with a wrapper here or on another machine.
   controls and dimmed results wait for `apps/desktop/internal/ui#waited`, not a store's busy flag; earlier results, typed fields
   and errors stay until the answer. Each async action is tested with
   `apps/desktop/internal/ui/flicker_test.go#noFlash`.
+- An album or playlist page is its record's page from wherever it opens:
+  state, track counts and region come from the record (`resource` mark,
+  `GET /api/v1/library/{kind}/{id}`); a run adds only live figures
+  (`apps/desktop/internal/ui/page.go#pageFigures`).
 - A control's size never depends on its state
   (`apps/desktop/internal/ui/shift_test.go#holdsStill`).
 - No cgo: every target cross-compiles with `CGO_ENABLED=0`.

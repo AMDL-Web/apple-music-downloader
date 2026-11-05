@@ -15,7 +15,7 @@ import (
 
 // TestTheHeadKeepsItsPlaceWhateverTheTitle: whatever the title, one line,
 // two or more, the album page's cover spans the column beside it, from the
-// label over the title to the bottom of the progress line, and only the
+// label over the title to the bottom of the progress line (its share), and only the
 // title changes between them.
 func TestTheHeadKeepsItsPlaceWhateverTheTitle(t *testing.T) {
 	titles := []string{"LOSTandFOUND", "LiTTLE DEViL PARADE", "The Rise and Fall of Ziggy Stardust and the Spiders from Mars"}
@@ -30,15 +30,19 @@ func TestTheHeadKeepsItsPlaceWhateverTheTitle(t *testing.T) {
 			tt := stillTester(a.View, w, 800)
 			find := func(prefix string) ui.Rect {
 				for _, s := range tt.Texts() {
-					if strings.HasPrefix(s, prefix) {
+					if strings.HasPrefix(s, prefix) || (prefix == "%" && strings.HasSuffix(s, "%")) {
 						r, _ := tt.Find(s)
+						// The head's share, not the sidebar card's or a row's.
+						if prefix == "%" && (r.X < 232 || r.Y > 400) {
+							continue
+						}
 						return r
 					}
 				}
 				t.Fatalf("%d %q: no %q in %q", w, title, prefix, tt.Texts())
 				return ui.Rect{}
 			}
-			cover, kicker, size, line := find("Artwork"), find("ALBUM"), find("SIZE"), find("6 / 13")
+			cover, kicker, size, line := find("Artwork"), find("ALBUM"), find("SIZE"), find("%")
 			if cover.Y != kicker.Y {
 				t.Errorf("%d %q: the cover's top is at %v, the label's at %v", w, title, cover.Y, kicker.Y)
 			}

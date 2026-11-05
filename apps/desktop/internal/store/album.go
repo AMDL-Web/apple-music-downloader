@@ -3,6 +3,8 @@ package store
 import (
 	"cmp"
 	"context"
+	"strconv"
+	"time"
 
 	"amdl/internal/client"
 	"amdl/internal/domain"
@@ -24,11 +26,27 @@ type AlbumPage struct {
 	Album  client.Album
 	Err    string
 
+	// Run is what a finished record lacks while no run of it is in the
+	// store, read once from the backend (WatchRun).
+	Run PageRun
+
 	gen   int
 	cache *lru[client.Album]
 	// items are the tracks of jobs the feed does not hold, read once.
 	items map[string][]domain.JobItem
 	read  map[string]bool
+}
+
+// PageRun is the size and the time of a finished record's last run: the
+// record keeps the bytes of its files, and only its run knows how long it
+// took. Key names the record and its done tracks the figures were asked for,
+// OK is set once they came, and Took is zero when no run is left to ask.
+type PageRun struct {
+	Key        string
+	Size       int64
+	Took       time.Duration
+	Storefront string
+	OK         bool
 }
 
 func newAlbumPage() AlbumPage {
@@ -291,4 +309,46 @@ func (s *Store) TrackMark(t client.AlbumTrack, albumMark MarkState, items []doma
 	}
 	m, _ := s.HitMark(TrackHit(t))
 	return m, item
+}
+
+// runWait bounds the reads of a record's size and last run.
+const runWait = 15 * time.Second
+
+// WatchRun reads the size and the time of the page's record while want: a
+// finished record with no run in the store. It asks once for each state of
+// the record, and keeps the figures it has until the new ones come.
+func (s *Store) WatchRun(want bool) {
+	p := &s.Search.Album
+	if !want || p.ID == "" || s.client == nil {
+		return
+	}
+	ref := domain.ResourceRef{Kind: p.Kind(), ID: p.ID}
+	key := string(ref.Kind) + ":" + ref.ID
+	if m := s.HitRecord(p.Hit); m != nil {
+		key += ":" + strconv.Itoa(m.TracksDone)
+	}
+	if p.Run.Key == key {
+		return
+	}
+	p.Run.Key, p.Run.OK = key, false
+	c, ctx := s.client, s.ctx
+	go func() {
+		ctx2, cancel := context.WithTimeout(ctx, runWait)
+		defer cancel()
+		files, err := c.RecordFiles(ctx2, ref)
+		var took time.Duration
+		if err == nil {
+			l, lerr := c.Downloads(ctx2, client.ListQuery{Limit: 1, Status: []domain.JobStatus{domain.JobCompleted}, Resource: ref, Sort: "updated_at"})
+			if lerr == nil && len(l.Downloads) > 0 {
+				if j := l.Downloads[0]; j.StartedAt != nil && j.FinishedAt != nil {
+					took = j.FinishedAt.Sub(*j.StartedAt)
+				}
+			}
+		}
+		s.postIf(ctx, func() {
+			if q := &s.Search.Album; q.Run.Key == key && err == nil {
+				q.Run = PageRun{Key: key, Size: files.Size, Took: took, Storefront: files.Storefront, OK: true}
+			}
+		})
+	}()
 }
