@@ -138,7 +138,8 @@ func TestTheRegionFigureFitsItsColumn(t *testing.T) {
 		var v string
 		var colW, w float32
 		tt := stillTester(func(c *ui.Context) {
-			l := pageHero(c, page)
+			// A page narrower than compactContent is the compact one.
+			l := pageHero(page, page < compactContent)
 			f := a.regionFigure(c, l, "us")
 			size := float32(22)
 			if l.compact {
