@@ -95,7 +95,7 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 			ui.Column(c).Gap(12).Children(func() {
 				a.flyLabel(label(c, k, h.kicker).TextColor(hc.label), h.kicker, hc.label)
 				size := l.titleSize(c, h.title)
-				a.flyText(c, display(c, h.title, size).TextColor(hc.title).MaxLines(2).Ellipsis("…"), partTitle, displaySpan(h.title, size), hc.title, l.width)
+				a.flyText(c, display(c, titleBreak(c, h.title, size, l.width), size).TextColor(hc.title).MaxLines(2).Ellipsis("…"), partTitle, displaySpan(h.title, size), hc.title, l.width)
 				ui.Row(c).Gap(10).AlignItems(ui.Center).Wrap().Children(func() {
 					if h.artist != "" {
 						ink := hc.title.Mix(hc.meta, 0.4)

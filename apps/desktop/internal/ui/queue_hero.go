@@ -32,6 +32,9 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		// A compact cover is as tall as the words beside it need, with room
 		// to spare: they spread over its height.
 		names := ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Justify(ui.SpaceBetween)
+		if w := names.LayoutBounds().W; w > 0 {
+			a.heroNamesW = w
+		}
 		if compact {
 			names.Height(size)
 		}
@@ -117,12 +120,12 @@ func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, h
 	if kicker != "" {
 		a.flySourceLabel(label(c, k, kicker).TextColor(hc.label), from, partKicker, kicker, hc.label)
 	}
-	size, lines := float32(heroTitle), 2
+	size, lines, title := float32(heroTitle), 2, titleBreak(c, j.Name(), heroTitle, a.heroNamesW)
 	if compact {
-		size, lines = heroTitleCompact, 1
+		size, lines, title = heroTitleCompact, 1, j.Name()
 	}
 	a.flySourceText(c, func() ui.Element {
-		return display(c, j.Name(), size).TextColor(hc.title).MaxLines(lines).Ellipsis("…")
+		return display(c, title, size).TextColor(hc.title).MaxLines(lines).Ellipsis("…")
 	}, displaySpan(j.Name(), size), from, partTitle, hc.title)
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 		a.flySourceText(c, func() ui.Element {

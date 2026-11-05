@@ -50,9 +50,9 @@ func TestATitleBrokenDifferentlyFliesWordByWord(t *testing.T) {
 }
 
 // A long title the queue hero breaks in two lines and the page sets in one
-// flies there and back, and lands in the hero where the flight left it. At
-// lyjw's window the hero puts "(Remastered 2014)" on its second line; at
-// 1300 it puts "2014)" there alone, as on lyjw's Mac.
+// flies there and back, and lands in the hero where the flight left it,
+// at lyjw's window and at 1300, where the hero puts "(Remastered 2014)" on
+// its second line (titleBreak).
 func TestALongTitleLandsInTheHeroWithoutAJump(t *testing.T) {
 	for _, w := range []int{1189, 1300} {
 		t.Run(strconv.Itoa(w), func(t *testing.T) { titleFlight(t, w) })

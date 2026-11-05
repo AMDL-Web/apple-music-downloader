@@ -223,6 +223,9 @@ type App struct {
 	// nowShown is the job the sidebar's now card shows, kept while the
 	// card closes after it.
 	nowShown *store.Job
+	// heroNamesW is how wide the queue hero's names were last laid out,
+	// which its title breaks at (titleBreak).
+	heroNamesW float32
 	// panelH is the height the tray panel was last fitted to.
 	panelH float32
 }

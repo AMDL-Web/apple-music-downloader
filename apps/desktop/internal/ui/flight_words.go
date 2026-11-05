@@ -26,25 +26,28 @@ type wordAt struct {
 type wordFlight struct{ src, dst []wordAt }
 
 // titleWords lays text out as display sets it at size in lines at most
-// width wide, breaking as the text breaks: after a space, or between two
-// characters of a CJK run, which has none. Nil past titleLines lines.
+// width wide, breaking it as a head does (titleBreak) and each line as the
+// text breaks: after a space, or between two characters of a CJK run,
+// which has none. Nil past titleLines lines.
 func titleWords(c *ui.Context, text string, size, width float32) []wordAt {
-	measure := func(s string) float32 {
-		w, _ := c.MeasureText(0, displaySpan(s+"|", size))
-		bar, _ := c.MeasureText(0, displaySpan("|", size))
-		return w - bar
-	}
+	measure := func(s string) float32 { return titleWidth(c, s, size) }
 	var out []wordAt
-	line, at := 0, ""
-	for _, p := range titlePieces(text) {
-		if at != "" && measure(strings.TrimRight(at+p, " ")) > width+1 {
-			line, at = line+1, ""
+	line := 0
+	for i, l := range strings.Split(titleBreak(c, text, size, width), "\n") {
+		if i > 0 {
+			line++
+		}
+		at := ""
+		for _, p := range titlePieces(l) {
+			if at != "" && measure(strings.TrimRight(at+p, " ")) > width+1 {
+				line, at = line+1, ""
+			}
 			if line >= titleLines {
 				return nil
 			}
+			out = append(out, wordAt{text: p, x: measure(at), line: line})
+			at += p
 		}
-		out = append(out, wordAt{text: p, x: measure(at), line: line})
-		at += p
 	}
 	return out
 }
