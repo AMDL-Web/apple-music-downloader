@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
+
 	"amdl/apps/desktop/internal/store"
 	"amdl/internal/client"
 	"amdl/internal/domain"
@@ -108,5 +110,79 @@ func TestAWholeRecordWithoutARunReadsItsSizeAndTime(t *testing.T) {
 	num, _, _ := strings.Cut(format.Bytes(r.Size), " ")
 	if !tt.HasText(num) || !tt.HasText(format.Duration(r.Took)) {
 		t.Errorf("the head does not show %s and %s: %q", num, format.Duration(r.Took), tt.Texts())
+	}
+}
+
+// valueUnder is the text under the figure named name, in its column.
+func valueUnder(t *testing.T, tt *ui.Tester, name string) string {
+	t.Helper()
+	label, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("no figure %q in %q", name, tt.Texts())
+	}
+	for _, text := range tt.Texts() {
+		if r, ok := tt.Find(text); ok && r.X == label.X && r.Y > label.Y && r.Y < label.Y+40 {
+			return text
+		}
+	}
+	t.Fatalf("nothing under %q", name)
+	return ""
+}
+
+// A region's name that does not fit its column gives way to its code, in
+// every window: the figure's text never runs wider than the column (Texts
+// reports the whole string, so the width is measured).
+func TestTheRegionFigureFitsItsColumn(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	for _, page := range []float32{957, 668, 1100, 1500} {
+		var v string
+		var colW, w float32
+		tt := stillTester(func(c *ui.Context) {
+			l := pageHero(c, page)
+			f := a.regionFigure(c, l, "us")
+			size := float32(22)
+			if l.compact {
+				size = 18
+			}
+			v = f.value
+			w, _ = c.MeasureText(0, ui.Span{Text: v, Font: MonoFont, Size: size, Weight: 600})
+			colW = (min(float32(heroBand), l.width) - 3*heroGap) / 4
+			ui.Box(c).Size(10, 10)
+		}, 1280, 838)
+		tt.Frame()
+		if w > colW || (v != "United States" && v != "US") {
+			t.Errorf("a %v wide page: the region reads %q, %v wide in a column %v wide", page, v, w, colW)
+		}
+	}
+}
+
+// A run that ended shows its share as its tracks figure counts it, whether
+// or not its tracks have arrived.
+func TestAnEndedRunsPercentIsItsTracksFigure(t *testing.T) {
+	a, run := demoApp(t)
+	s := a.Store
+	run(func() bool { return s.Loaded })
+	failed := jobOf(s, "920003", domain.JobFailed)
+	if failed == nil {
+		for _, j := range s.Jobs {
+			if j.Status == domain.JobFailed && j.ResourceKind == domain.ResourceAlbum {
+				failed = j
+				break
+			}
+		}
+	}
+	if failed == nil {
+		t.Fatal("the demo has no failed album download")
+	}
+	failed.Items = nil
+	failed.TotalItems, failed.CompletedItems, failed.SkippedItems, failed.FailedItems = 10, 8, 0, 2
+	a.OpenJob(failed.ID)
+	tt := stillTester(a.View, 1189, 838)
+	tt.Frame()
+	if got := valueUnder(t, tt, "TRACKS"); got != "8 / 10" {
+		t.Fatalf("the tracks figure reads %q", got)
+	}
+	if !tt.HasText("80%") {
+		t.Errorf("the share is not 80%% like the tracks figure: %q", tt.Texts())
 	}
 }

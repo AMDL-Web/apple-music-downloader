@@ -283,9 +283,9 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 			}
 		}
 	}
-	figs := a.pageFigures(c, p, j, f)
+	figs := a.pageFigures(c, l, p, j, f)
 	h.band = func() {
-		ui.Row(c).Gap(12).MaxWidth(heroBand).Children(func() {
+		ui.Row(c).Gap(heroGap).MaxWidth(heroBand).Children(func() {
 			for _, x := range figs {
 				heroStat(c, k, hc, l, x.name, x.value, x.unit)
 			}
@@ -299,8 +299,12 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	return h
 }
 
-// heroBand is the widest the head's figures and bar run, in a wide window.
-const heroBand = 900
+// heroBand is the widest the head's figures and bar run, in a wide window,
+// and heroGap the room between figures.
+const (
+	heroBand = 900
+	heroGap  = 12
+)
 
 // figure is one figure of the head's band: its name, value and unit.
 type figure struct{ name, value, unit string }
@@ -312,7 +316,7 @@ type figure struct{ name, value, unit string }
 // and then what it made (its size, how long it took, its region). A run
 // adds only what is live while it works: the bytes moved, its speed and
 // the time it has left.
-func (a *App) pageFigures(c *ui.Context, p *store.AlbumPage, j *store.Job, f albumFacts) []figure {
+func (a *App) pageFigures(c *ui.Context, l heroLayout, p *store.AlbumPage, j *store.Job, f albumFacts) []figure {
 	s := a.Store
 	size := func(n int64) figure {
 		if n <= 0 {
@@ -327,7 +331,7 @@ func (a *App) pageFigures(c *ui.Context, p *store.AlbumPage, j *store.Job, f alb
 		}
 		return figure{"Total time", format.Duration(d), ""}
 	}
-	where := figure{"Region", a.pageRegion(p, j), ""}
+	where := a.regionFigure(c, l, a.pageRegion(p, j))
 	count := func(done, total int) figure {
 		if total > 0 && done >= total {
 			return figure{"Tracks", strconv.Itoa(total), ""}
@@ -419,7 +423,25 @@ func (a *App) pageRegion(p *store.AlbumPage, j *store.Job) string {
 	if rs := a.Store.SearchRegions(); sf == "" && len(rs) > 0 {
 		sf = rs[0]
 	}
-	return firstNonEmptyStr(region.Name(sf), "—")
+	return sf
+}
+
+// regionFigure is the Region figure for storefront sf: its name where the
+// name fits its column at the figure's size, else its code in capitals, and
+// "—" for none; never an ellipsis.
+func (a *App) regionFigure(c *ui.Context, l heroLayout, sf string) figure {
+	if sf == "" {
+		return figure{"Region", "—", ""}
+	}
+	size, band := float32(22), min(float32(heroBand), l.width)
+	if l.compact {
+		size = 18
+	}
+	name := region.Name(sf)
+	if w, _ := c.MeasureText(0, ui.Span{Text: name, Font: MonoFont, Size: size, Weight: 600}); w > (band-3*heroGap)/4 {
+		name = strings.ToUpper(sf)
+	}
+	return figure{"Region", name, ""}
 }
 
 // pageActions are what the record's state lets be done, at the title bar's
