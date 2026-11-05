@@ -51,6 +51,7 @@ type albumDraw struct {
 	b             AlbumBar
 	h, live, done float32
 	reduce        bool
+	phase         stripePhase
 	p             *ui.Painter
 	r, cell       ui.Rect
 	span          float32
@@ -95,7 +96,10 @@ func (d *albumDraw) fillCell() {
 	p.Fill(clip, b.Track, 0)
 	if b.Resolving {
 		p.Fill(clip, b.Working.Alpha(0.45), 0)
-		stripes(p, clip, 0, d.reduce)
+		stripes(p, clip, 0, d.phase.shift(p.Now(), d.reduce))
+		if !d.reduce {
+			p.AnimationFrameRate(30)
+		}
 		return
 	}
 	if w := d.span * min(d.live, 1); w > 0 {

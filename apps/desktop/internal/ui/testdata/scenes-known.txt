@@ -5,5 +5,3 @@
 # matched in its run.
 first-search/* results flicker the skeleton shows for one frame before results that came in the next (not every run)
 head-downloading/* open jump the lower panel's rows and Saved to hold two frames, then rise 3 px in one
-head-downloading/light back pop the queue hero's stripes jump by up to 5 px on the frame the flight back ends (not every run)
-head-queued/light back pop the queue hero's stripes jump by up to 5 px on the frame the flight back ends
