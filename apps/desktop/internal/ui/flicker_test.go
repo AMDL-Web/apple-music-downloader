@@ -466,10 +466,9 @@ func TestWaitingStatesShowOnlyOnceTheRequestIsSlow(t *testing.T) {
 	}
 }
 
-// A search answers in place: more words keep the results as they are, and
-// a first search shows nothing below the field, until the answer, unless
-// the read has been out statusDelay, when the results dim or the skeleton
-// shows.
+// A search answers in place: more words keep the results as they are
+// until the answer, unless the read has been out statusDelay, when they
+// dim. A first search's skeleton is TestTheFirstSearchComesInWithTheRise's.
 func TestASearchWaitsInPlaceUntilItIsSlow(t *testing.T) {
 	stage := func(t *testing.T, words string) (*App, *ui.Tester, func(until func() bool)) {
 		a, run := liveApp(t, remoteSettings())
@@ -511,30 +510,6 @@ func TestASearchWaitsInPlaceUntilItIsSlow(t *testing.T) {
 		tt.Frame()
 		if d := snapFrame(tt).differs(mid); d != "" {
 			t.Errorf("after the answer the results are not as they were: %s", d)
-		}
-	})
-	t.Run("first search", func(t *testing.T) {
-		a, tt, run := stage(t, "")
-		a.Store.SetOmniText("yoru")
-		tt.Frame()
-		if tt.HasText("Overview") {
-			t.Errorf("the first key shows the skeleton's tabs at once: %q", tt.Texts())
-		}
-		run(func() bool { return !a.Store.Search.Sent.IsZero() })
-		// The window draws again as the store changes.
-		tt.Frame()
-		tt.Advance(statusDelay - time.Millisecond)
-		if tt.HasText("Overview") {
-			t.Errorf("the skeleton shows before statusDelay: %q", tt.Texts())
-		}
-		tt.Advance(2 * time.Millisecond)
-		if !tt.HasText("Overview") {
-			t.Errorf("past statusDelay no skeleton: %q", tt.Texts())
-		}
-		ready(a, run)()
-		tt.Frame()
-		if !tt.HasText("Elma") {
-			t.Errorf("after the answer no result: %q", tt.Texts())
 		}
 	})
 }
