@@ -3,5 +3,3 @@
 #   <scene>/<theme or *> <segment> <kind> <why>
 # The fix of one removes its line; framecheck sheet names lines nothing
 # matched in its run.
-first-search/* results flicker the skeleton shows for one frame before results that came in the next (not every run)
-head-downloading/* open jump the lower panel's rows and Saved to hold two frames, then rise 3 px in one
