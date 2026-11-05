@@ -75,13 +75,28 @@ The session the maintainer is talking to handles it:
    neighbours, frame by frame, and find the frame where it breaks (a step, a move
    after it had settled, a jump). Restate it in their words plus the measurement
    ("`2014)` settles at 0.43 s, then drops 5 pt at 0.62 s"). If nothing in the
-   numbers matches, ask which frame; never report a guessed defect.
+   numbers matches, ask which frame; never report a guessed defect. From the Mac
+   (ffmpeg and Go, nothing else):
+
+   ```bash
+   go run ./apps/desktop/tools/framecheck rec -out dist/review/rec <movie.mov> 260x110+1060+440
+   ```
+
+   The region is `<W>x<H>+<X>+<Y>` in the recording's pixels (Retina, twice the
+   points). It prints, for every frame the recording keeps, its time and the
+   bounds of the ink in the region (`-threshold 60` levels dark; `-light` for
+   light text), then each snap (moved after resting two frames or more) and jump
+   (one step over three times its neighbours), and writes the frames around each
+   at full size as `step-<frame>.png`. The scene set runs the same check
+   (`filmcheck.Steps`) on every part of the window.
 2. Fix it.
 3. Film the same interaction on the new build, both directions, at their window
    size with a title that wraps like theirs, and run the same measurement:
    nothing moves after it settles, no single-frame step, the end frame equals the
    still page. Report only the directions and entries that were filmed, with the
-   before and after numbers.
+   before and after numbers. `tools/lookround/round.sh` films the scene set this
+   way; a transition it lacks gets a scene in
+   `apps/desktop/internal/ui/scenes_test.go`.
 4. Install and let them judge and tune. No verifier session; timing and taste are
    theirs.
 

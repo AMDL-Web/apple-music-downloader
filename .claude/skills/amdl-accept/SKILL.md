@@ -1,6 +1,6 @@
 ---
 name: amdl-accept
-description: Acceptance of an amdl change before it is installed - for records, queue, downloads, API, DB, config or wrapper changes a verifier in its own linked session, which did not write the change, writes its criteria before reading the diff, checks the real app build on real-scale data against the acceptance rows for its change type (entry points x surfaces, state combinations, filmed motion, ui-audit, real runs over an existing install), returns PASS/FAIL with evidence, and records an accepted build with accept.sh; look and motion changes are checked by their author on frames. Only an accepted build counts as done or is installed for the maintainer. Use when a checklist item is ready, when dispatching or acting as the verifier, and before telling the maintainer something user-facing is finished.
+description: Acceptance of an amdl change before it is installed - for records, queue, downloads, API, DB, config or wrapper changes a verifier in its own linked session, which did not write the change, writes its criteria before reading the diff, checks the real app build on real-scale data against the acceptance rows for its change type (entry points x surfaces, state combinations, filmed motion, ui-audit, real runs over an existing install), returns PASS/FAIL with evidence, and records an accepted build with accept.sh; look and motion changes are checked by their author with tools/lookround/round.sh, which films a fixed scene set and installs. Only an accepted build counts as done or is installed for the maintainer. Use when a checklist item is ready, when dispatching or acting as the verifier, and before telling the maintainer something user-facing is finished.
 ---
 
 # Accept a change
@@ -14,12 +14,31 @@ surface the maintainer will touch.
 - **Records, queue, library state, downloads, API, DB, config, wrapper, upgrades:**
   a verifier in another session, as below.
 - **Look and motion only** (layout, copy, colour, radius, a transition, a control
-  wired to an existing action): no verifier. The author renders the touched screens
-  at the maintainer's window size in light and dark, films the touched transitions,
-  looks at the frames for a pop, flash, blank or vanishing frame, runs the tests of
-  what it touched, records the build with `accept.sh` under its own session and
-  installs it. The full suite runs in the background and on CI; a failure there is
-  fixed in the next round.
+  wired to an existing action): no verifier. The author commits the round and runs,
+  from the Mac:
+
+  ```bash
+  tools/lookround/round.sh                                   # check HEAD
+  tools/lookround/round.sh --install --session <your session> # then install it
+  ```
+
+  It films the scene set (`apps/desktop/internal/ui#TestScenes`: the album page in
+  every head state, search, queue and artist to album and back, a second album
+  right after a first, every tab switch, the first search) at the maintainer's
+  window size in light and dark, opening and going back, the queue hero's title
+  wrapping as a long one does; it tracks what each part of the window shows frame
+  by frame and flags a part that moves after it settled or takes a one-frame step
+  out of line (a snap, a jump), a pop, flicker, blank frame, a text gone for a
+  frame or the previous page's content (`apps/desktop/internal/filmcheck`), runs
+  the tests of the packages the round touched, and leaves
+  `dist/review/look-<sha>/sheet.jpg` and `summary.txt`. The author opens the sheet
+  and the settled frames of the screens it changed, then reruns with `--install`,
+  which reuses the passed check, records the build with `accept.sh` (the summary
+  as criteria) and installs it. A finding the author judges wrong is waived with `--waive "<why>"`, which the
+  record keeps. A screen or transition the set lacks gets a scene in
+  `scenes_test.go`, not a throwaway film. The whole desktop suite starts in the
+  background on the build host and runs on CI; a failure there is fixed in the
+  next round.
 
 A round that mixes both goes to a verifier, scoped to the non-look commits plus the
 smoke pass.
@@ -60,7 +79,8 @@ written, so the verifier does not choose its own scope.
 Acceptance covers the round being installed, not the whole app: the rows for what
 its commits touch, plus one smoke pass at the maintainer's window size in light and
 dark (open an album from search and from the queue, switch every tab, first search)
-looking only for a pop, flash, blank or vanishing frame. Areas the round did not
+looking only for a pop, flash, blank or vanishing frame: `tools/lookround/round.sh
+<commit>` is that pass. Areas the round did not
 touch are covered by the full test suite, not by re-running their rows; a verifier
 reused from an earlier item drops that item's rows.
 
@@ -80,9 +100,13 @@ the report.
 
 ### Motion and view transitions (desktop)
 
-A film test like `apps/desktop/internal/ui/flight_film_test.go`: 60 Hz frames, light
-and dark themes, motion on, started from each entry (search, queue, artist page),
-with long and scrolled data. It asserts on what the eye sees:
+The scene set (`tools/lookround/round.sh`) first; a transition it does not cover
+gets a scene in `apps/desktop/internal/ui/scenes_test.go`. Frames filmed some other
+way are checked with `go run ./apps/desktop/tools/framecheck film <dir of PNGs>`.
+What a scene cannot assert goes in a film test like
+`apps/desktop/internal/ui/flight_film_test.go`: 60 Hz frames, light and dark themes,
+motion on, started from each entry (search, queue, artist page), with long and
+scrolled data, asserting on what the eye sees:
 
 - the hand-over frame (shadow, badges, text) changes no more than the frames before;
 - other targets take a click as soon as the motion looks finished;

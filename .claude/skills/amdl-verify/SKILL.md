@@ -21,6 +21,11 @@ against `.claude/rules/go.md`:
 git diff -U0 origin/dev -- '*.go' | rg '^\+.*//'
 ```
 
+A change to how the desktop app looks or moves runs `tools/lookround/round.sh`
+from the Mac instead of hand-made renders or films: it runs the touched packages'
+tests too, and with `--install` is the whole look round
+([amdl-accept](../amdl-accept/SKILL.md)).
+
 A change to records, runs, the queue or the overview feed also runs the
 consistency test, which acts on a backend with simulated downloads and checks
 that queue counts, records, marks and the feed agree after each action. A

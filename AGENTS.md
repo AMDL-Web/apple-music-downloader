@@ -38,7 +38,7 @@ link, then download, decrypt, remux and tag each track. Code map: the
   records, the queue, downloads, the API, DB, config or wrapper is accepted by a
   verifier in another session ([amdl-accept](.claude/skills/amdl-accept/SKILL.md));
   a look or motion change is checked by its author on frames (a pop, flash, blank or
-  vanishing frame) and installed. Batches go through
+  vanishing frame) with `tools/lookround/round.sh` and installed. Batches go through
   [amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md); a look or motion
   complaint is fixed by the session the maintainer talks to, with them.
 - Before reasoning about the queue, a page's figures or downloaded state, read

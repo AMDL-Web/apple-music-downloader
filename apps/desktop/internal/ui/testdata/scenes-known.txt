@@ -1,0 +1,10 @@
+# Findings of the scene set (scenes_test.go) on dev that the maintainer has
+# been told of, so a look round fails only on new ones. A line is
+#   <scene>/<theme or *> <segment> <kind> <why>
+# The fix of one removes its line; framecheck sheet names lines nothing
+# matched in its run.
+first-search/* results flicker the skeleton shows for one frame before results that came in the next (not every run)
+head-downloading/* open pop the Hi-Res tag's colour changes on the frame the flight ends
+head-downloading/* open jump the lower panel's rows and Saved to hold two frames, then rise 3 px in one
+head-downloading/light back pop the queue hero's stripes move on by a jump on the frame the flight back ends (not every run)
+head-queued/light back pop the queue hero's stripes move on by a jump on the frame the flight back ends
