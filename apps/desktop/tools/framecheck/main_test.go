@@ -82,7 +82,7 @@ func TestSheetFailsOnAFindingAndPassesWhenItIsKnown(t *testing.T) {
 	}
 
 	known := filepath.Join(t.TempDir(), "known.txt")
-	writeFile(t, known, "# reported\nb/* open pop the badge lands late\nc/light back flicker gone since\n")
+	writeFile(t, known, "# reported\nb/* open pop the badge lands late\na/light back flicker gone since\nc/light back flicker not filmed\n")
 	out.Reset()
 	if code := run([]string{"sheet", "-known", known, dir}, &out, &errw); code != 0 {
 		t.Fatalf("exit %d with the pop known, want 0: %s%s", code, out.String(), errw.String())
@@ -91,6 +91,10 @@ func TestSheetFailsOnAFindingAndPassesWhenItIsKnown(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("summary lacks %q: %q", want, out.String())
 		}
+	}
+	// Scene c was not filmed, so its line is neither seen nor gone.
+	if strings.Contains(out.String(), "line 4 of the known file") {
+		t.Errorf("summary calls a scene that did not run unseen: %q", out.String())
 	}
 }
 

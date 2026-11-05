@@ -229,7 +229,12 @@ func sheet(dir string, known []knownEntry, out io.Writer) (bool, error) {
 		rows = append(rows, row)
 	}
 	for _, k := range known {
-		if !k.seen {
+		// A run of some scenes says nothing of the others' findings.
+		ran := false
+		for _, r := range results {
+			ran = ran || r.Scene == k.scene && (k.theme == "*" || k.theme == r.Theme)
+		}
+		if ran && !k.seen {
 			fmt.Fprintf(&b, "known finding not seen this run (line %d of the known file; drop it once it stays away): %s/%s %s %s\n", k.line, k.scene, k.theme, k.segment, k.kind)
 		}
 	}
