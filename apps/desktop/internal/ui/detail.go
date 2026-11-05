@@ -85,13 +85,22 @@ func countsBar(done, failed, total int, al progress.Album) progress.Album {
 	return out
 }
 
-func firstWithCodec(j *store.Job) *domain.JobItem {
+// firstWithSpec is the first of j's tracks whose stream is known
+// (specKnown), the one the head's quality tag tells.
+func firstWithSpec(j *store.Job) *domain.JobItem {
 	for i := range j.Items {
-		if j.Items[i].Codec != "" {
+		if specKnown(j.Items[i]) {
 			return &j.Items[i]
 		}
 	}
 	return nil
+}
+
+// specKnown reports whether a track's stream is known in full: its codec
+// and, for ALAC, its depth and rate, which a run learns after the codec.
+// Until then a quality tag keeps what it said, never a bare "ALAC".
+func specKnown(it domain.JobItem) bool {
+	return it.Codec != "" && (!strings.EqualFold(it.Codec, "alac") || it.BitDepth > 0 && it.SampleRate > 0)
 }
 
 // savedDir is the folder a job's tracks went to, from the first track's

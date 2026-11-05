@@ -105,7 +105,7 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 						var quality ui.Element
 						row := ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 							if h.quality != "" {
-								quality = tag(c, k, h.quality, h.hi, hc.meta)
+								quality = a.qualityTag(c, k, h.quality, h.hi, hc.meta)
 							}
 							if h.tags != nil {
 								rest := ui.Row(c).Gap(10).AlignItems(ui.Center).Children(h.tags)
@@ -123,4 +123,38 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 			}
 		})
 	})
+}
+
+// qualityTag is the head's quality tag, keyed by what it says: when that
+// changes on a page at rest, as the album's own hint gives way to its
+// stream's spec once the run knows it (specKnown), the old tag goes and the
+// new one comes as a switch's content does (switchOut, switchIn), not at
+// once. In a flight the tag is the flight's (flyTags).
+func (a *App) qualityTag(c *ui.Context, k *Tokens, q string, hi bool, fg ui.Color) ui.Element {
+	el := tag(c.Key("quality:"+q), k, q, hi, fg)
+	if a.PageMotion && !a.fly.moving {
+		el.Transition(swapMotion(el, fadeOut))
+	}
+	return el
+}
+
+// barMotion is the head's progress bar's Transition: it opens under the
+// figures as a download of the page's record starts, fading in and rising
+// as the room it takes opens, and closes the same way, in a switch's time.
+func (a *App) barMotion(el ui.Element) ui.ElementTransition {
+	return swapMotion(el, barGone)
+}
+
+// barGone is the head's bar where it is not: no room, risen a little, clear.
+var barGone = ui.Motion{Y: 6, Collapse: true}
+
+// swapMotion is the Transition of el, a part of a page at rest that comes
+// and goes as what the page holds changes, with gone where it is not: one
+// new in this frame comes in with switchIn, once what it replaces has gone
+// with switchOut.
+func swapMotion(el ui.Element, gone ui.Motion) ui.ElementTransition {
+	if fresh(el) {
+		return ui.ElementTransition{Animation: &switchIn, Enter: &gone, Exit: &gone}
+	}
+	return ui.ElementTransition{Animation: &switchOut, Exit: &gone}
 }

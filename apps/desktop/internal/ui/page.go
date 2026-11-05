@@ -265,7 +265,7 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	// offers.
 	var it *domain.JobItem
 	if j != nil {
-		it = firstWithCodec(j)
+		it = firstWithSpec(j)
 	}
 	var hints []string
 	if it != nil {
@@ -291,7 +291,11 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 			}
 		})
 		if j != nil {
-			ui.Column(c).FillWidth().MaxWidth(heroBand).Children(func() {
+			bar := ui.Column(c.Key("bar")).FillWidth().MaxWidth(heroBand)
+			if a.PageMotion && !a.fly.moving {
+				bar.Transition(a.barMotion(bar))
+			}
+			bar.Children(func() {
 				albumProgress(c, k, j, "album", 8, hc.title, hc.title.Alpha(0.16), hc.accent, hc.meta, 12, true)
 			})
 		}

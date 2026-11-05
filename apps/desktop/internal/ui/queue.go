@@ -146,7 +146,7 @@ func (h heroColors) eased(c *ui.Context) heroColors {
 // track that has picked a codec.
 func jobQuality(j *store.Job) string {
 	for _, it := range j.Items {
-		if it.Codec != "" {
+		if specKnown(it) {
 			return format.Quality(it.Codec, it.BitDepth, it.SampleRate, it.Bitrate)
 		}
 	}
