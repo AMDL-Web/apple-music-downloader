@@ -75,6 +75,9 @@ func titleFlight(t *testing.T, width int) {
 	for range 30 {
 		tt.Advance(50 * time.Millisecond)
 	}
+	// tail is where the title's last word was in the last frame of a
+	// flight, as the copy drew it.
+	var tail ui.Rect
 	fly := func(way string) (frames int, last *image.RGBA) {
 		for range 120 {
 			tt.Advance(filmFrame)
@@ -83,6 +86,7 @@ func titleFlight(t *testing.T, width int) {
 			}
 			frames++
 			last = cloneImage(tt.Image())
+			tail, _ = tt.Find(words[len(words)-1])
 			var rs []ui.Rect
 			for _, w := range words {
 				if r, ok := tt.Find(w); ok {
@@ -116,19 +120,29 @@ func titleFlight(t *testing.T, width int) {
 	_, last := fly("out")
 	tt.Advance(time.Second)
 	rest := tt.Image()
-	// The hero's title: the words' rows over the cover's right, where the
-	// sidebar's and the rows' copies of it are not.
-	cover, _ := tt.Find("Open " + j.Name())
-	box := image.Rect(int(cover.X), int(cover.Y), int(cover.X+cover.W), int(cover.Y)+130)
-	off := 0
-	for y := box.Min.Y; y < box.Max.Y; y++ {
-		for x := box.Min.X; x < box.Max.X; x++ {
-			if math.Abs(luma(last, x, y)-luma(rest, x, y)) > 40 {
-				off++
-			}
+	// The last word, in its band, is where it was in the frame before the
+	// landing: a word that stops a few points off its place and then jumps
+	// to it as the page's copy gives way to the hero's text moves the ink's
+	// middle row.
+	band := image.Rect(int(tail.X), int(tail.Y)-24, int(tail.X+tail.W), int(tail.Y+tail.H)+24)
+	if was, is := inkRow(last, band), inkRow(rest, band); math.Abs(was-is) > 1.5 {
+		t.Errorf("%q jumps %.1f DIPs as it lands in the hero", words[len(words)-1], is-was)
+	}
+}
+
+// inkRow is the middle row of what is drawn in r over its top row, the
+// ground: each row weighed by how far its pixels are from the top row's.
+func inkRow(img *image.RGBA, r image.Rectangle) float64 {
+	var sum, at float64
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		var w float64
+		for x := r.Min.X; x < r.Max.X; x++ {
+			w += math.Abs(luma(img, x, y) - luma(img, x, r.Min.Y))
 		}
+		sum, at = sum+w, at+w*float64(y)
 	}
-	if share := float64(off) / float64(box.Dx()*box.Dy()); share > 0.02 {
-		t.Errorf("the title jumps as it lands in the hero: %.1f%% of its box changes in the landing frame", 100*share)
+	if sum == 0 {
+		return 0
 	}
+	return at / sum
 }
