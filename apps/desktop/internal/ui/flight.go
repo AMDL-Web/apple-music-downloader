@@ -237,6 +237,9 @@ type flight struct {
 	ride, ridePrev ui.Point
 	growFrom       ui.Rect
 	growRadius     float32
+	// card is the whole card the page opened from grows out of, rather than
+	// its cover, as this frame builds it: the sidebar's (flySourceCard).
+	card flightSrc
 	// pick is the box of the cover clicked to open the page, for as long as
 	// the page is in, which of several elements of one name is the
 	// flight's source (sourceNearer).
@@ -252,7 +255,8 @@ type flightWall struct {
 
 // openingFrom names the element the next OpenAlbum or OpenJob opens from,
 // whose cover flies to the page's: "hero:" and the job's ID for the queue's
-// hero, "wall:", "row:", "hit:" and "song:" for the others.
+// hero, "wall:", "row:", "now:" (the sidebar's card), "hit:" and "song:"
+// for the others.
 func (a *App) openingFrom(from string) { a.fly.next = from }
 
 // flightQ moves q towards the page while the album screen is shown, else
@@ -277,6 +281,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	f.srcWas = f.src
 	f.src, f.texts, f.words, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, [flightParts]*wordFlight{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	f.viewsPrev, f.views = f.views, f.viewsPrev[:0]
+	f.card = flightSrc{}
 	f.wall = f.wall[:0]
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.

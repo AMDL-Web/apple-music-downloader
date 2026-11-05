@@ -27,6 +27,11 @@ func growsFrom(from string) bool { return from != "" && !strings.HasPrefix(from,
 // growing reports whether the page grows in this frame.
 func (f *flight) growing() bool { return f.grow && f.moving && !f.still }
 
+// overSidebar reports whether the page grows from the sidebar's card, or
+// shrinks into it, in this frame: the main column then lets its surface
+// draw over the sidebar rather than cut it off at the sidebar's edge.
+func (f *flight) overSidebar() bool { return f.growing() && strings.HasPrefix(f.from, "now:") }
+
 // lateShown is how much of the page's own parts show as it grows: none
 // until q reaches the tune's Text, all of it a little after.
 func (a *App) lateShown() float32 {
@@ -63,6 +68,9 @@ func (f *flight) growBox(main ui.Rect) (ui.Rect, float32) {
 		b.Y, b.H = b.Y+top, max(0, b.H-top-bottom)
 		f.growFrom, f.growRadius = b, src.size
 	}
+	if f.card.ok {
+		f.growFrom, f.growRadius = f.card.box, f.card.size
+	}
 	from := f.growFrom
 	if from.W <= 0 {
 		// Nothing seen to grow from: the middle of the column.
@@ -90,6 +98,17 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 	if !f.ready {
 		// Laid out, then matched with what is under it, before it shows.
 		s.Invisible()
+	} else if f.overSidebar() {
+		// The card it grows out of stays in its place under it: the page
+		// shows over it as it leaves, and is gone from over it before the
+		// spring's slow last stretch, which would leave it veiled; gone,
+		// it leaves the pointer to the card, whose hover would else come
+		// back only after the flight.
+		if o := smoothstep(0.04, 0.2, f.q); o > 0 {
+			s.Opacity(o)
+		} else {
+			s.Invisible()
+		}
 	}
 	if f.moving {
 		// The pointer goes to the screens' guard meanwhile (screens).

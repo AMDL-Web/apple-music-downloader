@@ -13,10 +13,10 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// coverFilm is the album page of a download coming in from the sidebar's
-// card, or going back to Home, one image per frame at 60 Hz with the cover's
-// box in it. The card matches no cover under the page, so the page's own
-// cover fades in, in place.
+// coverFilm is the album page of a download opened from nothing on the
+// screen under it, or going back to Home, one image per frame at 60 Hz with
+// the cover's box in it. With no match, the page's own cover fades in, in
+// place.
 func coverFilm(t *testing.T, theme string, out bool) (frames []*image.RGBA, covers []ui.Rect, settled *image.RGBA, home ui.Rect) {
 	t.Helper()
 	a, _ := newTestApp(remoteSettings())
@@ -33,9 +33,7 @@ func coverFilm(t *testing.T, theme string, out bool) (frames []*image.RGBA, cove
 		for range 90 {
 			tt.Advance(filmFrame)
 		}
-		if err := tt.Click("Downloading now"); err != nil {
-			t.Fatal(err)
-		}
+		a.OpenJob(a.Store.Now().ID)
 	} else {
 		a.Back()
 	}

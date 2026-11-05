@@ -11,6 +11,11 @@ import (
 // of one album, and only one is, the one where the source was in the frame
 // before (sourceNearer); only that one hides.
 func (a *App) flySource(el ui.Element, from string, part flightPart, text string, size float32) bool {
+	return a.markSource(el, from, part, text, size, true)
+}
+
+// markSource is flySource, hiding el while its part flies only if hide.
+func (a *App) markSource(el ui.Element, from string, part flightPart, text string, size float32, hide bool) bool {
 	f := &a.fly
 	if part == partCover && !f.moving && f.q == 0 && f.pick.W <= 0 && from != "" && from == f.from && a.Screen == ScreenAlbum {
 		// The frame of the click: the tile clicked names the page as it
@@ -25,7 +30,7 @@ func (a *App) flySource(el ui.Element, from string, part flightPart, text string
 		return false
 	}
 	f.src[part] = flightSrc{box: box, text: text, size: size, ok: true, tone: 1}
-	if p := f.pairWas[part]; (p == flies || p == morphs || p == swaps) && f.wasSource(part, box) {
+	if p := f.pairWas[part]; hide && (p == flies || p == morphs || p == swaps) && f.wasSource(part, box) {
 		el.Invisible()
 	}
 	return true
@@ -145,5 +150,21 @@ func (a *App) flySourceCover(el ui.Element, from string, radius, tone, dim, shad
 	if a.flySource(el, from, partCover, "", radius) {
 		src := &a.fly.src[partCover]
 		src.tone, src.dim, src.shadow = tone, dim, shadow
+	}
+}
+
+// flySourceCoverShown is flySourceCover for a cover that stays in view
+// beside the page, the sidebar card's: the page's cover leaves it and lands
+// on it, and it shows all the while.
+func (a *App) flySourceCoverShown(el ui.Element, from string, radius float32) {
+	a.markSource(el, from, partCover, "", radius, false)
+}
+
+// flySourceCard marks el, a whole card of the element from with corners of
+// radius, as what the page grows out of (flight.card), when it opens from
+// from.
+func (a *App) flySourceCard(el ui.Element, from string, radius float32) {
+	if f := &a.fly; f.moving && !f.still && from != "" && from == f.from {
+		f.card = flightSrc{box: el.Bounds(), size: radius, ok: true}
 	}
 }

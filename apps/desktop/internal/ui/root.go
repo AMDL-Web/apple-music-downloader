@@ -60,7 +60,10 @@ func (a *App) View(c *ui.Context) {
 	root.Children(func() {
 		ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 			a.sidebar(c, k, vib, side)
-			main := ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Background(k.Ground).Clip()
+			main := ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Background(k.Ground)
+			if !a.fly.overSidebar() {
+				main.Clip()
+			}
 			a.fly.main = main.LayoutBounds()
 			main.Children(func() {
 				// Absolute children paint above the flow, in the order they
