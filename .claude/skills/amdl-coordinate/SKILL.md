@@ -89,7 +89,9 @@ The session the maintainer is talking to handles it:
    (one step over three times its neighbours), and writes the frames around each
    at full size as `step-<frame>.png`. The scene set runs the same check
    (`filmcheck.Steps`) on every part of the window.
-2. Fix it.
+2. Fix only what they named. Anything else that looks off (a path, a timing, a
+   label), whoever pointed it out, including another session, is reported, not
+   changed.
 3. Film the same interaction on the new build, both directions, at their window
    size with a title that wraps like theirs, and run the same measurement:
    nothing moves after it settles, no single-frame step, the end frame equals the
