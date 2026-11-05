@@ -166,7 +166,7 @@ func tileSub(c *ui.Context, k *Tokens, sub string, size float32) {
 
 // qualityHint is a tile's glass pill of its best quality.
 func qualityHint(c *ui.Context, k *Tokens, s string) ui.Element {
-	return ui.Row(c).Height(22).PaddingX(8).Radius(radiusFull).AlignItems(ui.Center).Material(glass.Glass{}).
+	return ui.Row(c).Height(22).PaddingX(8).Radius(radiusInner).AlignItems(ui.Center).Material(glass.Glass{}).
 		Children(func() { hintText(c, s, k.Fg) })
 }
 
@@ -402,7 +402,7 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 
 // markButton is a hit's library or queue mark, which opens its job.
 func markButton(c *ui.Context, k *Tokens, text string, kind pillKind, ic *ui.SVG) ui.Element {
-	b := ui.ButtonBase(c.Key("mark")).Radius(radiusFull).Label(text + ": open the download")
+	b := ui.ButtonBase(c.Key("mark")).Radius(radiusInner).Label(text + ": open the download")
 	b.Cursor(ui.CursorPointer).Children(func() { pill(c, k, kind, ic, text) })
 	return b
 }

@@ -50,7 +50,8 @@ const (
 	pillWarn
 )
 
-// pill is a status: icon, word and color together, never color alone.
+// pill is a status: icon, word and color together, never color alone. Its
+// corners are a tag's (radiusInner), as every label's in the app.
 func pill(c *ui.Context, k *Tokens, kind pillKind, ic *ui.SVG, text string) ui.Element {
 	bg, fg := k.AccentSoft, k.Accent
 	switch kind {
@@ -63,7 +64,7 @@ func pill(c *ui.Context, k *Tokens, kind pillKind, ic *ui.SVG, text string) ui.E
 	case pillWarn:
 		bg, fg = k.WarnSoft, k.Warn
 	}
-	return ui.Row(c).Height(20).PaddingX(8).Gap(5).Radius(radiusFull).Background(bg).AlignItems(ui.Center).Children(func() {
+	return ui.Row(c).Height(20).PaddingX(8).Gap(5).Radius(radiusInner).Background(bg).AlignItems(ui.Center).Children(func() {
 		if ic != nil {
 			ui.Icon(c, ic).FontSize(11).TextColor(fg)
 		}
