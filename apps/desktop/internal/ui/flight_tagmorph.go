@@ -178,7 +178,7 @@ func tagMorph(c *ui.Context, from, to string, t float32, ink ui.Color) {
 			// move, and the separator keeps its share of it, going from
 			// its share in the one tag to its share in the other between
 			// 0.3 and 0.6: the middle of the gap while it opens, then its
-			// place by the time what only the other says shows (from 0.4).
+			// place well before what only the other says shows (pageOnly).
 			// Paired words stand on both sides (matchTagSeps).
 			before, after := i-1, i+1
 			for !a[before].word || a[before].match < 0 {
@@ -206,7 +206,14 @@ func tagMorph(c *ui.Context, from, to string, t float32, ink ui.Color) {
 	}
 	for i, p := range b {
 		if p.match < 0 {
-			piece("b"+strconv.Itoa(i), place(b, a, to, from, i, false), unit((t-0.4)/0.5), p.text)
+			// What only the page says shows over the last of the way, when
+			// the room it takes has opened: earlier, the separator moving
+			// into that room and the box closing round it would run over it.
+			piece("b"+strconv.Itoa(i), place(b, a, to, from, i, false), unit((t-pageOnly)/(1-pageOnly)), p.text)
 		}
 	}
 }
+
+// pageOnly is how far along the way what only the page's tag says starts
+// to show.
+const pageOnly = 0.8
