@@ -15,14 +15,15 @@ type heroLayout struct {
 	compact                        bool
 }
 
-// pageHero is the head's layout on a page width wide: a narrow or short
-// window keeps room for the tracks under a smaller head. The cover is as
-// tall as the column beside it with a title of two lines, so that its top
-// and bottom are the column's whatever the title.
-func pageHero(c *ui.Context, page float32) heroLayout {
-	_, height := c.Size()
+// pageHero is the head's layout on a page width wide: compact, keeping
+// room for the tracks under a smaller head, exactly when the queue's hero
+// is (App.heroCompact), so a title flying from the one to the other keeps
+// its scale. The cover is as tall as the column beside it with a title of
+// two lines, so that its top and bottom are the column's whatever the
+// title.
+func pageHero(page float32, compact bool) heroLayout {
 	l := heroLayout{cover: pageCover, title: 52, title2: 36, top: 26, gap: 32}
-	if page < 960 || height < 700 {
+	if compact {
 		l = heroLayout{cover: 216, title: 34, title2: 26, top: 12, gap: 24, compact: true}
 	}
 	l.width = page - 2*heroPad - l.cover - l.gap

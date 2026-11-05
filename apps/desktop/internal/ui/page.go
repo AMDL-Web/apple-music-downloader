@@ -189,7 +189,7 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 		return
 	}
 	s.WatchConfig()
-	l := pageHero(c, page)
+	l := pageHero(page, a.heroCompact(c))
 	master, _ := a.pageMotion()
 	video := a.motionPlayer(c, master)
 	pal := a.pagePalette(c)
