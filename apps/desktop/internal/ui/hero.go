@@ -119,7 +119,13 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 				})
 			})
 			if h.band != nil {
-				a.flyBand(ui.Column(c).Gap(12).Children(h.band))
+				// At rest the band glides to its place when the bar under
+				// the figures opens or closes, which moves it up or down.
+				band := ui.Column(c).Gap(12)
+				if a.PageMotion && !a.fly.moving {
+					band.Transition(ui.ElementTransition{Animation: &barIn, Position: true})
+				}
+				a.flyBand(band.Children(h.band))
 			}
 		})
 	})
@@ -141,9 +147,17 @@ func (a *App) qualityTag(c *ui.Context, k *Tokens, q string, hi bool, fg ui.Colo
 // barMotion is the head's progress bar's Transition: it opens under the
 // figures as a download of the page's record starts, fading in and rising
 // as the room it takes opens, and closes the same way, in a switch's time.
+// It opens at once, not after switchIn's wait: during a wait the room is
+// already taken, and the figures above it would jump up.
 func (a *App) barMotion(el ui.Element) ui.ElementTransition {
-	return swapMotion(el, barGone)
+	if fresh(el) {
+		return ui.ElementTransition{Animation: &barIn, Enter: &barGone, Exit: &barGone}
+	}
+	return ui.ElementTransition{Animation: &switchOut, Exit: &barGone}
 }
+
+// barIn is how the head's bar opens: switchIn's time and ease, at once.
+var barIn = ui.Animation{Duration: switchIn.Duration, Ease: switchIn.Ease}
 
 // barGone is the head's bar where it is not: no room, risen a little, clear.
 var barGone = ui.Motion{Y: 6, Collapse: true}
