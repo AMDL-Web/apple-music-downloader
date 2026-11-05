@@ -73,6 +73,8 @@ func (s *Store) OpenAlbumFrom(h client.SearchHit, from PageSource) {
 	}
 	p.gen++
 	p.ID, p.Hit, p.Storefront, p.From, p.Album, p.Err = h.ID, h, LinkStorefront(h.URL), from, client.Album{}, ""
+	// The figures read for the record shown before are not this one's.
+	p.Run = PageRun{}
 	if a, ok := p.cache.get(p.cacheKey()); ok {
 		p.Status, p.Album = SearchReady, a
 		return
@@ -86,6 +88,7 @@ func (s *Store) CloseAlbum() {
 	p := &s.Search.Album
 	p.gen++
 	p.ID, p.Hit, p.Storefront, p.From, p.Status, p.Album, p.Err = "", client.SearchHit{}, "", PageSource{}, SearchIdle, client.Album{}, ""
+	p.Run = PageRun{}
 }
 
 // PageKind is the kind of record a hit the album screen opens stands for.

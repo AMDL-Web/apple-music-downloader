@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -185,5 +186,19 @@ func TestAnEndedRunsPercentIsItsTracksFigure(t *testing.T) {
 	}
 	if !tt.HasText("80%") {
 		t.Errorf("the share is not 80%% like the tracks figure: %q", tt.Texts())
+	}
+}
+
+// A record's size and time read for its page are that record's alone: the
+// next album opened shows none of them, not even for a frame, before its
+// own arrive.
+func TestTheNextAlbumShowsNoneOfTheLastOnesFigures(t *testing.T) {
+	a, run := demoApp(t)
+	s := a.Store
+	run(func() bool { return s.Loaded })
+	s.Search.Album.Run = store.PageRun{Key: "album:920005:8", Size: 572300000, Took: 318 * time.Second, Storefront: "us", OK: true}
+	a.OpenAlbum(demoAlbum)
+	if r := s.Search.Album.Run; r.Size != 0 || r.Took != 0 || r.Storefront != "" {
+		t.Errorf("the page of %s carries the last record's figures: %+v", demoAlbum.Name, r)
 	}
 }
