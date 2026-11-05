@@ -64,7 +64,9 @@ var scenes = []struct {
 
 // TestScenes films every scene in both themes when $SCENE_OUT names where
 // the results go. With $SCENE_LIST it only writes the subtests' names
-// there, one a line, for a runner to give each its own process.
+// there, one a line, for a runner to give each its own process. With
+// SCENE_KEEP=all it also keeps every frame, full size, as all-<frame>.png,
+// to measure a finding on.
 func TestScenes(t *testing.T) {
 	if p := os.Getenv("SCENE_LIST"); p != "" {
 		var b strings.Builder
@@ -81,6 +83,9 @@ func TestScenes(t *testing.T) {
 	out := os.Getenv("SCENE_OUT")
 	if out == "" {
 		t.Skip("SCENE_OUT names where the scenes' results go")
+	}
+	if k := os.Getenv("SCENE_KEEP"); k != "" && k != "all" {
+		t.Fatalf("SCENE_KEEP is all or unset, not %q", k)
 	}
 	if err := RegisterFonts(); err != nil {
 		t.Fatal(err)
@@ -285,8 +290,13 @@ func (r *sceneRig) shoot(seg *sceneSeg) {
 }
 
 // keepBad writes the full frames the segment's findings name, and one on
-// either side.
+// either side; with SCENE_KEEP=all, every frame besides.
 func (r *sceneRig) keepBad(seg *sceneSeg) {
+	if os.Getenv("SCENE_KEEP") == "all" {
+		for i, img := range seg.full {
+			r.save(fmt.Sprintf("all-%03d.png", seg.First+i), img)
+		}
+	}
 	saved := map[int]bool{}
 	for _, f := range seg.Findings {
 		for i := max(f.Frame-1, 0); i <= f.Frame+f.Frames && i < len(seg.full); i++ {

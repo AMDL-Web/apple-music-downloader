@@ -98,7 +98,8 @@ The session the maintainer is talking to handles it:
    still page. Report only the directions and entries that were filmed, with the
    before and after numbers. `tools/lookround/round.sh` films the scene set this
    way; a transition it lacks gets a scene in
-   `apps/desktop/internal/ui/scenes_test.go`.
+   `apps/desktop/internal/ui/scenes_test.go`. To measure one of its findings,
+   film the scene again with `SCENE_KEEP=all`, which keeps every frame.
 4. Install and let them judge and tune. No verifier session; timing and taste are
    theirs.
 
