@@ -121,7 +121,9 @@ scrolled data, asserting on what the eye sees:
 Both directions of every transition are filmed; a direction not filmed is reported
 as not checked.
 
-A reported motion bug is reproduced in such a film before it is patched. Acceptance
+A reported motion bug is reproduced in such a film before it is patched, in the
+state the maintainer's recording shows
+([Motion and look](../amdl-coordinate/SKILL.md#motion-and-look), step 3). Acceptance
 of motion checks regressions only: a pop, a flash, a blank or vanishing frame. It
 does not judge timing, order or taste, which are the maintainer's
 ([desktop-motion](../../rules/desktop-motion.md)).

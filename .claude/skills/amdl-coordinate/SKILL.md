@@ -92,12 +92,17 @@ The session the maintainer is talking to handles it:
 2. Fix only what they named. Anything else that looks off (a path, a timing, a
    label), whoever pointed it out, including another session, is reported, not
    changed.
-3. Film the same interaction on the new build, both directions, at their window
-   size with a title that wraps like theirs, and run the same measurement:
-   nothing moves after it settles, no single-frame step, the end frame equals the
-   still page. Report only the directions and entries that were filmed, with the
-   before and after numbers. `tools/lookround/round.sh` films the scene set this
-   way; a transition it lacks gets a scene in
+3. Before the fix, a scene shows their defect: the same screen in the state their
+   recording shows (the same variant of it, as the queue's hero for the download
+   running now or the latest one when nothing runs; the same entry; a title that
+   wraps like theirs), its frames set beside theirs, and the same measurement
+   finds the same step. A scene of another variant proves nothing about theirs.
+   After the fix, film it again, both directions, at their window size: nothing
+   moves after it settles, no single-frame step, the end frame equals the still
+   page. A change to a part that several screens or variants draw films each of
+   them. Report only the directions and entries that were filmed, with the before
+   and after numbers. `tools/lookround/round.sh` films the scene set this way; a
+   screen, state or transition it lacks gets a scene in
    `apps/desktop/internal/ui/scenes_test.go`. To measure one of its findings,
    film the scene again with `SCENE_KEEP=all`, which keeps every frame.
 4. Install and let them judge and tune. No verifier session; timing and taste are
