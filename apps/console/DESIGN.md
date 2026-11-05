@@ -28,6 +28,13 @@ wins and this page is fixed in the same change. Sources are listed in
    in one place on a screen. No explanatory sentence under a page title and no
    text about what a card is for; a view holds data, state and actions. A
    destructive action's confirmation keeps one sentence on its consequence.
+   A zero is not a row ("0 cancelled"), a badge or hint line appears only when it
+   carries a fact (a limit, a consequence), and a motion cover carries no label.
+7. **A cover and its text column line up.** The cover's top and bottom edges match
+   the column's, for one-line and wrapped titles alike; the title shrinks before
+   the column outgrows the cover. Page actions sit in the page's top bar, not
+   floating beside the hero. A row that leads to a detail opens it on click, with
+   no menu in between.
 
 ## Information architecture
 

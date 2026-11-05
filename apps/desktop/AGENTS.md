@@ -15,7 +15,7 @@ the backend with a wrapper here or on another machine.
   (`apps/desktop/internal/app#startOrAttach`): one backend per data
   directory. When another program, such as `amdl service`, already runs it,
   the app uses that one; otherwise it runs its own, which the CLI finds.
-- `internal/` never imports this directory. Desktop-only code stays here.
+- `internal/` never imports this directory.
 - No `AMDL_*` environment variables: `internal/config#UnreadEnv` warns about
   each one. Development switches are command-line flags (`main.go`).
 - Store fields change only on the UI thread. Background work hands results
@@ -28,24 +28,25 @@ the backend with a wrapper here or on another machine.
   (`apps/desktop/internal/ui#radiusCard` and the constants after it), never
   a number: a box inside another takes the outer radius less the room
   between them, so both corners share a center. Continuous (squircle)
-  corners are macOS only, by choice (continuousCorners in MyGo's
+  corners are macOS only (continuousCorners in MyGo's
   ui/paint.go).
 - Focus shows as MyGo's own ring, no accent border or glow: on a text field
-  whenever it has the focus, as macOS's text fields, on other controls for
-  keyboard focus only. A box whose focused element is a part of it, as a
+  whenever it has the focus, on other controls for keyboard focus only. A box whose focused element is a part of it, as a
   field's input, rings itself with `focusRing`.
 - A button that can be disabled is built with `buttonOff`, not `button`
   then `Disabled`: MyGo reports hover until the element is disabled.
-- Scroll containers go through `scrollArea` (or `scrollState`): MyGo draws thumbs at all times over the content, so the app hides
-  them at rest where the desktop does, keeps lists clear of them and fades
-  an edge with more beyond it.
+- Scroll containers go through `scrollArea` (or `scrollState`): MyGo draws
+  thumbs over the content at all times, so the app hides them at rest where the
+  desktop does and keeps lists clear of them. An edge with more beyond it fades
+  inward: opacity rises from the container's own edge, never a blur outside it.
+- A large gradient goes through the dithered shader in
+  `apps/desktop/internal/widgets/glow.go`; a plain one bands.
 - A drawing with its own rate (`Painter.AnimationFrameRate`, as a stage
   bar's stripes) holds still while a list scrolls (`App.scrolling`,
-  `widgets.StageBar` Still): MyGo paces the window, and on macOS the
-  display, to that rate, so the list would scroll at 30 frames a second.
+  `widgets.StageBar` Still): MyGo paces the window to that rate, so
+  the list would scroll at 30 frames a second.
 - A quick answer must not flash or move the layout: waiting words, greyed
-  controls and dimmed results wait for `apps/desktop/internal/ui#waited`
-  (`statusDelay`), not a store's busy flag; earlier results, typed fields
+  controls and dimmed results wait for `apps/desktop/internal/ui#waited`, not a store's busy flag; earlier results, typed fields
   and errors stay until the answer. Each async action is tested with
   `apps/desktop/internal/ui/flicker_test.go#noFlash`.
 - A control's size never depends on its state
@@ -80,7 +81,6 @@ for os in windows darwin linux js; do GOOS=$os GOARCH=$([ $os = js ] && echo was
 Screens: build the app and run it with `-shots <dir>` (and `-demo`,
 `-remote` or `-wrapper`, `-data <dir>`), which captures every screen in a 1280×800 window
 with `Window.CapturePage`, renders playing motion covers without a window
-(`*-motion-N.png`), and quits. The window shows stills where the desktop asks
-for less motion; the renders do not. CapturePage draws no window material,
+(`*-motion-N.png`), and quits. CapturePage draws no window material,
 so shots give the sidebar its solid ground
 (`apps/desktop/internal/app#App.opaque`).
