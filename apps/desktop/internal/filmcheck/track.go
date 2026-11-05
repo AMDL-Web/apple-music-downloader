@@ -68,33 +68,40 @@ const minInk = 12
 // the moves of the frames on either side. A frame whose ink differs by
 // over a tenth from the frame before's shows something else (a fade, a
 // morph, another element), so no move is measured across it; nor along an
-// axis where the ink is clipped.
+// axis where the ink is clipped. A move is weighed only against frames that
+// measured it along the same axis: an element that touches its window's
+// edge in the frames around one has not held still there.
 func Steps(ink []Ink, times []float64, rest, least float64) []Step {
 	n := len(ink)
-	type move struct {
-		ok     bool
-		dx, dy float64
-	}
+	// A move's dx or dy is NaN where it was not measured.
+	type move struct{ dx, dy float64 }
+	nan := math.NaN()
 	mv := make([]move, n)
+	for i := range mv {
+		mv[i] = move{nan, nan}
+	}
 	for i := 1; i < n; i++ {
 		a, b := ink[i-1], ink[i]
 		if a.N < minInk || b.N < minInk || math.Abs(float64(a.N-b.N)) > 0.1*float64(max(a.N, b.N)) {
 			continue
 		}
-		m := move{ok: true}
 		if !a.ClipY && !b.ClipY {
-			m.dy = (float64(b.Top-a.Top) + float64(b.Bottom-a.Bottom)) / 2
+			mv[i].dy = (float64(b.Top-a.Top) + float64(b.Bottom-a.Bottom)) / 2
 		}
 		if !a.ClipX && !b.ClipX {
-			m.dx = (float64(b.Left-a.Left) + float64(b.Right-a.Right)) / 2
+			mv[i].dx = (float64(b.Left-a.Left) + float64(b.Right-a.Right)) / 2
 		}
-		mv[i] = m
 	}
+	// size is the larger of a move's measured axes, NaN if it has none.
 	size := func(i int) float64 {
-		if i <= 0 || i >= n || !mv[i].ok {
-			return math.NaN()
+		if i <= 0 || i >= n {
+			return nan
 		}
-		return math.Max(math.Abs(mv[i].dx), math.Abs(mv[i].dy))
+		x, y := math.Abs(mv[i].dx), math.Abs(mv[i].dy)
+		if math.IsNaN(x) || y > x {
+			return y
+		}
+		return x
 	}
 	still := func(i int) bool { s := size(i); return !math.IsNaN(s) && s <= 0.5 }
 	var out []Step
@@ -103,20 +110,38 @@ func Steps(ink []Ink, times []float64, rest, least float64) []Step {
 		if math.IsNaN(s) || s < least {
 			continue
 		}
-		if still(i-1) && (i+1 >= n || still(i+1)) {
+		dx, dy := mv[i].dx, mv[i].dy
+		if math.IsNaN(dx) {
+			dx = 0
+		}
+		if math.IsNaN(dy) {
+			dy = 0
+		}
+		// seen says frame j measured a move along the axis frame i moved
+		// most on.
+		seen := func(j int) bool {
+			if j >= n {
+				return false
+			}
+			if math.Abs(dy) > math.Abs(dx) {
+				return !math.IsNaN(mv[j].dy)
+			}
+			return !math.IsNaN(mv[j].dx)
+		}
+		if still(i-1) && seen(i-1) && (i+1 >= n || still(i+1) && seen(i+1)) {
 			k := i - 1
-			for k > 1 && still(k) {
+			for k > 1 && still(k) && seen(k) {
 				k--
 			}
 			// The element is where it rests from frame k on.
 			if held := times[i] - times[k]; held >= rest*0.99 {
-				out = append(out, Step{Frame: i, Kind: "snap", DX: mv[i].dx, DY: mv[i].dy, Rest: held})
+				out = append(out, Step{Frame: i, Kind: "snap", DX: dx, DY: dy, Rest: held})
 				continue
 			}
 		}
 		before, after := size(i-1), size(i+1)
-		if s >= least+1 && !math.IsNaN(before) && !math.IsNaN(after) && s > 3*math.Max(before, after) {
-			out = append(out, Step{Frame: i, Kind: "jump", DX: mv[i].dx, DY: mv[i].dy})
+		if s >= least+1 && seen(i-1) && seen(i+1) && s > 3*max(before, after) {
+			out = append(out, Step{Frame: i, Kind: "jump", DX: dx, DY: dy})
 		}
 	}
 	return out

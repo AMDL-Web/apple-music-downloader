@@ -70,6 +70,38 @@ func TestAPauseOrAChangeOfInkIsNotASnap(t *testing.T) {
 	}
 }
 
+// The playlist page's figures in dark, as a 64-pixel window saw them: a
+// line easing up, with more ink until frame 3, that another element's ink
+// clips at the window's edge in frames 3 and 6, so only the move into
+// frame 5 is measured along Y. The frames around it did not hold still,
+// so it is no jump, nor a snap. A line clipped along X all the way that
+// steps along Y is still caught.
+func TestAMoveBesideClippedFramesIsNoJump(t *testing.T) {
+	tops := []int{80, 66, 54, 44, 35, 29, 25, 21, 19, 18, 18, 18}
+	var ink []Ink
+	for i, y := range tops {
+		k := at(10, y)
+		k.ClipY = i == 3 || i == 6
+		if i < 3 {
+			k.N = 60
+		}
+		ink = append(ink, k)
+	}
+	if s := Steps(ink, times(len(ink), 1.0/60), filmRest, 2); len(s) > 0 {
+		t.Errorf("an ease clipped around a frame finds %v", s)
+	}
+	ink = nil
+	for _, y := range []int{30, 29, 28, 27, 21, 20, 19, 18, 18, 18} {
+		k := at(10, y)
+		k.ClipX = true
+		ink = append(ink, k)
+	}
+	s := Steps(ink, times(len(ink), 1.0/60), filmRest, 2)
+	if len(s) != 1 || s[0].Kind != "jump" || s[0].Frame != 4 || s[0].DY != -6 {
+		t.Errorf("steps %v, want one jump of -6 at frame 4", s)
+	}
+}
+
 // InkOf bounds the dark pixels and says which edges they touch.
 func TestInkOfBoundsWhatIsDrawn(t *testing.T) {
 	const w, h = 8, 6

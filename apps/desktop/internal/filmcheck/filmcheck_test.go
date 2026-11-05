@@ -63,6 +63,29 @@ func TestASmoothGlideFindsNothing(t *testing.T) {
 	}
 }
 
+// A light line on a dark ground that glides a pixel a frame and moves six
+// in one frame jumps there.
+func TestALineThatStepsOnADarkGroundJumps(t *testing.T) {
+	ys := []int{100, 100, 100, 100, 100, 100, 99, 98, 97, 96, 90, 89, 88, 87, 86}
+	for range 12 {
+		ys = append(ys, 86)
+	}
+	var frames []*image.RGBA
+	for _, y := range ys {
+		img := image.NewRGBA(image.Rect(0, 0, 320, 200))
+		draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{18, 18, 24, 255}), image.Point{}, draw.Src)
+		draw.Draw(img, image.Rect(140, y, 164, y+6), image.NewUniform(color.RGBA{220, 220, 220, 255}), image.Point{}, draw.Src)
+		frames = append(frames, img)
+	}
+	fs := film(frames, nil, nil)
+	if len(fs) == 0 || fs[0].Kind != "jump" || fs[0].Frame != 10 || !strings.Contains(fs[0].Detail, "(+0, -6)") {
+		t.Fatalf("found %v, want a jump of (+0, -6) at frame 10", fs)
+	}
+	for _, f := range fs[1:] {
+		t.Errorf("also found %v", f)
+	}
+}
+
 // A box that is gone for one frame and back is a flicker.
 func TestABoxGoneForAFrameVanishes(t *testing.T) {
 	box, other := image.Rect(100, 60, 180, 140), image.Rect(220, 20, 300, 180)
