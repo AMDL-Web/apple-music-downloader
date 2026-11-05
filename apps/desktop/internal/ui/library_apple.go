@@ -38,7 +38,7 @@ func (a *App) appleList(c *ui.Context, k *Tokens) {
 	s := a.Store
 	l := &s.Library
 	f := &a.lib
-	ui.Row(c).Padding(0, libraryPadX, 10, libraryPadX).Gap(8).AlignItems(ui.Center).Background(k.Ground).Children(func() {
+	ui.Row(c).Padding(0, libraryPadX, 10, libraryPadX).Gap(8).AlignItems(ui.Center).Children(func() {
 		prev := f.apple
 		segmented(c, k, "apple", &f.apple, []string{"Albums", "Songs", "Playlists"}, nil)
 		if f.apple != prev {
@@ -97,7 +97,7 @@ func (a *App) appleListState(kind string) *ui.ListState {
 
 // appleSongs is the Apple library's songs, a row each, built as they show.
 func (a *App) appleSongs(c *ui.Context, k *Tokens, items []domain.AppleLibraryItem) {
-	ui.Box(c.Key("apple-area-songs")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
+	ui.Box(c.Key("apple-area-songs")).Grow(1).MinHeight(0).Children(func() {
 		st := a.scrollState(c, "apple-songs")
 		list := ui.List(c.Key("apple-songs"), a.appleListState("songs"), len(items), func(i int) {
 			a.appleRow(c, k, items[i])
@@ -118,7 +118,7 @@ func (a *App) appleGrid(c *ui.Context, k *Tokens, items []domain.AppleLibraryIte
 	width := a.pageWidth(c) - 2*libraryPadX
 	cols, size := tileColumns(width), tileSize(width, 0)
 	rows := (len(items) + cols - 1) / cols
-	ui.Box(c.Key("apple-area-" + kind)).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
+	ui.Box(c.Key("apple-area-" + kind)).Grow(1).MinHeight(0).Children(func() {
 		st := a.scrollState(c, "apple-"+kind)
 		list := ui.List(c.Key("apple-"+kind), a.appleListState(kind), rows, func(r int) {
 			ui.Row(c).Padding(0, libraryPadX, appleGridGapY, libraryPadX).Gap(tileGap).AlignItems(ui.Start).Children(func() {

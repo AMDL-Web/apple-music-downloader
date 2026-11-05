@@ -30,7 +30,10 @@ func (a *App) libraryScreen(c *ui.Context, k *Tokens, compact bool) {
 	if s.Conn.Phase == client.Offline {
 		a.offlineBanner(c, k)
 	}
-	ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground).Children(func() {
+	// The Library paints no ground of its own, the main column's shows: the
+	// light of the screen left fades over it as over the title bar, with no
+	// edge where the bar ends.
+	ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Children(func() {
 		display(c, "Library", 22).SingleLine()
 		ui.Spacer(c)
 		a.appleSyncBar(c, k, compact)
