@@ -17,7 +17,7 @@ link, then download, decrypt, remux and tag each track. Code map: the
   in `apps/site/AGENTS.md`.
 - `apps/desktop`: the desktop app for macOS, Windows and Linux, drawn with MyGo's native
   UI. It imports the same core and embeds the server in standalone mode. Each product
-  keeps its own directory under `apps/`, including a future non-Go app with its own build.
+  keeps its own directory under `apps/`.
 - `internal/`: the Go core every product shares. It never imports a product; the server
   passes the console in through `internal/api#Deps`.
 - `deploy/`: the Compose file and per-service image files. `tools/`: repository tooling.
@@ -37,7 +37,13 @@ link, then download, decrypt, remux and tag each track. Code map: the
 - User-facing work is done, and installed for the maintainer, only once a verifier
   in another session accepts that build
   ([amdl-accept](.claude/skills/amdl-accept/SKILL.md)); batches go through
-  [amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md).
+  [amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md). A motion or look
+  complaint is not a batch item: the session the maintainer talks to fixes it with
+  them on frames of their recording, and acceptance of that build checks regressions
+  only (a pop, flash, blank or vanishing frame), not timing or taste.
+- Before reasoning about the queue, a page's figures or downloaded state, read
+  `GLOSSARY.md` "Jobs and pipeline": a record's state is the database's, never a disk
+  scan, and a UI state split by has-a-job / no-job is a defect.
 - A regression is reverted to the last accepted build before it is root-caused or fixed.
 - Docs change in the commit that changes the behavior. `rg` the changed symbols,
   keys and rule words across every Markdown file, `.claude/`, `internal/api/openapi.yaml`,
@@ -51,9 +57,8 @@ link, then download, decrypt, remux and tag each track. Code map: the
 ## This service has no auth, on purpose
 
 Every endpoint is unauthenticated; access control belongs to the deployment layer
-in front of it (reverse proxy, gateway). Each install serves one user, and the
-project is distributed as open source. Don't add auth middleware or multi-user
-features, and don't report missing auth in a review.
+in front of it (reverse proxy, gateway). Each install serves one user. Don't add auth
+middleware or multi-user features, and don't report missing auth in a review.
 
 ## Contracts and breaking changes
 
@@ -69,8 +74,7 @@ types and output paths are contracts that installs and the clients in this repos
   name cleaning or sidecar names makes the "already downloaded" check miss and
   libraries download again, so it needs the maintainer's OK and an upgrade note
   (`internal/media/AGENTS.md`).
-- What changes together with each surface (spec, handler, docs, README table,
-  console, config example, migration) is listed in
+- What changes together with each surface is listed in
   [amdl-api-change](.claude/skills/amdl-api-change/SKILL.md).
 - The clients here change in the same commit as an API they use: the console, and
   `internal/client` and `internal/capability` for the CLI, MCP server, TUI and
@@ -94,22 +98,16 @@ two kinds (`internal/applemusic/AGENTS.md`):
 - Required: the link's resource (song, album, playlist, station tracks, artist and its
   albums), a single song's album, read to place the song in the library, and each
   track's song metadata. A retryable error is tried up to `download.max_attempts`
-  times, a plain 4xx only once, and then the job or that track fails; there is nothing
-  to download, or nowhere to put it, without them.
+  times, a plain 4xx only once, and then the job or that track fails.
 - Optional: `editorialVideo` motion artwork, the album read that enriches a playlist or
   station track, a private playlist's library cover, and the artist read for a
-  standalone artist cover.
-  Each degrades to "not available" and never fails a job. A song with no usable web or
-  device manifest falls back to the next codec.
+  standalone artist cover. Each degrades to "not available" and never fails a job.
 
-With a media-user-token (`internal/usertoken`), the backend also asks Apple for what
-wrapper-lite would otherwise fetch with it: lyrics (amp-api `syllable-lyrics`, from the
-token account's storefront), and AAC-LC's playlist and Widevine license from the web
-player's playback hosts `play.music.apple.com` (`webPlayback`) and `play.itunes.apple.com`
-(`acquireWebPlaybackLicense`), with the same scraped JWT. These are required like the reads
-above. Without a token, or when Apple refuses it, they go to the wrapper as before
-(`internal/media#playbackClient`); `/key`, `/m3u8`, the token itself and login stay with
-the wrapper.
+With a media-user-token (`internal/usertoken`), the backend itself fetches lyrics and
+AAC-LC's playlist and Widevine license from Apple with the same scraped JWT
+([download pipeline](docs/download-pipeline.md)). These are required like the reads above. Without a token, or when Apple refuses it, they go to
+the wrapper as before (`internal/media#playbackClient`); `/key`, `/m3u8`, the token itself
+and login stay with the wrapper.
 
 ## Data safety
 
@@ -117,7 +115,7 @@ the wrapper.
   (`internal/db/AGENTS.md`). Before applying one to a real database, describe its
   impact and get the maintainer's confirmation.
 - Never commit `configs/config.yaml`, `configs/hooks.yaml`, `*.p8` files, `keys/` or
-  `data/`: they hold tokens, private keys and local state.
+  `data/`.
 
 ## Language
 
@@ -130,7 +128,7 @@ review-bot PR comments (Simplified Chinese, set in `REVIEW.md`).
 ## Verification
 
 CI (`.github/workflows/ci.yml`) runs the `make check` steps on pushes to `main` and
-`dev` and on pull requests, and builds the Docker image. Locally, run what the
+`dev` and on pull requests. Locally, run what the
 change touches; [amdl-verify](.claude/skills/amdl-verify/SKILL.md) has the live API
 and console checks and the report format.
 
@@ -184,7 +182,7 @@ sit in front and adds the console's login API; bare wrapper-lite answers `501 lo
 
 | Rule | Enforced by |
 | --- | --- |
-| gofmt, build, vet, tests, race detector, govulncheck, Node tests | CI, one step per `make` target; the race detector is three parallel `make race-*` jobs |
+| gofmt, build, vet, tests, race detector, govulncheck, Node tests | CI, one step per `make` target |
 | The Docker image builds | CI docker build job |
 | Config example key set and defaults match the struct | tests in `internal/config` |
 | Routes, error codes and runtime config keys match `internal/api/openapi.yaml` | parity tests in `internal/api` |
@@ -192,6 +190,7 @@ sit in front and adds the console's login API; bare wrapper-lite answers `501 lo
 | `internal/fairplay` decrypts like upstream Temari, and `internal/fairplay/rounds_gen.go` is the pinned version's translation | CI Temari parity job (`make temaridiff`); Renovate opens a PR per Temari release |
 | Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `apps/console`; layout: CI `ui-audit` jobs (warns only) |
 | Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md size, CLAUDE.md pairs, docs types and index | `tools/repocheck` tests |
+| An unaccepted build is never installed on the maintainer's Mac | `install-mac.sh` refuses a binary without an `accept.sh` record |
 | DCO sign-off | DCO GitHub App on PRs; `.claude/hooks/guard-commands.mjs` on `git commit` |
 | `main` only through a PR | branch protection; guard hook on `git push` |
 | No `--admin` merge without approval | guard hook on `gh pr merge` |

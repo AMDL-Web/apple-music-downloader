@@ -14,6 +14,7 @@ Reversible work, stating any assumption that matters:
 - breaking changes to the API, config keys or DB schema that meet
   [Contracts and breaking changes](AGENTS.md#contracts-and-breaking-changes);
 - fixing red CI, answering review bots, rebasing onto `origin/dev`;
+- adding the secrets and extra GitHub repositories that development needs;
 - running `make dev`, reading logs, probing the local API.
 
 ## Waits for you
@@ -28,8 +29,10 @@ Reversible work, stating any assumption that matters:
   migrations 2 to 5 were folded into the 2.0 schema once, by your decision, and rc
   databases are refused.
 - Deleting branches, tags, releases or GHCR images.
-- Repository and account settings: branch protection, secrets, repo variables such
-  as `CLAUDE_AUTO_REVIEW`, installed apps.
+- Repository and account settings: branch protection, repo variables such as
+  `CLAUDE_AUTO_REVIEW`, installed apps.
+- Opening a window on your Mac. Only `install-mac.sh` installing an accepted build
+  opens AMDL.app ([amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md#dispatch)).
 - A new mechanism (CI step, hook, check, scheduled job), after the agent says what
   it prevents, when it runs and who reads it.
 
@@ -47,7 +50,8 @@ Reversible work, stating any assumption that matters:
 | Several requests in one go | turns them into checklist items you review before work starts (amdl-coordinate) |
 | "A draft is fine" | stops at a draft PR |
 | "Release vX.Y.Z" | prepares the release PR and notes (amdl-release), then waits for your merge |
-| "From now on, …" | records the rule in AGENTS.md, this page or a skill in the same change |
+| A motion or look complaint | reproduces it on frames of your recording and fixes it with you in the same session, with no checklist item (AGENTS.md) |
+| "From now on, …" | records a repository rule in AGENTS.md or a skill, and your own working preferences in agent memory, in the same change |
 
 A request that reads two ways gets a one- or two-sentence restatement of the goal,
 and the work proceeds on that reading.
@@ -55,8 +59,8 @@ and the work proceeds on that reading.
 ## Reports
 
 - Result first, then evidence: commands and output, `path#Symbol` pointers, links.
-- Changed locally, tests passed, pushed to `dev` and released in an image are kept
-  apart; behavior inferred from code is labeled as inference.
+- The layers of a report and the label for inferred behavior are in
+  [Working agreements](AGENTS.md#working-agreements).
 - A question for the maintainer stands alone: what each option is, what choosing it
   changes, and a recommendation. A bare commit hash or file name is not an option.
 - When the maintainer must run a step by hand (a login, a password, a code), one

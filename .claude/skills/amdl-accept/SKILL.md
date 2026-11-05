@@ -67,10 +67,12 @@ with long and scrolled data. It asserts on what the eye sees:
 
 - the hand-over frame (shadow, badges, text) changes no more than the frames before;
 - other targets take a click as soon as the motion looks finished;
-- going in and going out take comparable time;
 - nothing is drawn over the page it came from after the motion ends.
 
-A reported motion bug is reproduced in such a film before it is patched.
+A reported motion bug is reproduced in such a film before it is patched. Acceptance
+of motion checks regressions only: a pop, a flash, a blank or vanishing frame. It
+does not judge timing, order or taste, which are the maintainer's
+([desktop-motion](../../rules/desktop-motion.md)).
 
 ### Web UI (console, site)
 
@@ -84,8 +86,19 @@ an action, misalignment, then polish.
 
 One real run that exercises the change. A fake QEMU, fake manager or mock backend
 does not count. A build meant for the maintainer starts first on a copy of the
-maintainer's app data directory, with absolute paths in its `config.yaml` rewritten
-to the copy, and reaches wrapper ready there. `make guestboot` and `make upgradecheck`
+maintainer's app data directory, rewritten so nothing points back at the live install,
+and reaches wrapper ready there:
+
+- `server/config.yaml`: `database.path`, `downloads_dir` and `temp_dir` are absolute
+  paths into the copy (`grep -c` for the home directory finds none).
+- The guest port differs from the live one in `wrapper/installed.json`,
+  `wrapper/disk.json`, `wrapper/state.json` and `config.yaml`, and `pid` is dropped from
+  `state.json`.
+- The database is copied with `sqlite3 .backup` into an empty `db/`, never next to
+  copied `-wal` or `-shm` files.
+- After start, `lsof -Fn -p <pid>` shows the copy's database path.
+
+`make guestboot` and `make upgradecheck`
 apply when the change touches their paths.
 
 ### API, SSE, config contract
@@ -110,8 +123,10 @@ it.
 
 Each row is PASS, FAIL or SKIPPED, with an artifact a reader can open: the
 entry-point by surface grid filled in, film frame sheets, the ui-audit report path,
-the real-run log, command output. A subtle visual change also gets a side-by-side
-before/after recording for the maintainer. SKIPPED carries its reason and keeps the
+the real-run log, command output. A subtle visual change (a detail the maintainer
+would have to hunt for) also gets a side-by-side before/after recording of the same
+scripted interaction, before on the left; an obvious one needs only screenshots.
+Copy the video into the worktree's ignored `dist/review/` before sending it. SKIPPED carries its reason and keeps the
 item from counting as done unless the maintainer accepts the gap.
 
 ```

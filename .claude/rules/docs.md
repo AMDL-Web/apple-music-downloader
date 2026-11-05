@@ -9,6 +9,9 @@ paths:
   first line after its H1 and a row in `docs/README.md` with the same type. A
   record page also carries `> Verified at <sha> on <date>; snapshot, not
   maintained.`
+- Refer to the repository's owner as "the maintainer", not by their account name;
+  the site's domain and the name of its page project (`amdl.lyjw.me`, `lyjwpage`)
+  are the exceptions.
 - Write the current state. History belongs in git log and release notes, not in
   "previously", "now" or "since" wording.
 - One fact, one place; elsewhere, point to it: `path#Symbol` for code (a package

@@ -25,15 +25,14 @@ once a test drives that interleaving in the real code and fails on it.
 
 ## First-draft mistakes
 
-Seen in all four models written in Nov 2026: an invariant stronger than what the
+Seen in every model written so far: an invariant stronger than what the
 code promises, or one atomic step split into two. Before calling a counterexample a
 bug, check each of its steps against the code at file and line.
 
 ## Running TLC
 
-On the test host, a portable JRE and tla2tools 1.7.4 (sha256
-936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88) sit in the
-tla directory under amdl-dev in the home directory:
+On the test host, a portable JRE and tla2tools sit in the tla directory under
+amdl-dev in the home directory:
 
 ```
 ~/amdl-dev/tla/tlc.sh <dir> <Module> <cfg>
@@ -43,12 +42,11 @@ tla directory under amdl-dev in the home directory:
 ## Where models live
 
 Outside the repository, in the maintainer's notes, not in git: keeping them in step
-with the code is not worth it permanently. Existing models (Nov 2026, dev a88b70fe
-and feat/library-files ac1920da): the job lifecycle (`internal/jobs`), requeue
-(requeue.go on the library-files work), media-user-token refresh
-(`internal/usertoken`), and the downloads feed resume and database swap
-(`internal/client` follow.go, and the console's stream.js). Next candidates: the
-Apple library sync and the library sync monitor (`internal/librarysync`).
+with the code is not worth it permanently. Existing models: the job lifecycle
+(`internal/jobs`), requeue, media-user-token refresh (`internal/usertoken`), and the
+downloads feed resume and database swap (`internal/client` follow.go, and the
+console's stream.js). Next candidates: the Apple library sync and the library sync
+monitor (`internal/librarysync`).
 
 ## Not for
 
