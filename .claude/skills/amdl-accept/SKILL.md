@@ -45,6 +45,13 @@ enough.
 Every row that matches the change applies. The checklist item lists them when it is
 written, so the verifier does not choose its own scope.
 
+Acceptance covers the round being installed, not the whole app: the rows for what
+its commits touch, plus one smoke pass at the maintainer's window size in light and
+dark (open an album from search and from the queue, switch every tab, first search)
+looking only for a pop, flash, blank or vanishing frame. Areas the round did not
+touch are covered by the full test suite, not by re-running their rows; a verifier
+reused from an earlier item drops that item's rows.
+
 ### Records, runs, queue, library state
 
 Each entry point of the action, against every surface that shows the thing:
