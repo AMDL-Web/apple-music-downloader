@@ -226,9 +226,16 @@ func (a *App) appleFrom(kind string, it domain.AppleLibraryItem) string {
 	return "lib:" + it.ID
 }
 
+// openAppleAlbum opens an album of the Apple library on its page, as the hit
+// of a search tile would, so that the page offers its download; an album
+// without a catalog link opens without one.
 func (a *App) openAppleAlbum(it domain.AppleLibraryItem) {
-	a.OpenAlbum(client.SearchHit{Type: "album", ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL,
-		Resource: a.Store.RecordMark(domain.ResourceAlbum, it.CatalogID)})
+	h, ok := a.appleHit("albums", it)
+	if !ok {
+		h = client.SearchHit{Type: "album", ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL,
+			Resource: a.Store.RecordMark(domain.ResourceAlbum, it.CatalogID)}
+	}
+	a.OpenAlbum(h)
 }
 
 // appleControl is an Apple tile's control, as a search tile's: the check
