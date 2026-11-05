@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -47,6 +48,24 @@ func scenes(t *testing.T) string {
 		 "cells":[{"file":"cell.png","caption":"open 2","bad":true}]}]}`)
 	writeGrey(t, filepath.Join(dir, "b.dark", "cell.png"), 40)
 	return dir
+}
+
+func TestSheetWritesTheFindingsPageWithTheFramesAround(t *testing.T) {
+	dir := scenes(t)
+	for i, v := range []uint8{40, 90, 40} {
+		writeGrey(t, filepath.Join(dir, "b.dark", fmt.Sprintf("bad-%03d.png", i+1)), v)
+	}
+	var out, errw strings.Builder
+	run([]string{"sheet", dir}, &out, &errw)
+	raw, err := os.ReadFile(filepath.Join(dir, "findings.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(raw)
+	if !strings.Contains(page, "pop at frame 2: a badge") || !strings.Contains(page, "b · dark · 方向 open · 第 2 帧") ||
+		strings.Count(page, `alt="前一帧，原大"`) != 1 || strings.Count(page, `alt="后一帧，原大"`) != 1 {
+		t.Errorf("page lacks the finding or its three frames (%d bytes)", len(page))
+	}
 }
 
 func TestSheetFailsOnAFindingAndPassesWhenItIsKnown(t *testing.T) {

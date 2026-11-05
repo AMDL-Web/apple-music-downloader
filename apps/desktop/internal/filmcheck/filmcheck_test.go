@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"strings"
 	"testing"
 )
 
@@ -187,6 +188,44 @@ func TestStripesThatMoveOnAfterTheMotionDoNotPop(t *testing.T) {
 	}
 	if fs := film(frames, nil, moving); len(fs) > 0 {
 		t.Errorf("stripes moving on find %v", fs)
+	}
+}
+
+// A part that lands one pixel off on the frame the motion ends and snaps
+// into place is not seen at 1x and not reported; one that lands 5 pixels
+// off is, and the finding says how far.
+func TestAPartThatLandsOffByAPixelIsNotAPopButByFiveIs(t *testing.T) {
+	tag := func(x int) *image.RGBA {
+		img := frame(image.Rect(20, 20, 140, 120))
+		for k := 0; k < 12; k++ {
+			draw.Draw(img, image.Rect(x+k*8, 150, x+k*8+3, 170), image.NewUniform(color.RGBA{60, 50, 20, 255}), image.Point{}, draw.Src)
+		}
+		return img
+	}
+	run := func(off int) []Finding {
+		var frames []*image.RGBA
+		var moving []bool
+		for i := range 20 {
+			x := 100
+			if i >= 12 {
+				x += off
+			}
+			frames = append(frames, tag(x))
+			moving = append(moving, i < 12)
+		}
+		return film(frames, nil, moving)
+	}
+	if fs := run(1); len(fs) > 0 {
+		t.Errorf("a 1 px landing finds %v", fs)
+	}
+	var pops []Finding
+	for _, f := range run(5) {
+		if f.Kind == "pop" {
+			pops = append(pops, f)
+		}
+	}
+	if len(pops) != 1 || !strings.Contains(pops[0].Detail, "move by up to (+5, +0) px") {
+		t.Errorf("a 5 px landing finds %v, want one pop saying it moved (+5, +0) px", pops)
 	}
 }
 

@@ -32,6 +32,16 @@ const (
 	Agree = 1.5
 	// PopMin is the least step that counts as a snap.
 	PopMin = 6.0
+	// SeeShift is the least shift, in pixels along an axis, that an eye
+	// sees as a part moving between two frames at 1x. A part that lands one
+	// pixel off and snaps into place changes a tile by as much as 12
+	// levels and is not seen.
+	SeeShift = 2
+	// searchShift is how far a tile's change is looked for as a shift.
+	searchShift = 6
+	// shiftFit is how much of a tile's change a shift must explain, as the
+	// part left over, for the change to be called a shift.
+	shiftFit = 0.4
 	// maxGlitch is the longest run of frames that counts as a flicker
 	// rather than a change of state.
 	maxGlitch = 3
@@ -89,7 +99,8 @@ type Film struct {
 	cols     int
 	rows     int
 	ring     [maxGlitch + 2]*image.RGBA
-	steps    [][]float64 // per frame, per tile: change from the frame before
+	steps    [][]float64     // per frame, per tile: change from the frame before
+	aligns   []map[int]align // per frame: tiles that changed by PopMin or more, as a shift
 	moving   []bool
 	contrast []float64
 	inks     [][]Ink  // per frame, per window (inkWindows): its ink
@@ -137,6 +148,7 @@ func (f *Film) Add(img *image.RGBA, texts []string, moving bool) {
 		}
 	}
 	f.steps = append(f.steps, step)
+	f.aligns = append(f.aligns, f.align(i, step))
 	f.moving = append(f.moving, moving)
 	f.contrast = append(f.contrast, contrastOf(cur, f.Content))
 	f.inks = append(f.inks, f.windowInks(cur))
@@ -382,6 +394,7 @@ func (f *Film) pops(i int, animated map[int]bool) {
 	}
 	handOver := ended == i
 	var hit []int
+	var shifts []align
 	worst := 0.0
 	for t, s := range f.steps[i] {
 		if s < PopMin || animated[t] || !f.inContent(t) {
@@ -406,6 +419,12 @@ func (f *Film) pops(i int, animated map[int]bool) {
 				continue
 			}
 		}
+		if a, ok := f.aligns[i][t]; ok && a.shifted {
+			if abs(a.dx) < SeeShift && abs(a.dy) < SeeShift {
+				continue // a part one pixel off: nothing an eye sees
+			}
+			shifts = append(shifts, a)
+		}
 		hit = append(hit, t)
 		worst = max(worst, s)
 	}
@@ -416,8 +435,21 @@ func (f *Film) pops(i int, animated map[int]bool) {
 	if handOver {
 		how = "on the frame the motion ends, over 1.5 times the frames before"
 	}
-	f.found = append(f.found, Finding{Kind: "pop", Frame: i, Frames: 1, Box: f.union(hit),
-		Detail: fmt.Sprintf("%d tiles change by up to %.0f levels %s", len(hit), worst, how)})
+	detail := fmt.Sprintf("%d tiles change by up to %.0f levels %s", len(hit), worst, how)
+	if len(shifts) > 0 {
+		big := shifts[0]
+		for _, a := range shifts {
+			if abs(a.dx)+abs(a.dy) > abs(big.dx)+abs(big.dy) {
+				big = a
+			}
+		}
+		if len(shifts) == len(hit) {
+			detail = fmt.Sprintf("%d tiles move by up to (%+d, %+d) px %s", len(hit), big.dx, big.dy, how)
+		} else {
+			detail += fmt.Sprintf("; %d of them are a move of up to (%+d, %+d) px", len(shifts), big.dx, big.dy)
+		}
+	}
+	f.found = append(f.found, Finding{Kind: "pop", Frame: i, Frames: 1, Box: f.union(hit), Detail: detail})
 }
 
 // textGlitches finds a text that leaves for up to two frames and comes
@@ -508,4 +540,84 @@ func clipList(s []string, n int) string {
 		out += fmt.Sprintf(" and %d more", len(s)-n)
 	}
 	return out
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// align is how a tile's change from the frame before is best explained as
+// a shift: the content now at (x, y) was at (x-dx, y-dy) before.
+type align struct {
+	dx, dy  int
+	shifted bool // the shift leaves under shiftFit of the change
+}
+
+// align measures, for frame i, every tile that changed by PopMin or more
+// from the frame before, how far a shift of up to searchShift pixels
+// explains it. Content that slid in from beside the tile counts: the
+// frame before is read whole.
+func (f *Film) align(i int, step []float64) map[int]align {
+	if i == 0 {
+		return nil
+	}
+	prev, cur := f.ring[(i-1)%len(f.ring)], f.ring[i%len(f.ring)]
+	var out map[int]align
+	for t, s := range step {
+		if s < PopMin || !f.inContent(t) {
+			continue
+		}
+		r := f.tileRect(t)
+		best, bx, by := s, 0, 0
+		for dy := -searchShift; dy <= searchShift; dy++ {
+			for dx := -searchShift; dx <= searchShift; dx++ {
+				if dx == 0 && dy == 0 {
+					continue
+				}
+				if m := shiftedMad(prev, cur, r, dx, dy, best); m < best {
+					best, bx, by = m, dx, dy
+				}
+			}
+		}
+		if out == nil {
+			out = map[int]align{}
+		}
+		out[t] = align{dx: bx, dy: by, shifted: (bx != 0 || by != 0) && best < shiftFit*s}
+	}
+	return out
+}
+
+// shiftedMad is the mean absolute difference over r between cur and prev
+// moved by (dx, dy); it stops early once it can no longer beat limit.
+func shiftedMad(prev, cur *image.RGBA, r image.Rectangle, dx, dy int, limit float64) float64 {
+	b := prev.Bounds()
+	s, n := 0, 0
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		py := y - dy
+		if py < b.Min.Y || py >= b.Max.Y {
+			continue
+		}
+		for x := r.Min.X; x < r.Max.X; x++ {
+			px := x - dx
+			if px < b.Min.X || px >= b.Max.X {
+				continue
+			}
+			i, j := cur.PixOffset(x, y), prev.PixOffset(px, py)
+			for k := range 3 {
+				d := int(cur.Pix[i+k]) - int(prev.Pix[j+k])
+				if d < 0 {
+					d = -d
+				}
+				s += d
+			}
+			n += 3
+		}
+	}
+	if n < 3*r.Dx()*r.Dy()/2 {
+		return limit
+	}
+	return float64(s) / float64(n)
 }

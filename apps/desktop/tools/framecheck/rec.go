@@ -86,6 +86,7 @@ func rec(args []string, out, errw io.Writer) int {
 		fmt.Fprintf(out, "%d\t%.3f\t%d\t%d\t%d\t%d\t%d\n", i, times[i], k.N, k.Top, k.Bottom, k.Left, k.Right)
 	}
 	steps := filmcheck.Steps(inks, times, 2/fps, *least)
+	var cases []filmcheck.Case
 	fmt.Fprintf(out, "%d steps\n", len(steps))
 	for _, s := range steps {
 		strip := filepath.Join(*dir, fmt.Sprintf("step-%03d.png", s.Frame))
@@ -93,7 +94,22 @@ func rec(args []string, out, errw io.Writer) int {
 			fmt.Fprintln(errw, "framecheck rec:", err)
 			return 1
 		}
+		c := filmcheck.Case{Num: fmt.Sprint(len(cases) + 1), Title: kindWords[s.Kind],
+			Where: fmt.Sprintf("录屏 %s · t=%.3f s · 第 %d 帧", filepath.Base(movie), times[s.Frame], s.Frame), Text: s.String()}
+		for i, d := range []int{-1, 0, 1} {
+			if j := s.Frame + d; j >= 0 && j < len(frames) {
+				c.Frames[i] = filmcheck.GrayRGBA(frames[j], w, h)
+			}
+		}
+		cases = append(cases, c)
 		fmt.Fprintf(out, "%s at t=%.3f s; frames %d to %d in %s\n", s, times[s.Frame], max(s.Frame-3, 0), min(s.Frame+2, len(frames)-1), strip)
+	}
+	if len(cases) > 0 {
+		if err := writeFindingsPage(filepath.Join(*dir, "findings.html"), cases); err != nil {
+			fmt.Fprintln(errw, "framecheck rec:", err)
+			return 1
+		}
+		fmt.Fprintf(out, "page of the steps: %s\n", filepath.Join(*dir, "findings.html"))
 	}
 	if len(steps) > 0 {
 		return 1

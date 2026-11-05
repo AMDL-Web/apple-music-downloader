@@ -108,7 +108,7 @@ fi
 s=$(date +%s)
 review=$top/dist/review/look-$short
 mkdir -p "$review"
-echo "cd $out && tar cf - summary.txt sheet.jpg \$(cd scenes && find . -name 'bad-*.png' -o -name 'settled-*.jpg' | sed 's|^./|scenes/|')" |
+echo "cd $out && tar cf - summary.txt sheet.jpg \$(ls findings.html 2>/dev/null) \$(cd scenes && find . -name 'bad-*.png' -o -name 'settled-*.jpg' | sed 's|^./|scenes/|')" |
   hostsh "$host" 120 | tar xf - -C "$review"
 t_pull=$(since "$s")
 
@@ -126,6 +126,7 @@ start_full() {
 verdict=$(head -1 "$review/summary.txt" | cut -d' ' -f1)
 echo "time: sync ${t_sync} s, check ${t_check} s, copy back ${t_pull} s"
 echo "review: $review/sheet.jpg and $review/summary.txt"
+[ ! -f "$review/findings.html" ] || echo "findings page (frames to flip; publish it as an Artifact for the maintainer): $review/findings.html"
 if [ "$verdict" != PASS ] && [ -z "$waive" ]; then start_full; exit 1; fi
 [ $build = 1 ] || { start_full; exit 0; }
 

@@ -110,5 +110,6 @@ verdict=PASS; [ $fail = 0 ] || verdict=FAIL
   cat "$out/scenes/summary.txt" 2>/dev/null
 } > "$out/summary.txt"
 cp "$out/scenes/sheet.jpg" "$out/sheet.jpg" 2>/dev/null
+cp "$out/scenes/findings.html" "$out/findings.html" 2>/dev/null
 cat "$out/summary.txt"
 exit $fail

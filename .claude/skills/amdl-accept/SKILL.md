@@ -31,7 +31,10 @@ surface the maintainer will touch.
   out of line (a snap, a jump), a pop, flicker, blank frame, a text gone for a
   frame or the previous page's content (`apps/desktop/internal/filmcheck`), runs
   the tests of the packages the round touched, and leaves
-  `dist/review/look-<sha>/sheet.jpg` and `summary.txt`. The author opens the sheet
+  `dist/review/look-<sha>/sheet.jpg` and `summary.txt`, plus `findings.html` when
+  there is any finding: every finding, new or known, with the frames before, at and
+  after it to flip through, shown to the maintainer as this page, published as an
+  Artifact by the session that ran the round. The author opens the sheet
   and the settled frames of the screens it changed, then reruns with `--install`,
   which reuses the passed check, records the build with `accept.sh` (the summary
   as criteria) and installs it. A finding the author judges wrong is waived with `--waive "<why>"`, which the

@@ -21,6 +21,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -100,6 +101,7 @@ type result struct {
 	Seconds  float64 `json:"seconds"`
 	Segments []struct {
 		Name     string              `json:"name"`
+		First    int                 `json:"first"`
 		Frames   int                 `json:"frames"`
 		Findings []filmcheck.Finding `json:"findings"`
 		Cells    []struct {
@@ -178,6 +180,7 @@ func sheet(dir string, known []knownEntry, out io.Writer) (bool, error) {
 	sort.Slice(results, func(i, j int) bool { return results[i].dir < results[j].dir })
 	var b strings.Builder
 	var rows []filmcheck.Row
+	var cases []filmcheck.Case
 	failed, frames, knownN := 0, 0, 0
 	for _, r := range results {
 		var lines []string
@@ -187,7 +190,13 @@ func sheet(dir string, known []knownEntry, out io.Writer) (bool, error) {
 		for _, s := range r.Segments {
 			n += s.Frames
 			for _, f := range s.Findings {
-				if k := match(known, r, s.Name, f); k != nil {
+				k := match(known, r, s.Name, f)
+				c := findingCase(r, s.Name, s.First, f)
+				if k != nil {
+					c.Known, c.Why = true, k.why
+				}
+				cases = append(cases, c)
+				if k != nil {
 					k.seen = true
 					knownN++
 					lines = append(lines, fmt.Sprintf("    known: %s: %s (%s)", s.Name, f, k.why))
@@ -233,11 +242,67 @@ func sheet(dir string, known []knownEntry, out io.Writer) (bool, error) {
 	if err := os.WriteFile(filepath.Join(dir, "summary.txt"), []byte(summary), 0o644); err != nil {
 		return false, err
 	}
+	if err := writeFindingsPage(filepath.Join(dir, "findings.html"), cases); err != nil {
+		return false, err
+	}
 	if err := writeJPEG(filepath.Join(dir, "sheet.jpg"), filmcheck.Sheet(rows, 8)); err != nil {
 		return false, err
 	}
 	fmt.Fprint(out, summary)
 	return failed > 0, nil
+}
+
+// maxCases is the most findings the page shows: each carries a few images.
+const maxCases = 40
+
+var kindWords = map[string]string{"flicker": "闪一下", "pop": "落地时突变", "snap": "停住后一跳", "jump": "一帧里跳了一大步",
+	"blank": "整窗空白", "text": "文字消失一帧", "stale": "残留上一页的内容"}
+
+// findingCase is f as a card of the findings page, with the frame before
+// it, the frame and the one after, as TestScenes kept them (bad-NNN.png,
+// numbered over the scene). A frame it cannot read is left out.
+func findingCase(r result, segment string, first int, f filmcheck.Finding) filmcheck.Case {
+	word := kindWords[f.Kind]
+	if word == "" {
+		word = f.Kind
+	}
+	c := filmcheck.Case{
+		Title: word,
+		Where: fmt.Sprintf("%s · %s · 方向 %s · 第 %d 帧", r.Scene, r.Theme, segment, f.Frame),
+		Text:  f.String(),
+		Box:   f.Box,
+	}
+	for i, d := range []int{-1, 0, 1} {
+		if f.Frame+d < 0 {
+			continue
+		}
+		if img, err := readPNG(filepath.Join(r.dir, fmt.Sprintf("bad-%03d.png", first+f.Frame+d))); err == nil {
+			c.Frames[i] = img
+		}
+	}
+	return c
+}
+
+// writeFindingsPage writes cases, new findings before known ones, as the
+// page the maintainer flips the frames on; no cases, no page.
+func writeFindingsPage(path string, cases []filmcheck.Case) error {
+	if len(cases) == 0 {
+		return nil
+	}
+	sort.SliceStable(cases, func(i, j int) bool { return !cases[i].Known && cases[j].Known })
+	lede := "每条发现先给原大（1x）的帧，就是实际看到的样子；再给放大的，用按钮逐帧切，或点「自动来回切」看那一下。"
+	if len(cases) > maxCases {
+		lede += fmt.Sprintf("只列前 %d 条，共 %d 条，其余见 summary.txt。", maxCases, len(cases))
+		cases = cases[:maxCases]
+	}
+	for i := range cases {
+		cases[i].Num = fmt.Sprint(i + 1)
+	}
+	var buf bytes.Buffer
+	if err := filmcheck.WriteReport(&buf, "看相发现", lede, cases); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
 func film(dir string, out io.Writer) (bool, error) {
