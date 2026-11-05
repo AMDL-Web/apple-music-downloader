@@ -34,17 +34,17 @@ link, then download, decrypt, remux and tag each track. Code map: the
 - Every wait and every outbound call is bounded: `timeout` on shell waits, a context
   deadline or client timeout in Go. A step that runs longer than expected goes to the
   background, and the report says what it is waiting on.
-- User-facing work is done, and installed for the maintainer, only once a verifier
-  in another session accepts that build
-  ([amdl-accept](.claude/skills/amdl-accept/SKILL.md)); batches go through
-  [amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md). A motion or look
-  complaint is not a batch item: the session the maintainer talks to fixes it with
-  them on frames of their recording, and acceptance of that build checks regressions
-  only (a pop, flash, blank or vanishing frame), not timing or taste.
+- The maintainer gets one install per round, with all of it in. A change to
+  records, the queue, downloads, the API, DB, config or wrapper is accepted by a
+  verifier in another session ([amdl-accept](.claude/skills/amdl-accept/SKILL.md));
+  a look or motion change is checked by its author on frames (a pop, flash, blank or
+  vanishing frame) and installed. Batches go through
+  [amdl-coordinate](.claude/skills/amdl-coordinate/SKILL.md); a look or motion
+  complaint is fixed by the session the maintainer talks to, with them.
 - Before reasoning about the queue, a page's figures or downloaded state, read
   `GLOSSARY.md` "Jobs and pipeline": a record's state is the database's, never a disk
   scan, and a UI state split by has-a-job / no-job is a defect.
-- A regression is reverted to the last accepted build before it is root-caused or fixed.
+- A regression is reverted to the last installed build before it is root-caused or fixed.
 - Docs change in the commit that changes the behavior. `rg` the changed symbols,
   keys and rule words across every Markdown file, `.claude/`, `internal/api/openapi.yaml`,
   `configs/config.example.yaml` and `apps/site/content/`. When a doc and the code
@@ -190,7 +190,7 @@ sit in front and adds the console's login API; bare wrapper-lite answers `501 lo
 | `internal/fairplay` decrypts like upstream Temari, and `internal/fairplay/rounds_gen.go` is the pinned version's translation | CI Temari parity job (`make temaridiff`); Renovate opens a PR per Temari release |
 | Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `apps/console`; layout: CI `ui-audit` jobs (warns only) |
 | Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md size, CLAUDE.md pairs, docs types and index | `tools/repocheck` tests |
-| An unaccepted build is never installed on the maintainer's Mac | `install-mac.sh` refuses a binary without an `accept.sh` record |
+| Nothing reaches the maintainer's Mac unrecorded | `install-mac.sh` refuses a binary without an `accept.sh` record |
 | DCO sign-off | DCO GitHub App on PRs; `.claude/hooks/guard-commands.mjs` on `git commit` |
 | `main` only through a PR | branch protection; guard hook on `git push` |
 | No `--admin` merge without approval | guard hook on `gh pr merge` |

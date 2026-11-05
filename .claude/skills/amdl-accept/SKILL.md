@@ -1,13 +1,28 @@
 ---
 name: amdl-accept
-description: Independent acceptance of an amdl change - a verifier in its own linked session, which did not write the change, writes its criteria before reading the diff, checks the real app build on real-scale data against the acceptance rows for its change type (entry points x surfaces, state combinations, filmed motion, ui-audit, real runs over an existing install), returns PASS/FAIL with evidence, and records an accepted build with accept.sh. Only an accepted build counts as done or is installed for the maintainer. Use when a checklist item is ready, when dispatching or acting as the verifier, and before telling the maintainer something user-facing is finished.
+description: Acceptance of an amdl change before it is installed - for records, queue, downloads, API, DB, config or wrapper changes a verifier in its own linked session, which did not write the change, writes its criteria before reading the diff, checks the real app build on real-scale data against the acceptance rows for its change type (entry points x surfaces, state combinations, filmed motion, ui-audit, real runs over an existing install), returns PASS/FAIL with evidence, and records an accepted build with accept.sh; look and motion changes are checked by their author on frames. Only an accepted build counts as done or is installed for the maintainer. Use when a checklist item is ready, when dispatching or acting as the verifier, and before telling the maintainer something user-facing is finished.
 ---
 
 # Accept a change
 
 The author's own checks ([amdl-verify](../amdl-verify/SKILL.md)) prove the code does
 what the author meant. Acceptance proves it does what the maintainer asked, on every
-surface the maintainer will touch. It is a separate step run by someone else.
+surface the maintainer will touch.
+
+## Which changes need a verifier
+
+- **Records, queue, library state, downloads, API, DB, config, wrapper, upgrades:**
+  a verifier in another session, as below.
+- **Look and motion only** (layout, copy, colour, radius, a transition, a control
+  wired to an existing action): no verifier. The author renders the touched screens
+  at the maintainer's window size in light and dark, films the touched transitions,
+  looks at the frames for a pop, flash, blank or vanishing frame, runs the tests of
+  what it touched, records the build with `accept.sh` under its own session and
+  installs it. The full suite runs in the background and on CI; a failure there is
+  fixed in the next round.
+
+A round that mixes both goes to a verifier, scoped to the non-look commits plus the
+smoke pass.
 
 ## Who
 
@@ -36,9 +51,6 @@ surface the maintainer will touch. It is a separate step run by someone else.
 5. Record the verdict (Evidence below). On PASS, run `accept.sh` on the development
    machine for that exact build; its installer refuses any binary without the
    record. A FAIL records nothing.
-
-Copy, a single style value or a doc fix needs no acceptance: the author's checks are
-enough.
 
 ## Rows by change type
 

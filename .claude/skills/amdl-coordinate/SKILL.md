@@ -57,8 +57,9 @@ it was last updated.
   [amdl-verify](../amdl-verify/SKILL.md), then sets the item to accepting.
 - The verifier is a separate linked session in fresh context, dispatched with the
   item only, not the writer's report ([amdl-accept](../amdl-accept/SKILL.md#who)).
-- Nothing is installed on the maintainer's machine or shown to them until the
-  verifier has recorded that build with `accept.sh`. Only `install-mac.sh`
+- Nothing is installed on the maintainer's machine or shown to them until that
+  build has an `accept.sh` record ([amdl-accept](../amdl-accept/SKILL.md#which-changes-need-a-verifier)),
+  and it carries the whole round. Only `install-mac.sh`
   installing an accepted build opens AMDL.app on the maintainer's Mac; nothing
   else, including a research brief or a test, opens a window there. Windows on the
   build host are fine.
@@ -68,9 +69,9 @@ it was last updated.
 
 A motion or look complaint is not a checklist item and is not relayed to a writer.
 The session the maintainer is talking to opens their recording, finds the frames
-they point at, restates the complaint in their words, fixes it, installs the
-accepted build and lets them judge and tune. Acceptance of that build checks
-regressions only (a pop, flash, blank or vanishing frame), not timing or taste.
+they point at, restates the complaint in their words, fixes it, checks its own frames for
+regressions (a pop, flash, blank or vanishing frame, never timing or taste),
+installs it and lets them judge and tune. No verifier session.
 Before dispatching anything visual, ask whether the maintainer complained about it;
 if not, report the finding and leave the motion alone
 ([desktop-motion](../../rules/desktop-motion.md)).
