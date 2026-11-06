@@ -321,7 +321,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 
 CI 在每次推送到 `main` 和 `dev` 以及每个拉取请求上运行 `make check` 的各个步骤，并构建 Docker
 镜像。开发在 `dev` 上进行；`main` 只通过发布用的拉取请求变更。每个提交都需要 DCO 签名
-（`git commit -s`），见 [CONTRIBUTING.md](CONTRIBUTING.md)。编码 agent 从 [AGENTS.md](AGENTS.md) 读起。
+（`git commit -s`），见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 

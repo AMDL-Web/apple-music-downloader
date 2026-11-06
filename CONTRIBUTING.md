@@ -1,8 +1,6 @@
 # Contributing
 
-Thanks for helping. This page is the human workflow; coding agents also follow
-[AGENTS.md](AGENTS.md), and [HUMAN.md](HUMAN.md) describes how the maintainer works
-with them. Review bots comment on pull requests following [REVIEW.md](REVIEW.md).
+Thanks for helping. This page is the contributor workflow.
 
 ## Branches
 
@@ -69,8 +67,7 @@ and the race detector (`make race-ui`, `make race-app`, `make race-rest`) as par
 on `127.0.0.1:18080`, which needs no wrapper.
 
 The API in `internal/api/openapi.yaml`, config keys, the DB schema and output paths
-are contracts. If your change touches one of them, read
-[Contracts and breaking changes](AGENTS.md#contracts-and-breaking-changes) first.
+are contracts.
 
 ## Pull requests
 

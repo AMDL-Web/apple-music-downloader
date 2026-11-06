@@ -26,6 +26,5 @@ here or its type here disagrees with the page.
 | [references.md](references.md) | reference | Outside practices this repo adopted, adapted or declined, and where they landed |
 
 New pages get a row here in the same commit. The website's build and preview steps
-are in [apps/site/README.md](../apps/site/README.md). Agent-facing rules live elsewhere:
-[AGENTS.md](../AGENTS.md), [REVIEW.md](../REVIEW.md), [GLOSSARY.md](../GLOSSARY.md)
-and `.claude/`.
+are in [apps/site/README.md](../apps/site/README.md). Shared vocabulary is in
+[GLOSSARY.md](../GLOSSARY.md).

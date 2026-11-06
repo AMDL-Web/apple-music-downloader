@@ -6,13 +6,10 @@ package repocheck
 //
 //   - Relative links and #anchors resolve (GitHub heading slug rules).
 //   - Backticked tokens that start with a top-level repo entry (internal/,
-//     docs/, Makefile, AGENTS.md, ...) name a path that exists on disk or is
+//     docs/, Makefile, README.md, ...) name a path that exists on disk or is
 //     git-ignored, and a "path#Symbol" pointer names something that is
 //     still there: a Go declaration (file or package directory), a YAML key,
 //     a Markdown heading, or for other files a whole word in the text.
-//   - Every AGENTS.md has a sibling CLAUDE.md that is exactly "@AGENTS.md\n";
-//     the root AGENTS.md stays within rootAgentsMaxBytes, nested ones within
-//     nestedAgentsMaxBytes.
 //   - Every docs/*.md page except docs/README.md declares "> Type: <type>"
 //     as the first line after its H1, is listed in docs/README.md with the
 //     same type, and a record page carries a "Verified at <sha>" stamp.
@@ -35,12 +32,6 @@ import (
 	"sync"
 	"testing"
 	"unicode"
-)
-
-const (
-	rootAgentsMaxBytes   = 12000
-	nestedAgentsMaxBytes = 5000
-	claudeImport         = "@AGENTS.md\n"
 )
 
 var docTypes = map[string]bool{"reference": true, "runbook": true, "decision": true, "record": true}
@@ -654,50 +645,6 @@ func TestMarkdownPathPointers(t *testing.T) {
 			hint = "line-number pointers rot; write path#Symbol instead"
 		}
 		t.Errorf("%s:%d: `%s` does not exist and is not git-ignored; %s", m.file, m.line, m.ref, hint)
-	}
-}
-
-func TestAgentsFiles(t *testing.T) {
-	r := loadRepo(t)
-	found := false
-	for _, file := range r.md {
-		if path.Base(file) != "AGENTS.md" {
-			continue
-		}
-		found = true
-		text, err := r.read(file)
-		if err != nil {
-			t.Errorf("%s: %v", file, err)
-			continue
-		}
-		limit, kind := nestedAgentsMaxBytes, "nested"
-		if file == "AGENTS.md" {
-			limit, kind = rootAgentsMaxBytes, "root"
-		}
-		if len(text) > limit {
-			t.Errorf("%s: %d bytes, over the %d-byte limit for a %s AGENTS.md; move procedures into a skill under .claude/skills/, path-specific rules into .claude/rules/ or a nested AGENTS.md, and human explanations into README or docs/", file, len(text), limit, kind)
-		}
-		companion := path.Join(path.Dir(file), "CLAUDE.md")
-		info, err := os.Lstat(filepath.Join(r.root, filepath.FromSlash(companion)))
-		if err != nil {
-			t.Errorf("%s: missing sibling %s; create it containing exactly %q", file, companion, claudeImport)
-			continue
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			t.Errorf("%s: is a symlink; make it a regular file containing exactly %q (symlinks break on checkouts without core.symlinks)", companion, claudeImport)
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(companion)))
-		if err != nil {
-			t.Errorf("%s: %v", companion, err)
-			continue
-		}
-		if string(raw) != claudeImport {
-			t.Errorf("%s: content is %q; it must be exactly %q so Claude Code imports the sibling AGENTS.md", companion, string(raw), claudeImport)
-		}
-	}
-	if !found {
-		t.Errorf("no AGENTS.md found; the root AGENTS.md is required")
 	}
 }
 

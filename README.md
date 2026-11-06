@@ -364,7 +364,7 @@ and events as a real download.
 CI runs the `make check` steps on every push to `main` and `dev` and on every pull
 request, and builds the Docker image. Work lands on `dev`; `main` changes only through a
 release pull request. Every commit needs a DCO sign-off (`git commit -s`); see
-[CONTRIBUTING.md](CONTRIBUTING.md). Coding agents start at [AGENTS.md](AGENTS.md).
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
