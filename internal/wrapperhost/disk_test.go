@@ -28,7 +28,7 @@ func legacyHome(t *testing.T) Home {
 func TestLegacyDiskIsPreservedAndManagerUpdatesKeepAllAccounts(t *testing.T) {
 	h := legacyHome(t)
 	art := fakeArtifact(t, "", "fresh manager disk")
-	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-first"), time.Now(), nil)
+	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-first"), false, time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestLegacyDiskIsPreservedAndManagerUpdatesKeepAllAccounts(t *testing.T) {
 	if err := h.Uninstall(false); err != nil {
 		t.Fatal(err)
 	}
-	in, err = h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-next"), time.Now(), nil)
+	in, err = h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-next"), false, time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestLegacyDiskCannotBeReplacedWhileGuestRuns(t *testing.T) {
 	h := legacyHome(t)
 	writeJSON(h.path("state.json"), State{Mode: "serving", PID: 123})
 	art := fakeArtifact(t, "", "fresh disk")
-	_, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-first"), time.Now(), nil)
+	_, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-first"), false, time.Now(), nil)
 	if err == nil || !strings.Contains(err.Error(), "stop the local wrapper") {
 		t.Fatalf("running legacy guest update: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestImportBareLiteDoesNotMoveLegacyDisk(t *testing.T) {
 	for _, name := range []string{"vmlinuz-lite-qemu", "lite-initramfs.cpio.gz", "data.img"} {
 		os.WriteFile(filepath.Join(dir, name), []byte("old guest"), 0o600)
 	}
-	if _, err := h.Import(dir, time.Now()); err == nil {
+	if _, err := h.Import(dir, false, time.Now()); err == nil {
 		t.Fatal("bare-lite guest was accepted")
 	}
 	got, _ := os.ReadFile(h.ImagePath())
@@ -104,7 +104,7 @@ func TestInterruptedManagerDiskSeedingKeepsLegacyBackup(t *testing.T) {
 	}
 	writeJSON(h.path("disk.json"), diskLayout{Kind: ManagerGuest, LegacyDisk: backup})
 	art := fakeArtifact(t, "", "fresh disk")
-	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-first"), time.Now(), nil)
+	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "manager-first"), false, time.Now(), nil)
 	if err != nil || in.LegacyDisk != backup {
 		t.Fatalf("resumed install: %+v, %v", in, err)
 	}

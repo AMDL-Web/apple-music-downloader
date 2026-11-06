@@ -26,7 +26,7 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | wrapper, wrapper-lite | The HTTP service that holds the Apple account session and serves device manifests and per-key decryption templates, and lyrics and AAC-LC licenses when the backend has no media-user-token to ask Apple itself; required for real downloads | `internal/wrapper#Client` |
 | wrapper-manager | Upstream v2 gateway in front of one wrapper-lite per account (at most 10 accounts); the only upstream wrapper with the login API behind the console's Account page (`login_supported`) | `internal/wrapper#Client.StartLogin` |
-| Managed wrapper | A wrapper-lite that amdl runs itself in a QEMU guest on the backend's machine (`amdl wrapper install`); it logs in by booting the guest with the account, and `GET /wrapper/status` describes it in `managed` | `internal/wrapperhost#Supervisor` |
+| Managed wrapper | A wrapper-lite that amdl runs itself on the backend's machine, under wrapper-manager in a QEMU guest or, on Linux x86_64, natively (`amdl wrapper install`); it logs in through the manager's HTTP login, and `GET /wrapper/status` describes it in `managed` | `internal/wrapperhost#Supervisor` |
 | Key template | The `ctx` and `state` tables wrapper-lite's `/key` returns for a FairPlay key URI; `internal/fairplay` decrypts samples with it, in-process | `internal/fairplay#Template` |
 | Record | An album or catalog playlist amdl keeps: its tracks and per track its slots; the only truth of what is downloaded. The API calls it a resource | `internal/domain#Album`, `internal/domain#Playlist` |
 | Slot | One quality of one track copy: `main`, the first quality with the plain file name, or a codec, another quality with a suffixed name | `internal/domain#File` |

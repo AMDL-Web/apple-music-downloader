@@ -218,7 +218,7 @@ func localCheck(dirs local.Dirs) check {
 // is installed and the backend would find no QEMU to run it, else "".
 func localQEMUMissing(dirs local.Dirs) string {
 	in, err := wrapperhost.Home{Dir: dirs.WrapperDir()}.Current()
-	if err != nil || in.QEMU != "" {
+	if err != nil || in.QEMU != "" || in.Native() {
 		return ""
 	}
 	if _, err := wrapperhost.FindQEMU("", runtime.GOOS, exec.LookPath, exists); err == nil {

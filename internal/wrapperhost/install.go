@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -18,7 +19,10 @@ import (
 // disks survive updates; a bare-lite disk is set aside for a fresh manager
 // login. report hears of both downloads as one: Done and Total count the
 // bytes of both.
-func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, report func(Progress)) (Installed, error) {
+//
+// With native the manager runs as a process of this machine (NativeNext):
+// it is copied out of the guest's initramfs and no guest disk is made.
+func (h Home) Install(ctx context.Context, f Fetcher, p Pin, native bool, now time.Time, report func(Progress)) (Installed, error) {
 	if err := p.valid(); err != nil {
 		return Installed{}, err
 	}
@@ -44,7 +48,7 @@ func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, repo
 	}
 	report(Progress{Phase: Unpacking})
 	in, err := h.unpack(zipPath, Installed{ID: p.Commit[:min(12, len(p.Commit))], Commit: p.Commit,
-		SHA256: p.SHA256, Lite: p.Lite, Source: "release guest-" + p.Commit[:min(12, len(p.Commit))], At: now})
+		SHA256: p.SHA256, Lite: p.Lite, Source: "release guest-" + p.Commit[:min(12, len(p.Commit))], At: now}, native)
 	if err == nil {
 		_ = os.Remove(zipPath) // unpacked; a leftover only costs disk
 	}
@@ -65,8 +69,8 @@ func shifted(report func(Progress), offset, total int64) func(Progress) {
 // Import installs a manager-qemu-guest zip or a directory holding its
 // kernel, manager initramfs and empty data.img. Bare-lite imports are refused.
 // The guest's wrapper-lite payload is the built-in pin's, since an import
-// carries none.
-func (h Home) Import(path string, now time.Time) (Installed, error) {
+// carries none. native is as for Install.
+func (h Home) Import(path string, native bool, now time.Time) (Installed, error) {
 	if err := Builtin.Lite.complete(); err != nil {
 		return Installed{}, fmt.Errorf("this amdl build cannot pin a payload for an imported guest: %w; update amdl", err)
 	}
@@ -77,7 +81,7 @@ func (h Home) Import(path string, now time.Time) (Installed, error) {
 	if err != nil {
 		return Installed{}, err
 	}
-	return h.unpack(path, Installed{ID: "import-" + sum[:12], SHA256: sum, Lite: Builtin.Lite, Source: "import of " + filepath.Base(path), At: now})
+	return h.unpack(path, Installed{ID: "import-" + sum[:12], SHA256: sum, Lite: Builtin.Lite, Source: "import of " + filepath.Base(path), At: now}, native)
 }
 
 func (h Home) prepare() error {
@@ -94,8 +98,9 @@ const unpackLimit = 512 << 20
 
 // unpack copies the guest files out of src, a zip or a directory, into
 // assets/<id>, seeds data.img if there is none, records in as installed and
-// removes the assets it replaced.
-func (h Home) unpack(src string, in Installed) (Installed, error) {
+// removes the assets it replaced. A native install instead copies the manager
+// out of the initramfs and makes its working directory.
+func (h Home) unpack(src string, in Installed, native bool) (Installed, error) {
 	dst := h.path("assets", in.ID)
 	tmp := dst + ".tmp"
 	_ = os.RemoveAll(tmp) // a failed earlier attempt
@@ -112,9 +117,20 @@ func (h Home) unpack(src string, in Installed) (Installed, error) {
 			return Installed{}, fmt.Errorf("%s has no %s; expected a manager-qemu-guest artifact", src, name)
 		}
 	}
+	if native {
+		if err := extractManager(filepath.Join(tmp, initrdName), filepath.Join(tmp, managerName)); err != nil {
+			return Installed{}, err
+		}
+		for _, name := range []string{kernelName, initrdName, imageName} {
+			_ = os.Remove(filepath.Join(tmp, name)) // the guest's files; a leftover only costs disk
+		}
+	}
 	_ = os.RemoveAll(dst) // a reinstall of the same id
 	if err := os.Rename(tmp, dst); err != nil {
 		return Installed{}, err
+	}
+	if native {
+		return h.recordNative(in)
 	}
 	layout, err := h.managerDisk(filepath.Join(dst, imageName))
 	if err != nil {
@@ -137,6 +153,40 @@ func (h Home) unpack(src string, in Installed) (Installed, error) {
 	if err := writeJSON(h.path("disk.json"), layout); err != nil {
 		return Installed{}, err
 	}
+	return h.record(in)
+}
+
+// recordNative records a native install. Its port is kept in native.json,
+// which survives uninstall(false) as disk.json does for a guest, so
+// wrapper.address stays valid across reinstalls.
+func (h Home) recordNative(in Installed) (Installed, error) {
+	if err := os.MkdirAll(h.path(nativeDir), 0o700); err != nil {
+		return Installed{}, err
+	}
+	var kept struct {
+		Port int `json:"port"`
+	}
+	if raw, err := os.ReadFile(h.path("native.json")); err == nil {
+		_ = json.Unmarshal(raw, &kept) // a damaged file only loses the port
+	}
+	in.Kind, in.Runner, in.QEMU, in.Port = ManagerGuest, NativeRunner, "", kept.Port
+	if prev, err := h.Current(); err == nil && prev.Port != 0 {
+		in.Port = prev.Port
+	}
+	if in.Port == 0 {
+		var err error
+		if in.Port, err = freePort(); err != nil {
+			return Installed{}, err
+		}
+	}
+	if err := writeJSON(h.path("native.json"), map[string]int{"port": in.Port}); err != nil {
+		return Installed{}, err
+	}
+	return h.record(in)
+}
+
+// record writes in as installed and removes the assets it replaced.
+func (h Home) record(in Installed) (Installed, error) {
 	if err := writeJSON(h.path("installed.json"), in); err != nil {
 		return Installed{}, err
 	}

@@ -191,7 +191,8 @@ amdl only needs its address. Four ways to get one:
 - **On Linux with user namespaces** (`unshare -Ur true` succeeds), run
   `wrapper-lite-rootless` or wrapper-manager v2 natively on the same machine, then use
   `--wrapper http://127.0.0.1:12340` (wrapper-lite's default port).
-- **Let amdl run it** in a QEMU guest on this machine: [A wrapper amdl runs](#a-wrapper-amdl-runs).
+- **Let amdl run it** on this machine, natively on Linux x86_64 and in a QEMU guest
+  elsewhere: [A wrapper amdl runs](#a-wrapper-amdl-runs).
   This is the self-contained setup for macOS and Windows.
 - **On macOS, Windows, or Linux without user namespaces** (such as Synology DSM), run
   upstream's `wrapper-lite-qemu` yourself, which boots wrapper-lite in a small QEMU guest
@@ -222,12 +223,18 @@ Notes on `wrapper-lite-qemu`, from its sources:
 ### A wrapper amdl runs
 
 ```bash
-amdl wrapper install          # QEMU, then the wrapper-manager guest
+amdl wrapper install          # the wrapper-manager guest, and QEMU where it needs one
 amdl service install          # runs the backend, which runs the wrapper
 amdl wrapper login            # asks for the Apple ID, password and any two-step code
 ```
 
-`amdl wrapper install` needs QEMU (`qemu-system-x86_64`). Without it, it offers to run
+On Linux x86_64 where `unshare -Ur true` succeeds, a new install needs no QEMU: amdl
+copies the `wrapper-manager` binary out of the guest's initramfs, the same pinned and
+checked build, and runs it as a process of this machine, which starts wrapper-lite with
+its rootless launcher. See [The native manager](#the-native-manager). An install that
+already runs in QEMU, with its accounts on `data.img`, stays in QEMU.
+
+Everywhere else, `amdl wrapper install` needs QEMU (`qemu-system-x86_64`). Without it, it offers to run
 `brew install qemu` on macOS or `winget install --id SoftwareFreedomConservancy.QEMU -e`
 on Windows (pass `--yes` when no one can answer), and prints the package command on
 Linux, where it needs `sudo`; `--qemu PATH` names one elsewhere. It then downloads
@@ -255,8 +262,8 @@ whenever the pin changes, checks it against the sha256 it is given
 built into amdl.
 Running `amdl wrapper install` again replaces a guest whose sha256 differs from the pin.
 
-The desktop app's setup screen does the same in standalone mode, row by row: it shows
-the QEMU or ffmpeg package command and runs it after Run (it only shows a command that
+The desktop app's setup screen does the same in standalone mode, row by row (no QEMU
+row where the manager runs natively): it shows the QEMU or ffmpeg package command and runs it after Run (it only shows a command that
 needs `sudo`), downloads and checks the guest with progress and Cancel, starts the
 backend and takes the Apple ID and two-step code.
 
@@ -278,7 +285,8 @@ desktop app), then `amdl config set wrapper.address=<address>` and
 
 | Host | Acceleration |
 | --- | --- |
-| Linux | KVM when `/dev/kvm` opens for you (the `kvm` group), else TCG |
+| Linux x86_64 with user namespaces | none needed: the manager runs natively (`accel` is `native`) |
+| Other Linux | KVM when `/dev/kvm` opens for you (the `kvm` group), else TCG |
 | Windows x64 | WHPX, which needs the *Windows Hypervisor Platform* feature, else TCG |
 | Intel Mac | HVF |
 | Apple Silicon Mac | TCG: the guest is x86_64, which HVF cannot run there |
@@ -299,6 +307,20 @@ it, so a stop or a crash of the host loses no installed payload or login.
 Accounts are discovered through GET /status's data.instances; each token is read
 through GET /token?instance=<id>, and logout removes just that id. Credentials
 travel over the loopback HTTP login API, never boot arguments.
+
+#### The native manager
+
+A native install keeps the manager binary in `assets/<id>/wrapper-manager` and runs it
+with `native/` under the wrapper directory as its working directory, so its registry
+is `native/data/instances.json`, account directories are under
+`native/data/wrapper/rootfs/data/instances/`, and the payload is in
+`native/data/wrapper/`. It listens on `127.0.0.1` at the port kept in `native.json`,
+which, like `native/`, survives an uninstall without purge. amdl stops it with SIGTERM,
+which stops each account's wrapper-lite, and kills it after 10 seconds; on Linux the
+kernel sends it SIGTERM when the backend dies. Memory is not reserved: each account's
+wrapper-lite is an ordinary process. To move a QEMU install to the native manager, run
+`amdl wrapper uninstall --purge` (which logs every account out), then
+`amdl wrapper install` and log in again.
 
 Updating a bare-lite guest preserves its entire disk as an owner-only
 `data-lite-*.img` backup beside data.img, recorded in installed.json's legacy_disk.

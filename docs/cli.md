@@ -444,7 +444,8 @@ that does not run on this machine's files there is no ffmpeg check here. `amdl s
 ## A wrapper amdl runs
 
 `amdl wrapper install|update|import|uninstall|start|stop|logs` manage a wrapper that the
-local backend runs in a QEMU guest (`internal/wrapperhost`); the steps, platforms and
+local backend runs, natively on Linux x86_64 and in a QEMU guest elsewhere
+(`internal/wrapperhost`); the steps, platforms and
 limits are in [install.md](install.md#a-wrapper-amdl-runs). These commands work on the
 local files and talk to no server. `wrapper status`, `login`, `2fa` and `logout` stay API
 commands: with a managed wrapper the backend logs in through the guest, so they work as

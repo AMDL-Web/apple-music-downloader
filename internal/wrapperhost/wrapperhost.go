@@ -1,9 +1,12 @@
-// Package wrapperhost installs and runs wrapper-manager in a QEMU guest for
-// the desktop app and amdl serve --local. The manager's registry, per-account
-// state and wrapper-lite payload all live on the owner-only account disk.
-// Guest assets and the wrapper-lite payload are downloaded and verified on
-// the host, and the guest's manager installs the payload from a loopback
-// server; QEMU is supplied by the host. Credentials reach the manager through loopback HTTP only.
+// Package wrapperhost installs and runs wrapper-manager for the desktop app
+// and amdl serve --local: in a QEMU guest, or, on Linux x86_64 with user
+// namespaces, the guest's own manager binary as a process here
+// (NativeRunner). The manager's registry, per-account state and wrapper-lite
+// payload live on the owner-only account disk, or in the native manager's
+// owner-only directory. Guest assets and the wrapper-lite payload are
+// downloaded and verified on the host, and the manager installs the payload
+// from a loopback server; QEMU is supplied by the host. Credentials reach the
+// manager through loopback HTTP only.
 package wrapperhost
 
 import (
@@ -66,6 +69,9 @@ type Installed struct {
 	// QEMU is the emulator chosen at install (--qemu), else empty for
 	// FindQEMU at each start.
 	QEMU string `json:"qemu,omitempty"`
+	// Runner is NativeRunner when the manager runs as a process of this
+	// machine; empty for a QEMU guest.
+	Runner string `json:"runner,omitempty"`
 }
 
 // ErrNotInstalled means no guest has been installed.

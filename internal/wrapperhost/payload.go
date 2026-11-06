@@ -67,7 +67,9 @@ type payloadServer struct {
 	URL string
 }
 
-func servePayload(path string, l LitePin) (*payloadServer, error) {
+// host is the loopback as the manager reaches it: guestHost from a guest,
+// 127.0.0.1 from a native manager.
+func servePayload(path string, l LitePin, host string) (*payloadServer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -97,7 +99,7 @@ func servePayload(path string, l LitePin) (*payloadServer, error) {
 		http.ServeContent(w, r, l.Artifact+".zip", st.ModTime(), f)
 	})
 	s := &payloadServer{srv: &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}}
-	s.URL = fmt.Sprintf("http://%s:%d%s", guestHost, ln.Addr().(*net.TCPAddr).Port, name)
+	s.URL = fmt.Sprintf("http://%s:%d%s", host, ln.Addr().(*net.TCPAddr).Port, name)
 	go func() {
 		if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			_ = err // the guest's manager retries, and the boot times out

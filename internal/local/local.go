@@ -481,7 +481,7 @@ func (b Backend) wrapperHost() *wrapperhost.Supervisor {
 		logOut = io.Discard
 	}
 	qemu := in.QEMU
-	if qemu == "" {
+	if qemu == "" && !in.Native() {
 		if qemu, err = wrapperhost.FindQEMU("", runtime.GOOS, exec.LookPath, exists); err != nil {
 			fmt.Fprintf(logOut, "the local wrapper is installed but cannot run: %v\n", err)
 			return nil

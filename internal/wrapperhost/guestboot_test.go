@@ -236,7 +236,7 @@ func TestGuestBoot(t *testing.T) {
 			if err := home.prepare(); err != nil {
 				return err
 			}
-			_, err := home.unpack(guestDir, Installed{ID: "guestboot", Lite: pin.Lite, Source: "guestboot of " + guestDir, At: now})
+			_, err := home.unpack(guestDir, Installed{ID: "guestboot", Lite: pin.Lite, Source: "guestboot of " + guestDir, At: now}, false)
 			return err
 		})
 	} else {
@@ -261,7 +261,7 @@ func TestGuestBoot(t *testing.T) {
 			if err := copyFile(cached, home.path("download-"+pin.SHA256[:12]+".zip"), 0o600); err != nil {
 				return err
 			}
-			_, err := home.Install(t.Context(), f, pin, now, nil)
+			_, err := home.Install(t.Context(), f, pin, false, now, nil)
 			return err
 		})
 	}

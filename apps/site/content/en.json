@@ -185,7 +185,7 @@
   "quickStart": {
     "kicker": "04 · Quick start",
     "title": "Up and running in a few minutes.",
-    "lead": "You need an Apple Music subscription and a wrapper: the service that holds your Apple Music login. Run the wrapper on a Linux box, or let amdl run it in a QEMU guest on your own machine.",
+    "lead": "You need an Apple Music subscription and a wrapper: the service that holds your Apple Music login. Run the wrapper on a Linux box, or let amdl run it on your own machine: natively on Linux x86_64, in a QEMU guest elsewhere.",
     "tabs": {
       "binary": "Binary",
       "docker": "Docker"
@@ -202,7 +202,7 @@
         },
         {
           "title": "Get a wrapper",
-          "text": "This downloads upstream's wrapper guest and checks it against a pinned hash; it needs QEMU, which it offers to install. Already run a wrapper on a NAS or server? Skip this step."
+          "text": "This downloads upstream's wrapper guest and checks it against a pinned hash; on Linux x86_64 it runs the wrapper natively, elsewhere it needs QEMU, which it offers to install. Already run a wrapper on a NAS or server? Skip this step."
         },
         {
           "title": "Run the backend",

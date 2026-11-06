@@ -3130,8 +3130,9 @@ components:
     ManagedWrapper:
       type: object
       description: >-
-        Present only when amdl runs the wrapper on this machine in a QEMU
-        guest (amdl wrapper install). While that guest boots or is stopped,
+        Present only when amdl runs the wrapper on this machine (amdl wrapper
+        install), in a QEMU guest or, on Linux x86_64, natively. While it
+        starts or is stopped,
         GET /wrapper/status answers 200 with ready false instead of 503.
       required: [mode, accel, accel_fallback, qemu, guest, login_residue]
       properties:
@@ -3140,13 +3141,13 @@ components:
           enum: [starting, serving, login, stopped, failed]
         accel:
           type: string
-          description: The QEMU accelerator in use, such as kvm, whpx, hvf or tcg (plain emulation).
+          description: The QEMU accelerator in use, such as kvm, whpx, hvf or tcg (plain emulation), or native when the manager runs as a process of this machine without QEMU.
         accel_fallback:
           type: boolean
           description: The chosen accelerator failed and the guest runs on tcg.
         qemu:
           type: string
-          description: The QEMU binary that runs the guest.
+          description: The QEMU binary that runs the guest; empty when accel is native.
         guest:
           type: string
           description: The installed guest, named by the commit it was built from or as an import.

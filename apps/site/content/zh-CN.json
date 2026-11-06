@@ -185,7 +185,7 @@
   "quickStart": {
     "kicker": "04 · 快速开始",
     "title": "几分钟就能跑起来。",
-    "lead": "你需要 Apple Music 订阅，和一个 wrapper：保管你 Apple Music 登录状态的服务。wrapper 可以跑在一台 Linux 机器上，也可以交给 amdl，在你自己电脑的 QEMU 虚拟机里运行。",
+    "lead": "你需要 Apple Music 订阅，和一个 wrapper：保管你 Apple Music 登录状态的服务。wrapper 可以跑在一台 Linux 机器上，也可以交给 amdl 在你自己电脑上运行：Linux x86_64 上原生运行，其他系统在 QEMU 虚拟机里。",
     "tabs": {
       "binary": "二进制",
       "docker": "Docker"
@@ -202,7 +202,7 @@
         },
         {
           "title": "准备 wrapper",
-          "text": "这条命令会下载上游的 wrapper 虚拟机，并按固定的哈希校验；它需要 QEMU，没装会提示你安装。已经在 NAS 或服务器上跑着 wrapper 的话，跳过这一步。"
+          "text": "这条命令会下载上游的 wrapper 虚拟机，并按固定的哈希校验；Linux x86_64 上 wrapper 原生运行，其他系统需要 QEMU，没装会提示你安装。已经在 NAS 或服务器上跑着 wrapper 的话，跳过这一步。"
         },
         {
           "title": "运行后端",

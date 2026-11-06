@@ -10,7 +10,8 @@ import (
 	"amdl/internal/wrapperhost"
 )
 
-// Guest is the wrapper guest this computer runs in QEMU.
+// Guest is the wrapper guest this computer runs in QEMU, or its manager run
+// natively (Setup.Native).
 type Guest struct {
 	State     State
 	Installed wrapperhost.Installed
@@ -105,7 +106,7 @@ func (s *Setup) installGuest() {
 					g.Size = size
 				}
 			})
-			in, err = s.deps.Home.Install(ctx, s.deps.Fetcher, pin, s.deps.Now(), report)
+			in, err = s.deps.Home.Install(ctx, s.deps.Fetcher, pin, s.deps.Home.NativeNext(s.deps.NativeHost), s.deps.Now(), report)
 		}
 		canceled := errors.Is(ctx.Err(), context.Canceled)
 		cancel()
@@ -165,7 +166,7 @@ func (s *Setup) ImportGuest(path string) {
 		resume, err := s.pauseGuest()
 		var in wrapperhost.Installed
 		if err == nil {
-			in, err = s.deps.Home.Import(path, s.deps.Now())
+			in, err = s.deps.Home.Import(path, s.deps.Home.NativeNext(s.deps.NativeHost), s.deps.Now())
 		}
 		if resume != nil {
 			err = errors.Join(err, resume())

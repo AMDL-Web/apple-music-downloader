@@ -97,6 +97,11 @@ var setupStages = []setupStage{
 	{name: "02-local", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) {
 		s.FFmpeg = setup.Tool{State: setup.Ready, Path: ffmpegPath, Source: "system"}
 	}},
+	{name: "02b-local-native", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) {
+		// Linux x86_64 with user namespaces: the manager runs without QEMU.
+		s.Native, s.QEMU = true, setup.Tool{State: setup.Ready}
+		s.FFmpeg = setup.Tool{State: setup.Ready, Path: "/usr/bin/ffmpeg", Source: "system"}
+	}},
 	{name: "03-consent", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, tt *ui.Tester) {
 		s.FFmpeg = setup.Tool{State: setup.Ready, Path: ffmpegPath, Source: "system"}
 		tt.Frame()

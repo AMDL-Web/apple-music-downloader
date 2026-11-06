@@ -168,7 +168,7 @@ func TestInstallReportsEachStep(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got []Progress
-	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, p, time.Now(), func(pr Progress) { got = append(got, pr) }); err != nil {
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, p, false, time.Now(), func(pr Progress) { got = append(got, pr) }); err != nil {
 		t.Fatal(err)
 	}
 	want := []Progress{
@@ -192,7 +192,7 @@ func TestInstallFetchesThePayloadToo(t *testing.T) {
 	art := fakeArtifact(t, "", "empty image")
 	p := pinFor(art, "bde3335f47a30518")
 	var last Progress
-	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, p, time.Now(), func(pr Progress) {
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, p, false, time.Now(), func(pr Progress) {
 		if pr.Phase == Downloading {
 			last = pr
 		}
@@ -226,7 +226,7 @@ func TestInstallKeepsTheAccount(t *testing.T) {
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
 	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
 	first := fakeArtifact(t, "", "empty image")
-	in, err := h.Install(context.Background(), &fakeFetcher{body: first}, pinFor(first, "bde3335f47a30518"), now, nil)
+	in, err := h.Install(context.Background(), &fakeFetcher{body: first}, pinFor(first, "bde3335f47a30518"), false, now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestInstallKeepsTheAccount(t *testing.T) {
 	}
 	os.WriteFile(h.ImagePath(), []byte("logged-in tokens"), 0o600)
 	second := fakeArtifact(t, "qemu/", "another empty image")
-	up, err := h.Install(context.Background(), &fakeFetcher{body: second}, pinFor(second, "0123456789abcdef"), now, nil)
+	up, err := h.Install(context.Background(), &fakeFetcher{body: second}, pinFor(second, "0123456789abcdef"), false, now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func TestImportRejectsAnUnrelatedZip(t *testing.T) {
 	z.Close()
 	p := filepath.Join(t.TempDir(), "x.zip")
 	os.WriteFile(p, b.Bytes(), 0o600)
-	if _, err := h.Import(p, time.Now()); err == nil || !strings.Contains(err.Error(), "has no") {
+	if _, err := h.Import(p, false, time.Now()); err == nil || !strings.Contains(err.Error(), "has no") {
 		t.Errorf("import of an unrelated zip: %v", err)
 	}
 }
@@ -339,7 +339,7 @@ func TestInstallAndImportRecordThePayloadPin(t *testing.T) {
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
 	art := fakeArtifact(t, "", "[]")
 	pin := pinFor(art, "bde3335f47a30518")
-	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pin, time.Now(), nil)
+	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pin, false, time.Now(), nil)
 	if err != nil || in.Lite != pin.Lite {
 		t.Fatalf("install: %+v, %v", in.Lite, err)
 	}
@@ -348,7 +348,7 @@ func TestInstallAndImportRecordThePayloadPin(t *testing.T) {
 	}
 	zipPath := filepath.Join(t.TempDir(), "guest.zip")
 	os.WriteFile(zipPath, art, 0o600)
-	in, err = h.Import(zipPath, time.Now())
+	in, err = h.Import(zipPath, false, time.Now())
 	if err != nil || in.Lite != Builtin.Lite {
 		t.Fatalf("import: %+v, %v", in.Lite, err)
 	}

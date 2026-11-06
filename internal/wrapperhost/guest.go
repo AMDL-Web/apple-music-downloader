@@ -18,13 +18,16 @@ import (
 	"amdl/internal/sysproc"
 )
 
-// guest is one running QEMU.
+// guest is one running QEMU, or a native manager process.
 type guest struct {
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
 	port  int           // the manager's loopback port
 	done  chan struct{} // closed once QEMU has exited
 	err   error         // QEMU's exit, valid after done
+	// native is a manager running as a process here: it stops on SIGTERM,
+	// and has no POST /shutdown (that powers a guest off).
+	native bool
 
 	// answered is set once the manager answered /status: only then can it
 	// take POST /shutdown.
@@ -42,6 +45,17 @@ type guest struct {
 // exited. QEMU dies with this process.
 func startGuest(qemu string, o RunOpts, onLine func(string), onExit func()) (*guest, error) {
 	cmd := exec.Command(qemu, Args(o)...)
+	tieToParent(cmd)
+	return startProc(cmd, o.HostPort, false, onLine, onExit)
+}
+
+// startNative starts a native manager like startGuest a guest.
+func startNative(cmd *exec.Cmd, port int, onLine func(string), onExit func()) (*guest, error) {
+	tieNative(cmd)
+	return startProc(cmd, port, true, onLine, onExit)
+}
+
+func startProc(cmd *exec.Cmd, port int, native bool, onLine func(string), onExit func()) (*guest, error) {
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -51,7 +65,6 @@ func startGuest(qemu string, o RunOpts, onLine func(string), onExit func()) (*gu
 		return nil, err
 	}
 	cmd.Stdout, cmd.Stderr = pw, pw
-	tieToParent(cmd)
 	sysproc.NoConsole(cmd)
 	if err := cmd.Start(); err != nil {
 		pr.Close()
@@ -64,7 +77,7 @@ func startGuest(qemu string, o RunOpts, onLine func(string), onExit func()) (*gu
 		pr.Close()
 		return nil, err
 	}
-	g := &guest{cmd: cmd, stdin: stdin, port: o.HostPort, done: make(chan struct{})}
+	g := &guest{cmd: cmd, stdin: stdin, port: port, native: native, done: make(chan struct{})}
 	read := make(chan struct{})
 	go func() {
 		defer close(read)
@@ -133,7 +146,14 @@ var (
 // killed. The data disk mounts with commit=1, so a kill loses at most the
 // last second of writes.
 func (g *guest) stop() {
-	if g.answered.Load() && !g.exited() && g.askShutdown() {
+	if g.native && !g.exited() && terminate(g.cmd.Process) == nil {
+		select {
+		case <-g.done:
+			return
+		case <-time.After(shutdownWait):
+		}
+	}
+	if !g.native && g.answered.Load() && !g.exited() && g.askShutdown() {
 		select {
 		case <-g.done:
 			return

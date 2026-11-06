@@ -141,7 +141,8 @@ type Instance struct {
 	Degraded bool   `json:"degraded"`
 }
 
-// Managed describes a wrapper amdl runs in a QEMU guest on this machine.
+// Managed describes a wrapper amdl runs on this machine, in a QEMU guest or
+// natively (Accel is then wrapperhost.NativeAccel).
 type Managed struct {
 	// Mode is starting, serving, login, stopped or failed.
 	Mode  string `json:"mode"`

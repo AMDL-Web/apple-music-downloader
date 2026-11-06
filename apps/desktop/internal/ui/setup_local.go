@@ -49,8 +49,10 @@ func (a *App) setupLocal(c *ui.Context, k *Tokens) {
 		if f.elsewhere {
 			count(a.wrapperAddressRow(c, k, applied))
 		} else {
-			count(s.QEMU.State)
-			a.toolRow(c, k, "QEMU", s.QEMU, nil)
+			if !s.Native {
+				count(s.QEMU.State)
+				a.toolRow(c, k, "QEMU", s.QEMU, nil)
+			}
 			count(s.Guest.State)
 			a.guestRow(c, k)
 			count(a.wrapperRow(c, k, applied))

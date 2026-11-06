@@ -42,7 +42,7 @@ capabilities as MCP tools, and `amdl` alone in a terminal opens an interactive i
 for people, which `make tui-web` also builds for browsers over the desktop demo's made-up
 backend. Without a server of its own, `amdl service install` runs the backend on this
 machine as a background service that starts at login, and `amdl wrapper install` gives it
-a wrapper of its own: wrapper-manager (up to ten accounts) in a QEMU guest that the backend runs
+a wrapper of its own: wrapper-manager (up to ten accounts), which the backend runs natively on Linux x86_64 and in a QEMU guest elsewhere
 ([docs/install.md](docs/install.md#a-wrapper-amdl-runs)). [docs/cli.md](docs/cli.md)
 describes it all.
 
@@ -57,8 +57,8 @@ build and preview it.
 `apps/desktop` is a native app for macOS, Windows and Linux, drawn with
 [MyGo](https://github.com/egoist/mygo)'s native UI. It runs either as a client of a remote
 server or as a standalone backend that runs the pipeline in-process and talks to a wrapper:
-one on this computer, which the app's setup screen installs with QEMU and ffmpeg as
-`amdl wrapper install` does, or one on another machine. Standalone mode runs the backend through `internal/local` on a loopback port, or
+one on this computer, which the app's setup screen installs with ffmpeg, and QEMU where
+the manager cannot run natively, as `amdl wrapper install` does, or one on another machine. Standalone mode runs the backend through `internal/local` on a loopback port, or
 uses the one this computer already runs, such as `amdl service`, so the app and the command
 line share one backend and one download history; the app's own packages sit under
 apps/desktop/internal, private to it. Each release attaches unsigned packages of it for
@@ -84,7 +84,8 @@ What the server needs:
   launchers run on Linux x86_64 and need user namespaces (`unshare -Ur true` must succeed);
   on arm64 or a host without them, such as Synology DSM, use wrapper-manager v2's QEMU
   variant. See [Wrapper](docs/deployment.md#the-wrapper). With the binary install
-  on macOS, Windows or Linux, amdl can run one itself in QEMU (`amdl wrapper install`).
+  on macOS, Windows or Linux, amdl can run one itself (`amdl wrapper install`): natively on
+  Linux x86_64, in QEMU elsewhere.
 - Docker with Compose, or Go (version in [`go.mod`](go.mod)) and `ffmpeg`.
 
 ## Quick start
@@ -97,7 +98,7 @@ Two ways to run it, side by side:
 | Install | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh` (PowerShell: see the guide) | Copy [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | Runs as | A service that starts at login: `amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | Install it yourself; `amdl doctor` prints the command | In the image |
-| Wrapper | Elsewhere, or one amdl runs in QEMU: `amdl wrapper install`; none to [try it in simulate mode](docs/install.md#try-it-without-a-wrapper) | A compose service on the same host |
+| Wrapper | Elsewhere, or one amdl runs (natively on Linux x86_64, else in QEMU): `amdl wrapper install`; none to [try it in simulate mode](docs/install.md#try-it-without-a-wrapper) | A compose service on the same host |
 | Guide | [docs/install.md](docs/install.md) | Below and [docs/deployment.md](docs/deployment.md) |
 
 The rest of this section is the Docker path. The repository's
@@ -336,7 +337,7 @@ so it stays valid when files inside the package are split.
 | How does the terminal interface work? | `apps/amdl/internal/tui#Run` |
 | How do the clients call the API? | `internal/client#Client` |
 | How does a client run the backend on this machine? | `internal/local#Backend` |
-| How does amdl run a wrapper in QEMU? | `internal/wrapperhost#Supervisor` |
+| How does amdl run a wrapper in QEMU or natively? | `internal/wrapperhost#Supervisor` |
 | How is the website built? | `apps/site/build.mjs#renderPage` |
 
 ## Development

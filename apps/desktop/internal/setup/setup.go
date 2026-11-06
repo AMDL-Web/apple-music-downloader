@@ -68,6 +68,9 @@ type Deps struct {
 	// FFmpeg finds ffmpeg as the app runs it, from the settings' override.
 	FFmpeg func(override string) (path, source string, err error)
 	Home   wrapperhost.Home
+	// NativeHost is whether this computer can run the wrapper's manager
+	// without QEMU (wrapperhost.NativeHost).
+	NativeHost bool
 	// Pin names the guest download; Fetcher fetches it.
 	Pin     func(context.Context) (wrapperhost.Pin, error)
 	Fetcher wrapperhost.Fetcher
@@ -87,6 +90,9 @@ type Setup struct {
 
 	FFmpeg Tool
 	QEMU   Tool
+	// Native is whether the wrapper runs, or would install to run, without
+	// QEMU (wrapperhost.Home.NativeNext); QEMU is then Ready and not shown.
+	Native bool
 	Guest  Guest
 	// Run is the package manager command running or last run, or nil.
 	Run *Run
@@ -126,11 +132,12 @@ func SystemDeps(resources string, home wrapperhost.Home, fetcher wrapperhost.Fet
 			p, src, err := ffmpeg.Find(override, resources)
 			return p, src.String(), err
 		},
-		Home:    home,
-		Pin:     pin,
-		Fetcher: fetcher,
-		Exec:    execCommand,
-		Now:     time.Now,
+		Home:       home,
+		NativeHost: wrapperhost.NativeHost(runtime.GOOS, runtime.GOARCH),
+		Pin:        pin,
+		Fetcher:    fetcher,
+		Exec:       execCommand,
+		Now:        time.Now,
 	}
 }
 
@@ -155,6 +162,7 @@ func (s *Setup) Check(ffmpegOverride string) {
 	if !s.running("ffmpeg") {
 		s.FFmpeg = s.findFFmpeg(ffmpegOverride)
 	}
+	s.Native = s.deps.Home.NativeNext(s.deps.NativeHost)
 	if !s.running("QEMU") {
 		s.QEMU = s.findQEMU()
 	}
@@ -183,6 +191,9 @@ func (s *Setup) findFFmpeg(override string) Tool {
 }
 
 func (s *Setup) findQEMU() Tool {
+	if s.Native {
+		return Tool{State: Ready}
+	}
 	configured := ""
 	if in, err := s.deps.Home.Current(); err == nil {
 		configured = in.QEMU

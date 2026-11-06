@@ -109,6 +109,10 @@ test('a wrapper amdl runs is not a config.yaml address', () => {
   assert.deepEqual(row.value, { text: 'This machine, QEMU (tcg)' });
   assert.equal(row.title, 'wrapper:20020');
   assert.equal(chipOf(row).label, 'Run by amdl');
+  // A manager run natively has no QEMU to name.
+  const native = { logged_in: true, managed: { mode: 'serving', accel: 'native', qemu: '' } };
+  const [nrow] = factRows('account', full, false, native).filter((r) => r.id === 'wrapper_address');
+  assert.deepEqual(nrow.value, { text: 'This machine, native' });
   // Otherwise the address is the wrapper.address field, and no row holds its place.
   assert.equal(factRows('account', full, false, { logged_in: true }).find((r) => r.id === 'wrapper_address'), undefined);
   assert.equal(factRows('account', full, true, managed).find((r) => r.id === 'wrapper_address'), undefined);

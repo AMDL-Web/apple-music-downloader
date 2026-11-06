@@ -45,17 +45,25 @@ func viewOf(h wrapperhost.Home) managedView {
 	if in, err := h.Current(); err == nil {
 		on := h.Enabled() // meaningless without an installed guest, so absent then
 		v.Installed, v.URL, v.Enabled = &in, in.URL(), &on
-		v.QEMU = in.QEMU
-		if v.QEMU == "" {
-			v.QEMU, _ = wrapperhost.FindQEMU("", runtime.GOOS, exec.LookPath, exists) // empty when missing
+		if in.Native() {
+			v.Accel = wrapperhost.NativeAccel
+		} else {
+			v.QEMU = in.QEMU
+			if v.QEMU == "" {
+				v.QEMU, _ = wrapperhost.FindQEMU("", runtime.GOOS, exec.LookPath, exists) // empty when missing
+			}
+			v.Accel = wrapperhost.Accel(runtime.GOOS, runtime.GOARCH, wrapperhost.KVMUsable())
 		}
-		v.Accel = wrapperhost.Accel(runtime.GOOS, runtime.GOARCH, wrapperhost.KVMUsable())
 	}
 	if st, err := h.ReadState(); err == nil {
 		v.State = &st
 	}
 	return v
 }
+
+// nativeHost reports whether this machine can run the wrapper's manager
+// without QEMU; tests replace it.
+var nativeHost = func() bool { return wrapperhost.NativeHost(runtime.GOOS, runtime.GOARCH) }
 
 func exists(p string) bool {
 	_, err := os.Stat(p)
@@ -108,9 +116,13 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 			if update && curErr != nil {
 				return &cliError{Code: "not_installed", exit: exitNotFound, Message: curErr.Error(), Hint: "amdl wrapper install"}
 			}
-			qemu, err := e.ensureQEMU(*qemuFlag)
-			if err != nil {
-				return err
+			// A manager that can run natively needs no QEMU (NativeNext).
+			native := *qemuFlag == "" && h.NativeNext(nativeHost())
+			qemu := ""
+			if !native {
+				if qemu, err = e.ensureQEMU(*qemuFlag); err != nil {
+					return err
+				}
 			}
 			pin, source, err := wrapperhost.CurrentPin(e.ctx, &http.Client{})
 			if err != nil {
@@ -138,7 +150,7 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 				}
 				e.progressf("downloading %s (%d MB, commit %s, %s pin) and checking the sha256",
 					what, size>>20, pin.Commit[:12], source)
-				_, err := h.Install(e.ctx, fetcher, pin, time.Now(), rep.report)
+				_, err := h.Install(e.ctx, fetcher, pin, native, time.Now(), rep.report)
 				rep.finish()
 				if err != nil {
 					return &cliError{Code: "wrapper_download_failed", exit: exitUnavailable, Message: err.Error(),
@@ -166,7 +178,8 @@ func wrapperImportCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := h.Import(args[0], time.Now()); err != nil {
+		native := h.NativeNext(nativeHost())
+		if _, err := h.Import(args[0], native, time.Now()); err != nil {
 			return &cliError{Code: "invalid_request", exit: exitInput, Message: err.Error()}
 		}
 		v := viewOf(h)

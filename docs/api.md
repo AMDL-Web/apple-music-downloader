@@ -217,8 +217,8 @@ playlist covers, library sync and the Apple library need it.
 
 When amdl runs the wrapper itself (`amdl wrapper install`, [install.md](install.md#the-wrapper)),
 the response also carries `managed`: `mode` (`starting`, `serving`, `login`, `stopped` or
-`failed`), the QEMU `accel` in use and whether it fell back to TCG (`accel_fallback`), the
-`qemu` binary, the installed `guest`, `last_error`, and `login_residue`. While mode is
+`failed`), the QEMU `accel` in use (`native` when the manager runs without QEMU) and
+whether it fell back to TCG (`accel_fallback`), the `qemu` binary (empty when native), the installed `guest`, `last_error`, and `login_residue`. While mode is
 `starting` and the backend downloads the guest's wrapper-lite payload before the boot,
 `download` carries its `done_bytes` and `total_bytes`. A booting or stopped managed
 wrapper answers `200` with `ready` false rather than `503`.

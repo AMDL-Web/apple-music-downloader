@@ -36,7 +36,7 @@ Server-Sent Events 接口，以及同一端口上的网页控制台。它以容�
 JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli search "<任务>"` 能找到对应
 的命令。`amdl mcp` 把同样的能力作为 MCP 工具提供；在终端里直接运行 `amdl` 会打开给人用的交互界面，`make tui-web` 把它编译给浏览器，数据来自桌面演示版同一个虚构后端。没有单独部署服务器时，`amdl service install`
 会把后端作为登录即启动的后台服务跑在本机，`amdl wrapper install` 再给它配一个自己的 wrapper：
-由后端在 QEMU 虚拟机里运行的 wrapper-manager（最多十个账户）（[docs/install.md](docs/install.md#a-wrapper-amdl-runs)）。
+由后端运行的 wrapper-manager（最多十个账户；Linux x86_64 上原生运行，其他系统在 QEMU 虚拟机里）（[docs/install.md](docs/install.md#a-wrapper-amdl-runs)）。
 详见 [docs/cli.md](docs/cli.md)。
 
 ### 官网
@@ -48,7 +48,7 @@ JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli se
 
 `apps/desktop` 是一个面向 macOS、Windows 和 Linux 的原生应用，用 [MyGo](https://github.com/egoist/mygo)
 的原生界面绘制。它可以作为远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接
-wrapper：可以是这台电脑上的那个（应用的设置引导会像 `amdl wrapper install` 一样连同 QEMU 和 ffmpeg 一起装好），也可以是别的机器上的。单机模式通过 `internal/local` 在本机回环端口上运行后端；如果这台电脑上已有后端在跑（比如
+wrapper：可以是这台电脑上的那个（应用的设置引导会像 `amdl wrapper install` 一样连同 ffmpeg 一起装好，manager 不能原生运行的系统上还会装 QEMU），也可以是别的机器上的。单机模式通过 `internal/local` 在本机回环端口上运行后端；如果这台电脑上已有后端在跑（比如
 `amdl service`），就直接使用它，所以应用和命令行共用一个后端、一份下载记录；应用自己的包放在
 apps/desktop/internal 下，只归它用。每个版本都附带它的 macOS、Windows 和 Linux 安装包，目前未签名
 （[docs/install.md](docs/install.md#the-desktop-app)）；`make desktop-web` 把同一个应用编译给浏览器，
@@ -71,7 +71,7 @@ apps/desktop/internal 下，只归它用。每个版本都附带它的 macOS、W
 - 一个 wrapper：保存 Apple Music 登录状态的上游服务。原生和 Docker 启动器跑在 Linux x86_64 上，
   需要 user namespace（`unshare -Ur true` 必须能成功）；arm64 或没有 user namespace 的主机，
   例如群晖 DSM，改用 wrapper-manager v2 的 QEMU 变体。见 [Wrapper](docs/deployment.md#the-wrapper)。
-  在 macOS、Windows 或 Linux 上用二进制安装时，也可以让 amdl 自己在 QEMU 里跑一个（`amdl wrapper install`）。
+  在 macOS、Windows 或 Linux 上用二进制安装时，也可以让 amdl 自己跑一个（`amdl wrapper install`）：Linux x86_64 上原生运行，其他系统在 QEMU 里。
 - 带 Compose 的 Docker，或者 Go（版本见 [`go.mod`](go.mod)）加 `ffmpeg`。
 
 ## 快速开始
@@ -84,7 +84,7 @@ apps/desktop/internal 下，只归它用。每个版本都附带它的 macOS、W
 | 安装 | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh`（PowerShell 见指南） | 复制 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | 运行方式 | 登录即启动的后台服务：`amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | 自己安装；`amdl doctor` 会给出安装命令 | 镜像自带 |
-| wrapper | 用别处的，或让 amdl 在 QEMU 里跑一个：`amdl wrapper install`；[用模拟模式试用](docs/install.md#try-it-without-a-wrapper)时不需要 | 同一台机器上的 compose 服务 |
+| wrapper | 用别处的，或让 amdl 跑一个（Linux x86_64 上原生运行，其他在 QEMU 里）：`amdl wrapper install`；[用模拟模式试用](docs/install.md#try-it-without-a-wrapper)时不需要 | 同一台机器上的 compose 服务 |
 | 指南 | [docs/install.md](docs/install.md) | 下文和 [docs/deployment.md](docs/deployment.md) |
 
 本节下面讲 Docker 方式。仓库里的 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) 用 GHCR 上的预构建镜像运行 amdl，两种
@@ -297,7 +297,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 | 终端界面怎么工作？ | `apps/amdl/internal/tui#Run` |
 | 客户端怎么调用 API？ | `internal/client#Client` |
 | 客户端怎么在本机运行后端？ | `internal/local#Backend` |
-| amdl 怎么在 QEMU 里运行 wrapper？ | `internal/wrapperhost#Supervisor` |
+| amdl 怎么在 QEMU 里或原生运行 wrapper？ | `internal/wrapperhost#Supervisor` |
 | 官网怎么构建？ | `apps/site/build.mjs#renderPage` |
 
 ## 开发

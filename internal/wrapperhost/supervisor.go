@@ -134,6 +134,9 @@ func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, erro
 	if log == nil {
 		log = io.Discard
 	}
+	if in.Native() {
+		qemu, accel = "", NativeAccel
+	}
 	s := &Supervisor{home: h, in: in, qemu: qemu, log: log, wake: make(chan struct{}, 1), run: context.Background(), manager: manager,
 		fetcher: Releases{Client: &http.Client{}}}
 	s.st = State{Mode: "stopped", Port: in.Port, Accel: accel, QEMU: qemu}
@@ -307,7 +310,10 @@ func (s *Supervisor) startServingLocked() {
 		return
 	}
 	s.refreshLocked()
-	accounts, err := s.home.accountCount()
+	accounts, err := 0, error(nil)
+	if !s.in.Native() {
+		accounts, err = s.home.accountCount()
+	}
 	if err != nil {
 		// A damaged registry must not under-size a guest restoring many accounts.
 		accounts = MaxAccounts
@@ -322,9 +328,19 @@ func (s *Supervisor) startServingLocked() {
 		s.fetchPayloadLocked(ctx)
 		return
 	}
-	payload, err := servePayload(s.home.payloadPath(s.in.Lite), s.in.Lite)
+	host := guestHost
+	if s.in.Native() {
+		host = "127.0.0.1"
+	}
+	payload, err := servePayload(s.home.payloadPath(s.in.Lite), s.in.Lite, host)
 	if err != nil {
 		s.failLocked(err)
+		return
+	}
+	if s.in.Native() {
+		s.startLocked(ctx, func() (*guest, error) {
+			return startNative(s.home.managerCommand(s.in, payload.URL), s.in.Port, s.consoleLine(), payload.Close)
+		}, payload)
 		return
 	}
 	argsFile := s.home.path(managerArgsName)
@@ -334,8 +350,16 @@ func (s *Supervisor) startServingLocked() {
 		return
 	}
 	kernel, initrd := s.home.assets(s.in)
-	g, err := startGuest(s.qemu, RunOpts{Accel: s.st.Accel, Kernel: kernel, Initrd: initrd, Image: s.home.ImagePath(),
-		HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: GuestMemoryMB(accounts), CPUs: 2, ArgsFile: argsFile}, s.consoleLine(), payload.Close)
+	s.startLocked(ctx, func() (*guest, error) {
+		return startGuest(s.qemu, RunOpts{Accel: s.st.Accel, Kernel: kernel, Initrd: initrd, Image: s.home.ImagePath(),
+			HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: GuestMemoryMB(accounts), CPUs: 2, ArgsFile: argsFile}, s.consoleLine(), payload.Close)
+	}, payload)
+}
+
+// startLocked starts a guest or native manager with start and waits for it
+// to answer in the background.
+func (s *Supervisor) startLocked(ctx context.Context, start func() (*guest, error), payload *payloadServer) {
+	g, err := start()
 	if err != nil {
 		payload.Close()
 		s.g = nil
@@ -352,7 +376,7 @@ func (s *Supervisor) startServingLocked() {
 			return
 		}
 		if err != nil {
-			if failed := s.st.Accel; errors.Is(err, errExited) && failed != "tcg" {
+			if failed := s.st.Accel; errors.Is(err, errExited) && failed != "tcg" && failed != NativeAccel {
 				if line := g.accelFailed(); line != "" {
 					s.setState(func(st *State) { st.Accel, st.AccelFallback = "tcg", true })
 					fmt.Fprintf(s.log, "[amdl] %s could not start the guest (%s); falling back to tcg\n", failed, line)

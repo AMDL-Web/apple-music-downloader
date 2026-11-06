@@ -12,6 +12,10 @@ import (
 	"amdl/internal/wrapperhost"
 )
 
+// The fake guests these tests install are not real initramfs archives, so
+// every install runs in QEMU whatever the host could do.
+func init() { nativeHost = func() bool { return false } }
+
 func feed(r *installReport, clock *time.Time, step time.Duration, doneMB ...int64) {
 	for _, d := range doneMB {
 		*clock = clock.Add(step)

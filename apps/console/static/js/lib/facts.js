@@ -34,7 +34,9 @@ export const FIXED_ROWS = [
 function managedWrapperRow(row, system, managed) {
   const address = system && system.startup && system.startup.wrapper_address;
   const accel = typeof managed.accel === 'string' && managed.accel ? managed.accel : 'QEMU';
-  return { ...row, chip: 'managed', title: address || undefined, value: { text: `This machine, QEMU (${accel})` } };
+  // accel "native": the manager runs as a process of that machine, no QEMU.
+  const text = accel === 'native' ? 'This machine, native' : `This machine, QEMU (${accel})`;
+  return { ...row, chip: 'managed', title: address || undefined, value: { text } };
 }
 
 /**
@@ -62,7 +64,7 @@ export function chipOf(row) {
   if (row.chip === 'config') {
     return { label: 'config.yaml', icon: 'lock', title: `Set in configs/config.yaml (${row.configKey}); restart to change` };
   }
-  if (row.chip === 'managed') return { label: 'Run by amdl', icon: '', title: 'amdl runs it in a QEMU guest; amdl wrapper start, stop and update manage it' };
+  if (row.chip === 'managed') return { label: 'Run by amdl', icon: '', title: 'amdl runs it, natively on Linux x86_64 or in a QEMU guest; amdl wrapper start, stop and update manage it' };
   if (row.chip === 'builtin') return { label: 'Built in', icon: '', title: row.title || 'Fixed by the server' };
   return { label: 'At startup', icon: 'lock', title: 'Read at startup; restart to change' };
 }

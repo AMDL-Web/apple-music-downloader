@@ -29,6 +29,10 @@ func TestMain(m *testing.M) {
 		fakeQEMU(os.Args[1:])
 		return
 	}
+	if os.Getenv("AMDL_FAKE_MANAGER") == "1" {
+		fakeManager(os.Args[1:])
+		return
+	}
 	os.Exit(m.Run())
 }
 
@@ -214,7 +218,7 @@ func startFake(t *testing.T, accel string, prep func(Home), fetcher Fetcher) (*S
 	t.Setenv("AMDL_FAKE_QEMU", "1")
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
 	art := fakeArtifact(t, "", "[]")
-	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), time.Now(), nil); err != nil {
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), false, time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if prep != nil {
@@ -380,7 +384,7 @@ func TestUninstallStopsUntilTheNextInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	art := fakeArtifact(t, "", "[]")
-	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "c0ffee5f47a30518"), time.Now(), nil); err != nil {
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "c0ffee5f47a30518"), false, time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
 	h.SetEnabled(true)
@@ -437,7 +441,7 @@ func TestGuestWithoutAPayloadPinDoesNotBoot(t *testing.T) {
 	t.Setenv("AMDL_FAKE_QEMU", "1")
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
 	art := fakeArtifact(t, "", "[]")
-	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), time.Now(), nil); err != nil {
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), false, time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
 	in, _ := h.Current()
