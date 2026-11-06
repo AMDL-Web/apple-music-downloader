@@ -112,7 +112,12 @@ jobs:
         with:
           node-version: '26'
 
+      # One job runs what CI splits into shards, so the desktop ui package
+      # runs whole and needs more than go test's default 10m per package.
+      # GOFLAGS reaches go test and go test -race; vet and go run ignore it.
       - name: Run the CI gate
+        env:
+          GOFLAGS: -timeout=30m
         run: make check
 
       - name: Get base tag
