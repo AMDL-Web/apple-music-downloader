@@ -15,9 +15,6 @@ import (
 	"amdl/apps/desktop/internal/store"
 )
 
-// refresh is one frame of a 60 Hz display.
-const refresh = time.Second / 60
-
 // flightApp is the queue over the demo backend, with the album page's
 // motion on, and the job its hero shows.
 func flightApp(t *testing.T) (*App, *ui.Tester, *store.Job) {

@@ -23,6 +23,10 @@ import (
 	"amdl/internal/domain"
 )
 
+// refresh is one frame of a 60 Hz display. It lives in a file the race
+// build compiles, as the scenes do.
+const refresh = time.Second / 60
+
 // The scene set: the screens and transitions a look or motion round can
 // break, filmed at 60 Hz in the maintainer's window and checked frame by
 // frame by package filmcheck. tools/lookround runs it, a theme and a scene
