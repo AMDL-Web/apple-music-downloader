@@ -422,6 +422,9 @@ func TestStoreUpdateErrorLeavesSnapshotAndFileUntouched(t *testing.T) {
 	}
 }
 
+// examplePath is the committed example, which configs.Example embeds.
+const examplePath = "../../configs/config.example.yaml"
+
 // The embedded example is the shipped file and creates a config that loads.
 func TestEnsureFileFromEmbeddedExample(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "configs", "config.yaml")

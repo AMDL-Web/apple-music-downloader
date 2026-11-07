@@ -269,8 +269,8 @@ const STAGE_LABELS = { resolve: 'Resolve', download: 'Download', decrypt: 'Decry
  * about a tenth each and the finishing steps a sliver. They add up to 1: they
  * size the stage segments, and the drawer's album bar weights its overall
  * progress with them (lib/album-progress.js). The Go clients use the same
- * values (internal/progress#Weights); TestWeightsMatchConsole there keeps them
- * equal.
+ * values (internal/progress#Weights); TestWeightsMatchConsole in
+ * tools/repocheck keeps them equal.
  */
 export const STAGE_WEIGHTS = Object.freeze({ resolve: 0.13, download: 0.8, decrypt: 0.02, remux: 0.0125, verify: 0.0125, tag: 0.0125, save: 0.0125 });
 

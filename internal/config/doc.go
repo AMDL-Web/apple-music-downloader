@@ -22,5 +22,6 @@
 // owner-only; Default equals the values configs/config.example.yaml sets
 // except the album and artist path formats (TestDefaultMatchesExample); and
 // the example's key set equals the keys derived from Config's YAML tags
-// (TestCommittedExampleDocumentsEveryConfigKey).
+// (TestCommittedExampleDocumentsEveryConfigKey). Both tests are in
+// tools/repocheck.
 package config

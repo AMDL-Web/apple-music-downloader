@@ -10,8 +10,8 @@ import (
 // Shutdown budget. Each step waits at most its own timeout and then moves on,
 // so their sum bounds how long SIGTERM takes. docker-compose.yml's
 // stop_grace_period must stay above that sum, or Docker kills the process
-// before the store is closed; TestShutdownBudgetFitsComposeGracePeriod checks
-// it.
+// before the store is closed; TestShutdownBudgetFitsComposeGracePeriod in
+// tools/repocheck checks it against ShutdownBudget.
 const (
 	// httpDrainTimeout is how long ordinary requests get after the listener
 	// closes. SSE streams end when the drain starts (api.Server.EndStreams,
@@ -51,6 +51,10 @@ var defaultShutdownTimeouts = shutdownTimeouts{
 func (t shutdownTimeouts) total() time.Duration {
 	return t.httpDrain + t.httpHandlerExit + t.backgroundStop + t.jobShutdown + t.downloaderWait + t.hookDrain + t.hookCancel
 }
+
+// ShutdownBudget is the longest a SIGTERM shutdown takes: the sum of the
+// per-step timeouts.
+func ShutdownBudget() time.Duration { return defaultShutdownTimeouts.total() }
 
 // shutdownSteps stops the running components in the order of
 // docs/architecture.md section 1. The store, the wrapper client and the log

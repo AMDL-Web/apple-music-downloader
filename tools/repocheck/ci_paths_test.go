@@ -42,12 +42,12 @@ func TestGuestBootRulesCoverImports(t *testing.T) {
 // TestLightPathsReadByGoTestsAreCovered keeps a Go test that reads a file
 // outside its package from going unrun. ci.yml skips the Go jobs for a change
 // to only light paths (docs, the console, the website, ...), so a test that
-// reads such a file (internal/progress reads the console's status.js,
-// internal/api reads docs/api.md) must be in the light job's `go test`.
-// Paths are found as string literals: a literal that goes up out of the
-// package ("../../docs/api.md") or a filepath.Join of literals, resolved from
-// the test's directory and kept when the file exists. A path built from
-// variables is not seen.
+// reads such a file (this package reads the console's static files and
+// docs/api.md) must be in the light job's `go test`. This package is scanned
+// like any other, so it must be there too. Paths are found as string
+// literals: a literal that goes up out of the package ("../../docs/api.md")
+// or a filepath.Join of literals, resolved from the test's directory and kept
+// when the file exists. A path built from variables is not seen.
 func TestLightPathsReadByGoTestsAreCovered(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -65,7 +65,7 @@ func TestLightPathsReadByGoTestsAreCovered(t *testing.T) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, "_test.go") || filepath.Dir(path) == filepath.Join(root, "tools", "repocheck") {
+		if !strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)

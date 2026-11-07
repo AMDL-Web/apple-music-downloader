@@ -1,18 +1,12 @@
 package config
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 func TestWrapperLoginTimeout(t *testing.T) {
@@ -223,142 +217,6 @@ func TestLoadClampsResourceLimitsFromFile(t *testing.T) {
 	}
 	if cfg.Download.MaxRunningJobs != maxRunningJobsLimit || cfg.Download.MaxParallelDownloads != maxGlobalPoolLimit || cfg.Download.MaxAttempts != maxAttemptsLimit {
 		t.Fatalf("Load() did not clamp download values: %+v", cfg.Download)
-	}
-}
-
-func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
-	raw, err := os.ReadFile(examplePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var doc map[string]map[string]any
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		t.Fatal(err)
-	}
-	want := knownKeys()
-	got := map[string]bool{}
-	for section, fields := range doc {
-		for field := range fields {
-			got[section+"."+field] = true
-		}
-	}
-	var missing, extra []string
-	for key := range want {
-		if !got[key] {
-			missing = append(missing, key)
-		}
-	}
-	for key := range got {
-		if !want[key] {
-			extra = append(extra, key)
-		}
-	}
-	slices.Sort(missing)
-	slices.Sort(extra)
-	if len(missing) > 0 || len(extra) > 0 {
-		t.Fatalf("config.example.yaml keys: missing=%v extra=%v", missing, extra)
-	}
-	if _, err := Load(examplePath); err != nil {
-		t.Fatalf("config.example.yaml does not load: %v", err)
-	}
-}
-
-const examplePath = "../../configs/config.example.yaml"
-
-// A key missing from config.yaml must behave the way the example documents,
-// so every Default value equals the example's. The example is decoded onto a
-// zero Config, so a key the example lacks shows up as a mismatch too.
-func TestDefaultMatchesExample(t *testing.T) {
-	raw, err := os.ReadFile(examplePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var example Config
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&example); err != nil {
-		t.Fatal(err)
-	}
-	defaults, documented := reflect.ValueOf(Default()), reflect.ValueOf(example)
-	for _, field := range configFields() {
-		got := defaults.FieldByIndex(field.index).Interface()
-		want := documented.FieldByIndex(field.index).Interface()
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("Default() %s = %#v, config.example.yaml sets %#v", field.key, got, want)
-		}
-	}
-}
-
-// exampleDefaultAnnotation matches "Default: 16." in a comment line and
-// captures the value.
-var exampleDefaultAnnotation = regexp.MustCompile(`\bDefault:\s*([^\s.;,(]+)`)
-
-// Every "Default: X" written in an example comment must be what Default()
-// actually holds for the key the comment sits above. Values that do not
-// parse as the field's type (lists) are skipped; the test requires a minimum
-// number of checked annotations so a parser regression cannot pass silently.
-func TestExampleDefaultAnnotationsMatchDefault(t *testing.T) {
-	raw, err := os.ReadFile(examplePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fields := map[string]configField{}
-	for _, field := range configFields() {
-		fields[field.key] = field
-	}
-	defaults := reflect.ValueOf(Default())
-	sectionLine := regexp.MustCompile(`^([a-z_]+):\s*$`)
-	keyLine := regexp.MustCompile(`^  ([a-z_]+):`)
-	section, pending := "", ""
-	checked := 0
-	for n, line := range strings.Split(string(raw), "\n") {
-		if m := sectionLine.FindStringSubmatch(line); m != nil {
-			if pending != "" {
-				t.Errorf("line %d: annotation %q is not followed by a key in its section", n, pending)
-			}
-			section, pending = m[1], ""
-			continue
-		}
-		if comment := strings.TrimSpace(line); strings.HasPrefix(comment, "#") {
-			if m := exampleDefaultAnnotation.FindStringSubmatch(comment); m != nil {
-				if pending != "" {
-					t.Errorf("line %d: two Default annotations (%q, %q) before one key", n+1, pending, m[1])
-				}
-				pending = m[1]
-			}
-			continue
-		}
-		m := keyLine.FindStringSubmatch(line)
-		if m == nil || pending == "" {
-			continue
-		}
-		key := section + "." + m[1]
-		annotation := pending
-		pending = ""
-		field, ok := fields[key]
-		if !ok {
-			t.Errorf("annotation above unknown key %s", key)
-			continue
-		}
-		value := defaults.FieldByIndex(field.index)
-		var got string
-		switch value.Kind() {
-		case reflect.Int:
-			got = strconv.Itoa(int(value.Int()))
-		case reflect.Bool:
-			got = strconv.FormatBool(value.Bool())
-		case reflect.String:
-			got = value.String()
-		default:
-			continue
-		}
-		checked++
-		if got != annotation {
-			t.Errorf("config.example.yaml says %s Default: %s, Default() has %s", key, annotation, got)
-		}
-	}
-	if checked < 12 {
-		t.Fatalf("checked %d Default annotations, want at least 12; did the example's comment format change?", checked)
 	}
 }
 

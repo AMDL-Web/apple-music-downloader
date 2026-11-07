@@ -83,7 +83,7 @@ page in `apps/console/skins/`.
 | Carbon status indicator pattern: two of color, shape and symbol; purple for outliers | `apps/console/static/js/lib/status.js` | adopted | "Already on disk" uses the purple skipped role; red/green fail under deuteranopia, so labels are mandatory. |
 | Geist Status Dot: only in-progress states animate, no separate spinner | `apps/console/static/css/controls.css` | adopted | The running pulse is the only loop. |
 | Stripe badge discipline: a small semantic set, badges are read-only | `apps/console/static/js/ui/components.js` | adopted | |
-| lyjwpage DESIGN.md structure: token tables, the doc as target and code as state, a guard against off-scale values | [DESIGN.md](../apps/console/DESIGN.md), `apps/console/console_test.go` | adapted | Structure only; the look is not borrowed. The guard is a Go test instead of a pnpm script. |
+| lyjwpage DESIGN.md structure: token tables, the doc as target and code as state, a guard against off-scale values | [DESIGN.md](../apps/console/DESIGN.md), `tools/repocheck/console_test.go` | adapted | Structure only; the look is not borrowed. The guard is a Go test instead of a pnpm script. |
 
 ### Patterns
 

@@ -160,8 +160,9 @@ its chain under the skin prefix.
 
 ### Tokens the skin must declare
 
-`TestSkinsDeclareEveryBaseToken` fails when the skin misses one that a base
-stylesheet reads and `tokens.css` does not declare. Declare the whole table anyway (for
+`TestSkinsDeclareEveryBaseToken` (`tools/repocheck`) fails when the skin
+misses one that a base stylesheet reads and `tokens.css` does not declare.
+Declare the whole table anyway (for
 example every role's `-text`, though the base reads only `--danger-text` and
 `--warning-text`), so the skin's rules can rely on it.
 

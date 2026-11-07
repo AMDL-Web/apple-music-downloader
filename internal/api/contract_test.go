@@ -4,8 +4,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -161,37 +159,6 @@ func TestErrorCodesMatchSpec(t *testing.T) {
 	}
 }
 
-var requestErrorCode = regexp.MustCompile(`(?s)RequestError\{[^}]*?Code:\s*"([a-z_]+)"`)
-
-// The SubmitErrorCode enum lists exactly the per-URL codes the server
-// produces: the job manager's domain.SubmitCode* constants and every code the
-// request validator in internal/media puts in a jobs.RequestError.
-func TestSubmitErrorCodesMatchProducers(t *testing.T) {
-	produced := typedStringConsts(t, filepath.Join("..", "domain", "submit.go"), "")
-	sources, err := filepath.Glob(filepath.Join("..", "media", "*.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, source := range sources {
-		if strings.HasSuffix(source, "_test.go") {
-			continue
-		}
-		raw, err := os.ReadFile(source)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, match := range requestErrorCode.FindAllSubmatch(raw, -1) {
-			produced = append(produced, string(match[1]))
-		}
-	}
-	slices.Sort(produced)
-	produced = slices.Compact(produced)
-	want := specEnum(t, "SubmitErrorCode")
-	if !slices.Equal(produced, want) {
-		t.Fatalf("produced submit codes = %v\nopenapi.yaml SubmitErrorCode enum = %v", produced, want)
-	}
-}
-
 // The RuntimeConfig schema in openapi.yaml has a property for exactly the
 // runtime config keys, which GET /api/v1/config returns (config.MutableView,
 // derived from the config package's runtime classification). The console's
@@ -314,36 +281,5 @@ func TestEventTypeEnumMatchesDomain(t *testing.T) {
 	}
 	if spec.Components.Schemas.Event.Properties.Payload.Type != "object" {
 		t.Fatalf("Event.payload type = %q, want object", spec.Components.Schemas.Event.Properties.Payload.Type)
-	}
-}
-
-// The Events section of docs/api.md lists every event type. This polices the
-// docs, not the server; it belongs in tools/repocheck.
-func TestDocsListEveryEventType(t *testing.T) {
-	var want []string
-	for _, ty := range domain.EventTypes {
-		want = append(want, string(ty))
-	}
-	doc, err := os.ReadFile("../../docs/api.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := strings.Index(string(doc), "\n## Events")
-	if start < 0 {
-		t.Fatal("docs/api.md has no Events section")
-	}
-	events := string(doc[start+1:])
-	if end := strings.Index(events, "\n## "); end >= 0 {
-		events = events[:end]
-	}
-	for _, ty := range want {
-		if !strings.Contains(events, "`"+ty+"`") {
-			t.Errorf("docs/api.md Events section does not list `%s`", ty)
-		}
-	}
-	for _, gone := range []string{"codec_retry", "codec_exhausted", "codec_recovered"} {
-		if strings.Contains(events, "`"+gone+"`") {
-			t.Errorf("docs/api.md Events section still lists never-emitted `%s`", gone)
-		}
 	}
 }

@@ -2,9 +2,6 @@ package progress
 
 import (
 	"math"
-	"os"
-	"regexp"
-	"strconv"
 	"testing"
 	"time"
 
@@ -24,44 +21,6 @@ func near(t *testing.T, got, want float64) {
 	t.Helper()
 	if math.Abs(got-want) > 1e-9 {
 		t.Errorf("got %v, want %v", got, want)
-	}
-}
-
-func TestWeightsMatchConsole(t *testing.T) {
-	raw, err := os.ReadFile("../../apps/console/static/js/lib/status.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := regexp.MustCompile(`STAGE_WEIGHTS = Object\.freeze\(\{([^}]*)\}\)`).FindSubmatch(raw)
-	if m == nil {
-		t.Fatal("STAGE_WEIGHTS not found in status.js")
-	}
-	keys := map[string]Stage{"resolve": StageResolve, "download": StageDownload, "decrypt": StageDecrypt,
-		"remux": StageRemux, "verify": StageVerify, "tag": StageTag, "save": StageSave}
-	seen := 0
-	for _, kv := range regexp.MustCompile(`(\w+):\s*([0-9.]+)`).FindAllSubmatch(m[1], -1) {
-		s, ok := keys[string(kv[1])]
-		if !ok {
-			t.Errorf("console stage %q has no Go stage", kv[1])
-			continue
-		}
-		v, _ := strconv.ParseFloat(string(kv[2]), 64)
-		if v != Weights[s] {
-			t.Errorf("weight of %s: console %v, Go %v", kv[1], v, Weights[s])
-		}
-		seen++
-	}
-	if seen != int(StageCount) {
-		t.Errorf("console lists %d stages, Go has %d", seen, StageCount)
-	}
-
-	raw, err = os.ReadFile("../../apps/console/static/js/lib/album-progress.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tm := regexp.MustCompile(`TICK_MAX = (\d+);`).FindSubmatch(raw)
-	if tm == nil || string(tm[1]) != strconv.Itoa(TickMax) {
-		t.Errorf("console TICK_MAX %q, Go %d", tm, TickMax)
 	}
 }
 

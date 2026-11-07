@@ -5,14 +5,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // stepRecorder records the order in which shutdown reaches each component.
@@ -140,29 +136,5 @@ func TestShutdownStepsMovePastStuckSteps(t *testing.T) {
 	}
 	if got := rec.got(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("shutdown order =\n%q\nwant\n%q", got, want)
-	}
-}
-
-// docker-compose.yml's stop_grace_period must outlast the whole shutdown
-// budget, or Docker kills the backend before it closes the store.
-func TestShutdownBudgetFitsComposeGracePeriod(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "deploy", "docker-compose.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var compose struct {
-		Services map[string]struct {
-			StopGracePeriod string `yaml:"stop_grace_period"`
-		} `yaml:"services"`
-	}
-	if err := yaml.Unmarshal(raw, &compose); err != nil {
-		t.Fatal(err)
-	}
-	grace, err := time.ParseDuration(compose.Services["amdl-backend"].StopGracePeriod)
-	if err != nil {
-		t.Fatalf("amdl-backend stop_grace_period: %v", err)
-	}
-	if budget := defaultShutdownTimeouts.total(); budget >= grace {
-		t.Fatalf("shutdown budget %s does not fit stop_grace_period %s", budget, grace)
 	}
 }

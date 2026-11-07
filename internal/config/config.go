@@ -246,7 +246,7 @@ type SimulateConfig struct {
 
 // Default returns the built-in configuration that a key missing from
 // config.yaml falls back to. Every value equals the one configs/config.example.yaml
-// sets (TestDefaultMatchesExample).
+// sets (TestDefaultMatchesExample in tools/repocheck).
 func Default() Config {
 	return Config{
 		Server:   ServerConfig{Listen: "127.0.0.1:18080"},

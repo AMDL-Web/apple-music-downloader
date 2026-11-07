@@ -35,8 +35,8 @@ const (
 // download, and the four short stages after it measure under 1% each, so they
 // get a floor instead, decrypt's a little wider than the four equal ones after
 // it. The web console keeps the same values as STAGE_WEIGHTS in
-// apps/console/static/js/lib/status.js; TestWeightsMatchConsole holds them
-// together.
+// apps/console/static/js/lib/status.js; TestWeightsMatchConsole in
+// tools/repocheck holds them together.
 var Weights = [StageCount]float64{0.13, 0.80, 0.02, 0.0125, 0.0125, 0.0125, 0.0125}
 
 // Stages is how far each stage has come, each in [0,1].
