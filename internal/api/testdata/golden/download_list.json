@@ -1,0 +1,45 @@
+{
+  "downloads": [
+    {
+      "artist_name": "Album Artist",
+      "artist_url": "https://music.apple.com/us/artist/album-artist/1",
+      "artwork_bg_color": "1a1a1a",
+      "artwork_text_color1": "ffffff",
+      "artwork_text_color2": "eeeeee",
+      "artwork_text_color3": "cccccc",
+      "artwork_text_color4": "aaaaaa",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg",
+      "cancelled_items": 0,
+      "completed_items": 0,
+      "created_at": "<time>",
+      "curator_name": "Curator",
+      "failed_items": 0,
+      "genre": "Pop",
+      "id": "job1",
+      "input": "album|us|1",
+      "priority": 0,
+      "progress": 0,
+      "release_date": "2024-06-01",
+      "skipped_items": 0,
+      "status": "running",
+      "storefront": "us",
+      "title": "Album",
+      "total_items": 1,
+      "trigger": "manual",
+      "type": "album",
+      "updated_at": "<time>"
+    }
+  ],
+  "event_cursor": 0,
+  "limit": 50,
+  "offset": 0,
+  "status_counts": {
+    "cancelled": 0,
+    "completed": 0,
+    "failed": 0,
+    "queued": 0,
+    "running": 1,
+    "total": 1
+  },
+  "total": 1
+}

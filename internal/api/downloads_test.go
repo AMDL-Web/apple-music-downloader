@@ -183,65 +183,18 @@ func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
 	assertJobCounters(t, resp.Downloads[0])
 }
 
-func TestDownloadResponsesIncludeArtworkURLTemplate(t *testing.T) {
-	server := newServer(t, Deps{})
-	ctx := context.Background()
-	jobArt := "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg"
-	itemArt := "https://is1-ssl.mzstatic.com/image/thumb/Music/track/{w}x{h}bb.jpg"
-	job := domain.Job{ID: "job1", Input: "album|us|1", Type: "album", ArtworkURL: jobArt, Status: domain.JobRunning, TotalItems: 1}
-	if err := server.store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-	item := domain.JobItem{ID: "item1", JobID: job.ID, Index: 1, ArtworkURL: itemArt, HasLyrics: true, Status: domain.ItemQueued}
-	if err := server.store.CreateItem(ctx, item); err != nil {
-		t.Fatal(err)
-	}
-
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	var detail struct {
-		Job   domain.Job       `json:"job"`
-		Items []domain.JobItem `json:"items"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &detail); err != nil {
-		t.Fatal(err)
-	}
-	if detail.Job.ArtworkURL != jobArt {
-		t.Fatalf("job artwork_url = %q, want %q", detail.Job.ArtworkURL, jobArt)
-	}
-	if len(detail.Items) != 1 || detail.Items[0].ArtworkURL != itemArt {
-		t.Fatalf("items = %+v, want one item with artwork_url %q", detail.Items, itemArt)
-	}
-	// Raw-body check so a renamed/mistyped json tag can't slip through the
-	// struct round-trip above.
-	if !strings.Contains(recorder.Body.String(), `"has_lyrics":true`) {
-		t.Fatalf("detail body missing \"has_lyrics\":true: %s", recorder.Body.String())
-	}
-
-	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	var resp struct {
-		Downloads []domain.Job `json:"downloads"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if len(resp.Downloads) != 1 || resp.Downloads[0].ArtworkURL != jobArt {
-		t.Fatalf("listed downloads = %+v, want one job with artwork_url %q", resp.Downloads, jobArt)
-	}
-}
-
-func TestDownloadResponsesIncludeDisplayMetadata(t *testing.T) {
+// A job's display metadata (artist, curator, release, genre, the artwork URL
+// template and palette) and its items' artwork and lyrics flag reach both the
+// download detail and the list. The golden files pin every field name and
+// value; the schema check in requestJSON pins the shape.
+func TestDownloadResponsesCarryDisplayMetadata(t *testing.T) {
 	server := newServer(t, Deps{})
 	ctx := context.Background()
 	job := domain.Job{
-		ID: "job1", Input: "album|us|1", Type: "album",
+		ID: "job1", Input: "album|us|1", Type: "album", Title: "Album", Storefront: "us",
 		ArtistName: "Album Artist", ArtistURL: "https://music.apple.com/us/artist/album-artist/1",
 		CuratorName: "Curator", ReleaseDate: "2024-06-01", Genre: "Pop",
+		ArtworkURL:     "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg",
 		ArtworkBgColor: "1a1a1a", ArtworkTextColor1: "ffffff", ArtworkTextColor2: "eeeeee",
 		ArtworkTextColor3: "cccccc", ArtworkTextColor4: "aaaaaa",
 		Status: domain.JobRunning, TotalItems: 1,
@@ -249,65 +202,21 @@ func TestDownloadResponsesIncludeDisplayMetadata(t *testing.T) {
 	if err := server.store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
 	}
-
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	var detail struct {
-		Job domain.Job `json:"job"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &detail); err != nil {
+	item := domain.JobItem{ID: "item1", JobID: job.ID, Index: 1, Title: "Track", HasLyrics: true, Status: domain.ItemQueued,
+		ArtworkURL: "https://is1-ssl.mzstatic.com/image/thumb/Music/track/{w}x{h}bb.jpg"}
+	if err := server.store.CreateItem(ctx, item); err != nil {
 		t.Fatal(err)
 	}
-	if detail.Job.ArtistName != job.ArtistName || detail.Job.CuratorName != job.CuratorName ||
-		detail.Job.ReleaseDate != job.ReleaseDate || detail.Job.Genre != job.Genre {
-		t.Fatalf("detail job metadata = %+v, want artist/curator/release/genre from %+v", detail.Job, job)
-	}
-	if detail.Job.ArtworkBgColor != job.ArtworkBgColor || detail.Job.ArtworkTextColor1 != job.ArtworkTextColor1 ||
-		detail.Job.ArtworkTextColor2 != job.ArtworkTextColor2 || detail.Job.ArtworkTextColor3 != job.ArtworkTextColor3 ||
-		detail.Job.ArtworkTextColor4 != job.ArtworkTextColor4 {
-		t.Fatalf("detail job artwork colors = %+v, want palette from %+v", detail.Job, job)
-	}
-	// Raw-body check so a renamed/mistyped json tag can't slip through the
-	// struct round-trip above.
-	for _, key := range []string{
-		`"artist_name":"Album Artist"`,
-		`"artist_url":"https://music.apple.com/us/artist/album-artist/1"`,
-		`"curator_name":"Curator"`,
-		`"release_date":"2024-06-01"`,
-		`"genre":"Pop"`,
-		`"artwork_bg_color":"1a1a1a"`,
-		`"artwork_text_color1":"ffffff"`,
-		`"artwork_text_color2":"eeeeee"`,
-		`"artwork_text_color3":"cccccc"`,
-		`"artwork_text_color4":"aaaaaa"`,
+
+	for name, path := range map[string]string{
+		"download_detail": "/api/v1/downloads/" + job.ID,
+		"download_list":   "/api/v1/downloads",
 	} {
-		if !strings.Contains(recorder.Body.String(), key) {
-			t.Fatalf("detail body missing %s: %s", key, recorder.Body.String())
+		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("GET %s: status = %d, body = %s", path, recorder.Code, recorder.Body.String())
 		}
-	}
-
-	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	var resp struct {
-		Downloads []domain.Job `json:"downloads"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if len(resp.Downloads) != 1 || resp.Downloads[0].ArtistName != job.ArtistName ||
-		resp.Downloads[0].ArtistURL != job.ArtistURL ||
-		resp.Downloads[0].CuratorName != job.CuratorName || resp.Downloads[0].ReleaseDate != job.ReleaseDate ||
-		resp.Downloads[0].Genre != job.Genre {
-		t.Fatalf("listed downloads = %+v, want the job's display metadata", resp.Downloads)
-	}
-	if resp.Downloads[0].ArtworkBgColor != job.ArtworkBgColor || resp.Downloads[0].ArtworkTextColor1 != job.ArtworkTextColor1 ||
-		resp.Downloads[0].ArtworkTextColor2 != job.ArtworkTextColor2 || resp.Downloads[0].ArtworkTextColor3 != job.ArtworkTextColor3 ||
-		resp.Downloads[0].ArtworkTextColor4 != job.ArtworkTextColor4 {
-		t.Fatalf("listed downloads = %+v, want the job's artwork palette", resp.Downloads)
+		assertGolden(t, name, recorder.Body.Bytes())
 	}
 }
 

@@ -3,11 +3,14 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"amdl/internal/accounts"
 	"amdl/internal/api/openapitest"
@@ -114,6 +117,70 @@ func fillDeps(t *testing.T, deps Deps) Deps {
 		deps.AppleLibrary = applelibrary.NewSet(deps.Config, deps.Tokens, nil, deps.Store, deps.Accounts, quietLogger)
 	}
 	return deps
+}
+
+var update = flag.Bool("update", false, "rewrite the testdata/golden files from the current responses")
+
+// assertGolden compares a JSON body with testdata/golden/<name>.json. Both are
+// normalized first: keys sorted, indented, and every RFC 3339 timestamp
+// replaced by "<time>", so a golden file pins the shape and the values a test
+// set, not the clock. go test -update rewrites the file.
+func assertGolden(t *testing.T, name string, body []byte) {
+	t.Helper()
+	got := normalizeJSON(t, body)
+	path := filepath.Join("testdata", "golden", name+".json")
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v (run go test -update to create it)", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("%s differs from %s (go test -update rewrites it):\n got: %s\nwant: %s", name, path, got, want)
+	}
+}
+
+func normalizeJSON(t *testing.T, body []byte) []byte {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		t.Fatalf("body is not JSON: %v (%s)", err, body)
+	}
+	var mask func(any) any
+	mask = func(v any) any {
+		switch x := v.(type) {
+		case map[string]any:
+			for k, e := range x {
+				x[k] = mask(e)
+			}
+		case []any:
+			for i, e := range x {
+				x[i] = mask(e)
+			}
+		case string:
+			if _, err := time.Parse(time.RFC3339Nano, x); err == nil {
+				return "<time>"
+			}
+		}
+		return v
+	}
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(mask(v)); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
 }
 
 // assertErrorCode checks a response against the error envelope

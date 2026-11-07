@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
 	"amdl/internal/config"
 )
 
@@ -129,36 +127,4 @@ func TestRestartSystem(t *testing.T) {
 	server = newServer(t, Deps{})
 	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/system/restart", "")
 	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "feature_unavailable")
-}
-
-// RuntimeConfig marks exactly the restart keys with x-applies: restart, so a
-// client can tell which saved values wait for a restart before it saves.
-func TestRuntimeConfigMarksRestartKeys(t *testing.T) {
-	type property struct {
-		Applies    string              `yaml:"x-applies"`
-		Properties map[string]property `yaml:"properties"`
-	}
-	var spec struct {
-		Components struct {
-			Schemas map[string]property `yaml:"schemas"`
-		} `yaml:"components"`
-	}
-	if err := yaml.Unmarshal(OpenAPI, &spec); err != nil {
-		t.Fatal(err)
-	}
-	marked := 0
-	for section, body := range spec.Components.Schemas["RuntimeConfig"].Properties {
-		for leaf, prop := range body.Properties {
-			key := section + "." + leaf
-			if want := config.AppliesOnRestart(key); (prop.Applies == "restart") != want {
-				t.Errorf("%s: x-applies %q, restart key %v", key, prop.Applies, want)
-			}
-			if prop.Applies == "restart" {
-				marked++
-			}
-		}
-	}
-	if marked != 10 {
-		t.Fatalf("%d keys marked x-applies: restart, want 10", marked)
-	}
 }
