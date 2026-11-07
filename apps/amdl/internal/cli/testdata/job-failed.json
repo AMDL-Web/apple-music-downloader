@@ -1,0 +1,6 @@
+{"job":{"id":"job_a","input":"x","type":"album","status":"failed","total_items":2,
+	"completed_items":1,"skipped_items":0,"failed_items":1,"cancelled_items":0,"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:01:00Z"},
+	"items":[
+	{"id":"i1","job_id":"job_a","adam_id":"1","kind":"song","index":1,"has_lyrics":false,"status":"completed","progress":{"download":1,"decrypt":1,"resolved":true,"remuxed":true,"verified":true,"tagged":true,"saved":true},"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:00:30Z"},
+	{"id":"i2","job_id":"job_a","adam_id":"2","kind":"song","index":2,"has_lyrics":false,"status":"failed","error":"decrypt failed","progress":{"download":1,"decrypt":0.4,"resolved":true,"remuxed":false,"verified":false,"tagged":false,"saved":false},"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:00:50Z"}],
+	"hooks":[],"event_cursor":9}

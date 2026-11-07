@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,8 +49,8 @@ func sample(t *testing.T) *model {
 	}
 	d := client.DownloadDetail{Job: job, Items: items}
 	st := &jobState{job: job, detail: &d, index: map[string]int{}}
-	st.rate.Add(time.Now().Add(-20*time.Second), 0.20)
-	st.rate.Add(time.Now(), 0.35)
+	st.rate.Add(at(0), 0.20)
+	st.rate.Add(at(20), 0.35)
 	m.jobs["job_a"] = st
 	m.jobs["job_b"] = &jobState{job: domain.Job{ID: "job_b", Type: "playlist", Status: domain.JobQueued, Title: "City Pop Essentials", CreatedAt: at(5)}}
 	m.number("job_a")
@@ -78,24 +79,61 @@ func withResults(m *model) {
 	m.panel = panelResults
 }
 
+var update = flag.Bool("update", false, "rewrite testdata/frame-*.ansi with the frames the sample draws")
+
+// frame is what a terminal shows of the sample with search results: the
+// header, the line typed and the live region.
+func frame(m *model, w int) string {
+	out := render(m, w)
+	return m.header(m.contentWidth()) + "\n" + m.you("tyler igor") + "\n" + out
+}
+
 func TestEveryLineFitsTheTerminal(t *testing.T) {
 	m := sample(t)
 	withResults(m)
 	dir := os.Getenv("AMDL_TUI_SNAPSHOTS")
 	for _, w := range []int{200, 120, 100, 72, 46, 40, 30} {
-		out := render(m, w)
-		head := m.header(m.contentWidth())
-		for i, line := range strings.Split(head+"\n"+out, "\n") {
+		full := frame(m, w)
+		for i, line := range strings.Split(full, "\n") {
 			if lw := lipgloss.Width(line); lw > w {
 				t.Errorf("width %d: line %d is %d columns: %q", w, i, lw, line)
 			}
 		}
+		// The site build's frame (Makefile site); testdata/frame-100.ansi
+		// is the same frame, committed.
 		if dir != "" {
-			full := head + "\n" + m.you("tyler igor") + "\n" + out
 			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("tui-%d.ansi", w)), []byte(full), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
+	}
+}
+
+// The sample's frames, colours included, are testdata/frame-<width>.ansi;
+// go test ./apps/amdl/internal/tui -run TestFrames -update rewrites them
+// after a deliberate change to the look (review the diff with cat -v, or in
+// a terminal with cat).
+func TestFrames(t *testing.T) {
+	m := sample(t)
+	withResults(m)
+	for _, w := range []int{200, 100, 72, 46} {
+		t.Run(fmt.Sprint(w), func(t *testing.T) {
+			got := frame(m, w)
+			path := filepath.Join("testdata", fmt.Sprintf("frame-%d.ansi", w))
+			if *update {
+				if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			want, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("%v (go test -run TestFrames -update writes it)", err)
+			}
+			if got != string(want) {
+				t.Errorf("the %d-column frame changed; with -update it is rewritten. got:\n%s\nwant:\n%s", w, got, want)
+			}
+		})
 	}
 }
 

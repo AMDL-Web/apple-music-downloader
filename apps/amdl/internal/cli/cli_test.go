@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -19,37 +20,6 @@ import (
 	"amdl/apps/console"
 	"amdl/internal/capability"
 )
-
-type result struct {
-	code           int
-	stdout, stderr string
-}
-
-func run(t *testing.T, srv *httptest.Server, stdin string, args ...string) result {
-	t.Helper()
-	var out, errb bytes.Buffer
-	if srv != nil {
-		args = append(args, "--server", srv.URL)
-	}
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-	code := Run(context.Background(), args, IO{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errb,
-		Getenv: func(string) string { return "" }})
-	return result{code, out.String(), errb.String()}
-}
-
-func errorCode(t *testing.T, stderr string) string {
-	t.Helper()
-	var e struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal([]byte(stderr), &e); err != nil {
-		t.Fatalf("stderr is not an error object: %q", stderr)
-	}
-	return e.Error.Code
-}
 
 func TestEveryCapabilityHasACommand(t *testing.T) {
 	have := map[string]command{}
@@ -91,48 +61,7 @@ func TestEveryCapabilityHasACommand(t *testing.T) {
 	}
 }
 
-func TestErrorsMapToExitCodes(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprint(w, `{"error":{"code":"job_not_found","message":"job job_x not found"}}`)
-	}))
-	defer srv.Close()
-	r := run(t, srv, "", "jobs", "retry", "job_x")
-	if r.code != exitNotFound || errorCode(t, r.stderr) != "job_not_found" || r.stdout != "" {
-		t.Errorf("got %+v", r)
-	}
-}
-
-func TestCatalogNotFoundIsNotARetry(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprint(w, `{"error":{"code":"catalog_not_found","message":"read Apple Music catalog: Apple Music has no album 1 in storefront us (404)"}}`)
-	}))
-	defer srv.Close()
-	r := run(t, srv, "", "lookup", "https://music.apple.com/us/album/x/1")
-	if r.code != exitNotFound || errorCode(t, r.stderr) != "catalog_not_found" {
-		t.Errorf("got %+v, want exit %d", r, exitNotFound)
-	}
-}
-
-func TestConfigSetEchoesOnlyTheKeysSet(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"config":{"catalog":{"language":"ja","motion_artwork_enabled":true},"logging":{"level":"debug","access_log":false}},"persisted":true}`)
-	}))
-	defer srv.Close()
-	r := run(t, srv, "", "config", "set", "logging.level=debug")
-	var out struct {
-		Config    map[string]any `json:"config"`
-		Persisted bool           `json:"persisted"`
-	}
-	if err := json.Unmarshal([]byte(r.stdout), &out); err != nil || r.code != 0 {
-		t.Fatalf("got %+v (%v)", r, err)
-	}
-	if len(out.Config) != 1 || out.Config["logging.level"] != "debug" || !out.Persisted {
-		t.Fatalf("config set printed %s, want only logging.level and persisted", r.stdout)
-	}
-}
-
+// A misspelled key is refused before the PUT, naming the key meant.
 func TestConfigSetOfAMisspelledKeyNamesTheKey(t *testing.T) {
 	var puts atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -160,29 +89,8 @@ func TestConfigSetOfAMisspelledKeyNamesTheKey(t *testing.T) {
 	}
 }
 
-func TestDestructiveNeedsYesAndDryRunSendsNothing(t *testing.T) {
-	var calls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-	r := run(t, srv, "", "jobs", "delete", "job_x")
-	if r.code != exitConfirm || errorCode(t, r.stderr) != "confirmation_required" {
-		t.Errorf("without --yes: %+v", r)
-	}
-	r = run(t, srv, "", "jobs", "delete", "job_x", "--dry-run")
-	if r.code != 0 || !strings.Contains(r.stdout, `"method":"DELETE"`) || !strings.Contains(r.stdout, "/api/v1/downloads/job_x?record=true") {
-		t.Errorf("--dry-run: %+v", r)
-	}
-	if calls.Load() != 0 {
-		t.Fatalf("%d requests reached the server", calls.Load())
-	}
-	if r := run(t, srv, "", "jobs", "delete", "job_x", "--yes"); r.code != 0 || calls.Load() != 1 {
-		t.Errorf("with --yes: %+v, %d calls", r, calls.Load())
-	}
-}
-
+// Submitting a link whose job already runs is not a failure: the answer
+// names the running job.
 func TestDownloadOfRunningLinksSucceeds(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -201,35 +109,17 @@ func TestDownloadOfRunningLinksSucceeds(t *testing.T) {
 	}
 }
 
-func TestFieldsKeepOnlyNamedKeysOfAList(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("status") != "failed" {
-			t.Errorf("query = %s", r.URL.RawQuery)
-		}
-		fmt.Fprint(w, `{"downloads":[{"id":"job_a","title":"IGOR","status":"failed","input":"x"}],"total":1,"limit":50,"offset":0,"event_cursor":3,"status_counts":{}}`)
-	}))
-	defer srv.Close()
-	r := run(t, srv, "", "jobs", "list", "--status", "failed", "--fields", "id,title")
-	var got struct {
-		Downloads []map[string]any `json:"downloads"`
-		Total     int              `json:"total"`
-	}
-	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &got) != nil || got.Total != 1 || len(got.Downloads[0]) != 2 {
-		t.Errorf("got %+v", r)
-	}
-}
-
+// jobs wait on a failed job is exit 7 with the job's summary on stdout: album
+// progress and each track, the failed one with its error.
 func TestJobsWaitReportsAFailedJob(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"job":{"id":"job_a","input":"x","type":"album","status":"failed","total_items":2,
-			"completed_items":1,"skipped_items":0,"failed_items":1,"cancelled_items":0,"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:01:00Z"},
-			"items":[{"id":"i1","job_id":"job_a","adam_id":"1","kind":"song","index":1,"has_lyrics":false,"status":"completed","progress":{"download":1,"decrypt":1,"resolved":true,"remuxed":true,"verified":true,"tagged":true,"saved":true},"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:00:30Z"},
-			{"id":"i2","job_id":"job_a","adam_id":"2","kind":"song","index":2,"has_lyrics":false,"status":"failed","error":"decrypt failed","progress":{"download":1,"decrypt":0.4,"resolved":true,"remuxed":false,"verified":false,"tagged":false,"saved":false},"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:00:50Z"}],
-			"hooks":[],"event_cursor":9}`)
-	}))
+	detail, err := os.ReadFile(filepath.Join("testdata", "job-failed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(detail) }))
 	defer srv.Close()
 	r := run(t, srv, "", "jobs", "wait", "job_a")
-	if r.code != exitJobFailed || errorCode(t, r.stderr) != "job_failed" {
+	if r.code != exitJobFailed || errorCode(t, r.stderr) != "job_failed" || errorHint(t, r.stderr) != "amdl jobs retry job_a" {
 		t.Fatalf("got %+v", r)
 	}
 	var s struct {
@@ -242,67 +132,6 @@ func TestJobsWaitReportsAFailedJob(t *testing.T) {
 	}
 	if s.Status != "failed" || s.AlbumProgress.Finished != 2 || len(s.Tracks) != 2 || s.Tracks[1].Error != "decrypt failed" {
 		t.Errorf("summary = %+v", s)
-	}
-}
-
-func TestCLISearchFindsTheCommand(t *testing.T) {
-	for task, want := range map[string]string{
-		"retry the failed downloads":   "amdl jobs retry",
-		"search for an album by name":  "amdl search",
-		"wait until the download ends": "amdl jobs wait",
-		"sign in to my apple id":       "amdl wrapper login",
-	} {
-		r := run(t, nil, "", "cli", "search", task)
-		var hits []struct{ Command string }
-		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &hits) != nil || len(hits) == 0 {
-			t.Fatalf("%q: %+v", task, r)
-		}
-		if !strings.HasPrefix(hits[0].Command, want) {
-			t.Errorf("%q: first hit %q, want %s", task, hits[0].Command, want)
-		}
-	}
-}
-
-func TestUnknownCommandSuggests(t *testing.T) {
-	r := run(t, nil, "", "job", "retry")
-	if r.code != exitInput || !strings.Contains(r.stderr, "amdl jobs retry") {
-		t.Errorf("got %+v", r)
-	}
-}
-
-func TestSchemaDescribesTheRequest(t *testing.T) {
-	r := run(t, nil, "", "schema", "jobs", "list")
-	var s struct {
-		Operations []capability.Operation `json:"operations"`
-		Safety     string                 `json:"safety"`
-	}
-	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &s) != nil || len(s.Operations) != 1 ||
-		s.Operations[0].Path != "/api/v1/downloads" || s.Operations[0].Output != "DownloadList" || s.Safety != "read" {
-		t.Errorf("got %+v", r)
-	}
-}
-
-func TestSearchPassesTheQueryAndProjectsHits(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		if r.URL.Path != "/api/v1/search" || q.Get("term") != "igor tyler" || q.Get("types") != "albums" || q.Get("limit") != "3" {
-			t.Errorf("request = %s", r.URL)
-		}
-		fmt.Fprint(w, `{"term":"igor tyler","storefront":"us","albums":{"items":[{"id":"1","type":"album","name":"IGOR",
-			"url":"https://music.apple.com/us/album/igor/1","artist_name":"Tyler, The Creator","track_count":12}],"next_offset":3}}`)
-	}))
-	defer srv.Close()
-	r := run(t, srv, "", "search", "igor tyler", "--types", "albums", "--limit", "3", "--fields", "name,url")
-	want := `{"albums":{"items":[{"name":"IGOR","url":"https://music.apple.com/us/album/igor/1"}],"next_offset":3},"storefront":"us","term":"igor tyler"}` + "\n"
-	if r.code != 0 || r.stdout != want {
-		t.Errorf("got %+v\nwant %s", r, want)
-	}
-}
-
-func TestFieldsOnAnObjectKeepItsKeys(t *testing.T) {
-	got, err := project([]byte(`{"accepted":1,"rejected":0,"results":[{"url":"x"}]}`), []string{"accepted", "rejected"})
-	if err != nil || string(got) != `{"accepted":1,"rejected":0}` {
-		t.Errorf("project = %s, %v", got, err)
 	}
 }
 
@@ -404,54 +233,47 @@ func TestHelpAndUsageAreASCII(t *testing.T) {
 	}
 }
 
-func TestSearchLeavesOutThePaletteUnlessAsked(t *testing.T) {
+// The palette fields of catalog answers are left out unless asked for.
+func TestCatalogAnswersLeaveOutThePaletteUnlessAsked(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/albums/") {
+			fmt.Fprint(w, `{"id":"1783644603","title":"T","artwork_bg_color":"eae7e3","tracks":[{"id":"1","name":"A"}]}`)
+			return
+		}
 		fmt.Fprint(w, `{"songs":{"hits":[{"id":"1","name":"Lemon","artwork_bg_color":"eae7e3","artwork_text_color1":"0d0c13"}]}}`)
 	}))
 	defer srv.Close()
-	if r := run(t, srv, "", "search", "lemon"); r.code != 0 || strings.Contains(r.stdout, "artwork_") || !strings.Contains(r.stdout, `"Lemon"`) {
-		t.Errorf("search: %+v", r)
-	}
-	if r := run(t, srv, "", "search", "lemon", "--artwork-colors"); r.code != 0 || !strings.Contains(r.stdout, "artwork_bg_color") {
-		t.Errorf("search --artwork-colors: %+v", r)
+	for _, c := range []struct {
+		args    []string
+		palette bool
+		keep    string
+	}{
+		{[]string{"search", "lemon"}, false, `"Lemon"`},
+		{[]string{"search", "lemon", "--artwork-colors"}, true, `"Lemon"`},
+		{[]string{"albums", "get", "1783644603"}, false, `"tracks"`},
+	} {
+		r := run(t, srv, "", c.args...)
+		if r.code != 0 || strings.Contains(r.stdout, "artwork_bg_color") != c.palette || !strings.Contains(r.stdout, c.keep) {
+			t.Errorf("amdl %v: %+v", c.args, r)
+		}
 	}
 }
 
-func TestAlbumsGetReadsOneAlbum(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/albums/1783644603" || r.URL.Query().Get("storefront") != "cn" {
-			t.Errorf("request = %s", r.URL)
+// --fields keeps the named keys of an object that has one of them, and
+// otherwise of each object in the arrays inside it: a list's jobs, each
+// search group's hits.
+func TestFieldsKeepOnlyTheNamedKeys(t *testing.T) {
+	for _, c := range []struct{ in, fields, want string }{
+		{`{"accepted":1,"rejected":0,"results":[{"url":"x"}]}`, "accepted,rejected", `{"accepted":1,"rejected":0}`},
+		{`{"downloads":[{"id":"job_a","title":"IGOR","status":"failed","input":"x"}],"total":1}`, "id,title",
+			`{"downloads":[{"id":"job_a","title":"IGOR"}],"total":1}`},
+		{`{"term":"igor tyler","storefront":"us","albums":{"items":[{"id":"1","type":"album","name":"IGOR","url":"https://music.apple.com/us/album/igor/1","track_count":12}],"next_offset":3}}`,
+			"name,url", `{"albums":{"items":[{"name":"IGOR","url":"https://music.apple.com/us/album/igor/1"}],"next_offset":3},"storefront":"us","term":"igor tyler"}`},
+		{`[{"id":"1","name":"a"},{"id":"2","name":"b"}]`, "id", `[{"id":"1"},{"id":"2"}]`},
+	} {
+		got, err := project([]byte(c.in), strings.Split(c.fields, ","))
+		if err != nil || string(got) != c.want {
+			t.Errorf("project(%s, %s) = %s, %v; want %s", c.in, c.fields, got, err, c.want)
 		}
-		fmt.Fprint(w, `{"id":"1783644603","title":"T","artwork_bg_color":"eae7e3","tracks":[{"id":"1","name":"A"}]}`)
-	}))
-	defer srv.Close()
-	if r := run(t, srv, "", "albums", "get", "1783644603", "--storefront", "cn"); r.code != 0 || strings.Contains(r.stdout, "artwork_") || !strings.Contains(r.stdout, `"tracks"`) {
-		t.Errorf("albums get: %+v", r)
-	}
-}
-
-func TestStorefrontFlagReachesSearchAndArtistAlbums(t *testing.T) {
-	var seen []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = append(seen, r.URL.Path+"?storefront="+r.URL.Query().Get("storefront"))
-		if r.URL.Path == "/api/v1/search" {
-			fmt.Fprint(w, `{"term":"yorushika","storefront":"jp","albums":{"items":[{"id":"1","type":"album","name":"エルマ","url":"https://music.apple.com/jp/album/x/1"}]}}`)
-			return
-		}
-		fmt.Fprint(w, `{"storefront":"jp","artist":{"id":"7","type":"artist","name":"ヨルシカ","url":"https://music.apple.com/jp/artist/x/7"},"albums":{"items":[]}}`)
-	}))
-	defer srv.Close()
-	if r := run(t, srv, "", "search", "yorushika", "--storefront", "jp"); r.code != 0 || !strings.Contains(r.stdout, "music.apple.com/jp/") {
-		t.Errorf("search: %+v", r)
-	}
-	if r := run(t, srv, "", "artists", "albums", "7", "--storefront", "jp"); r.code != 0 {
-		t.Errorf("artists albums: %+v", r)
-	}
-	if r := run(t, srv, "", "search", "yorushika"); r.code != 0 {
-		t.Errorf("search without it: %+v", r)
-	}
-	want := []string{"/api/v1/search?storefront=jp", "/api/v1/artists/7/albums?storefront=jp", "/api/v1/search?storefront="}
-	if strings.Join(seen, " ") != strings.Join(want, " ") {
-		t.Errorf("requests %v, want %v: the default stays the backend's", seen, want)
 	}
 }

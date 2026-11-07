@@ -1,0 +1,12 @@
+# amdl cli search finds the command for a task described in words; the
+# first hit is the one to run. No server is asked.
+exec amdl cli search 'retry the failed downloads'
+stdout '^\[\{"command":"amdl jobs retry'
+exec amdl cli search 'search for an album by name'
+stdout '^\[\{"command":"amdl search'
+exec amdl cli search 'wait until the download ends'
+stdout '^\[\{"command":"amdl jobs wait'
+exec amdl cli search 'sign in to my apple id'
+stdout '^\[\{"command":"amdl wrapper login'
+exec amdl cli search 'where did my files go'
+stdout '^\[\{"command":"amdl jobs get'

@@ -1,0 +1,9 @@
+# wrapper keygen prints a fresh 32-byte key, base64url without padding (43
+# characters), without asking a server; two runs differ.
+exec amdl wrapper keygen
+stdout '^\{"key":"[A-Za-z0-9_-]{43}"\}$'
+! stderr .
+cp stdout first.json
+exec amdl wrapper keygen
+stdout '^\{"key":"[A-Za-z0-9_-]{43}"\}$'
+! cmp stdout first.json

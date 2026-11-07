@@ -1,0 +1,41 @@
+# A server that does not answer is saved, but not made current, so a typo
+# does not take later commands away from the server that works.
+exec amdl context add nowhere http://$DEAD
+stdout '"current":false'
+stdout '"name":"nowhere"'
+stdout '"reachable":false'
+stdout '"hint":"it does not answer now; amdl context use nowhere once it does"'
+exec amdl context list
+stdout '"name":"nowhere"'
+stdout '"current":false'
+
+# A --server that is neither a saved name nor an address is
+# context_not_found (3); a host:port stays an address, dialled and refused (5).
+exits 3 amdl jobs list --server nosuchctx
+stderr '"code":"context_not_found"'
+exits 5 amdl jobs list --server $DEAD
+stderr '"code":"server_unreachable"'
+exits 3 amdl context use nosuchctx
+stderr '"code":"context_not_found"'
+exits 3 amdl context remove nosuchctx
+
+# The MCP snippet of cli setup names the server this run would use:
+# --server, then AMDL_URL, then the current context.
+exec amdl cli setup --server nas
+stdout '"claude_code":"[^"]* mcp --server nas"'
+env AMDL_URL=http://nas:18570
+exec amdl cli setup
+stdout '"claude_code":"[^"]* mcp --server http://nas:18570"'
+env AMDL_URL=
+exec amdl context add nas http://192.0.2.7:18570
+exec amdl context use nas
+stdout '"current":true'
+exec amdl cli setup
+stdout '"claude_code":"[^"]* mcp --server http://192.0.2.7:18570"'
+
+# With nothing configured, it names the default address the client's
+# amdl mcp will try, whether or not something answers there now.
+exec amdl context remove nas
+stdout '"removed":true'
+exec amdl cli setup
+stdout '"claude_code":"[^"]* mcp --server http://127.0.0.1:18080"'

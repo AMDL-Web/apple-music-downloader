@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -32,37 +30,12 @@ func fakeManager(t *testing.T, st service.State) *[]string {
 }
 
 // startServeLocalBackend writes the runtime file a foreground amdl serve
-// --local leaves, with a health endpoint that answers, and returns its pid.
-func startServeLocalBackend(t *testing.T) int {
+// --local leaves, naming a backend whose health check answers, with pid 4242.
+func startServeLocalBackend(t *testing.T) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
 	t.Cleanup(srv.Close)
-	dirs, err := local.DefaultDirs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(dirs.ServerDir(), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(local.Runtime{URL: srv.URL, PID: 4242, Version: "test", Started: time.Now()})
-	if err := os.WriteFile(filepath.Join(dirs.ServerDir(), "runtime.json"), raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return 4242
-}
-
-func runLocal(t *testing.T, args ...string) result {
-	t.Helper()
-	var out, errb bytes.Buffer
-	code := Run(context.Background(), args, IO{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb,
-		Getenv: func(string) string { return "" }})
-	return result{code, out.String(), errb.String()}
-}
-
-func localHome(t *testing.T) {
-	t.Helper()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
+	writeRuntime(t, srv.URL)
 }
 
 // A stop or uninstall with no service installed returns at once instead of
@@ -70,11 +43,10 @@ func localHome(t *testing.T) {
 func TestServiceStopAndUninstallWithoutAServiceReturnAtOnce(t *testing.T) {
 	for _, cmd := range []string{"stop", "uninstall"} {
 		t.Run(cmd, func(t *testing.T) {
-			localHome(t)
 			calls := fakeManager(t, service.State{Manager: "launchd", Definition: "/x/amdl.plist"})
-			pid := startServeLocalBackend(t)
+			startServeLocalBackend(t)
 			start := time.Now()
-			r := runLocal(t, "service", cmd)
+			r := run(t, nil, "", "service", cmd)
 			if r.code != exitOK {
 				t.Fatalf("exit %d, stderr %s", r.code, r.stderr)
 			}
@@ -92,16 +64,16 @@ func TestServiceStopAndUninstallWithoutAServiceReturnAtOnce(t *testing.T) {
 				t.Fatalf("stdout %q: %v", r.stdout, err)
 			}
 			if !strings.Contains(got.Note, "not installed") || !strings.Contains(got.Note, "pid 4242") || !got.Running {
-				t.Errorf("note %q (running %v) should say the service is not installed and name pid %d", got.Note, got.Running, pid)
+				t.Errorf("note %q (running %v) should say the service is not installed and name pid 4242", got.Note, got.Running)
 			}
 		})
 	}
 }
 
 func TestServiceStopWhenAlreadyStoppedDoesNotCallTheManager(t *testing.T) {
-	localHome(t)
+	isolateHome(t)
 	calls := fakeManager(t, service.State{Manager: "launchd", Installed: true, Status: "not loaded"})
-	r := runLocal(t, "service", "stop")
+	r := run(t, nil, "", "service", "stop")
 	if r.code != exitOK || len(*calls) != 0 || !strings.Contains(r.stdout, "already stopped") {
 		t.Fatalf("exit %d, manager calls %v, stdout %s, stderr %s", r.code, *calls, r.stdout, r.stderr)
 	}
@@ -109,15 +81,16 @@ func TestServiceStopWhenAlreadyStoppedDoesNotCallTheManager(t *testing.T) {
 
 func TestServiceStopAndUninstallOfARunningServiceStillAct(t *testing.T) {
 	for _, cmd := range []string{"stop", "uninstall"} {
-		localHome(t)
-		calls := fakeManager(t, service.State{Manager: "launchd", Installed: true, Active: true, Status: "running"})
-		r := runLocal(t, "service", cmd)
-		if r.code != exitOK {
-			t.Fatalf("%s: exit %d, stderr %s", cmd, r.code, r.stderr)
-		}
-		if len(*calls) != 1 || (*calls)[0] != cmd {
-			t.Errorf("%s asked the manager for %v", cmd, *calls)
-		}
+		t.Run(cmd, func(t *testing.T) {
+			calls := fakeManager(t, service.State{Manager: "launchd", Installed: true, Active: true, Status: "running"})
+			r := run(t, nil, "", "service", cmd)
+			if r.code != exitOK {
+				t.Fatalf("exit %d, stderr %s", r.code, r.stderr)
+			}
+			if len(*calls) != 1 || (*calls)[0] != cmd {
+				t.Errorf("asked the manager for %v", *calls)
+			}
+		})
 	}
 }
 
@@ -125,14 +98,14 @@ func TestServiceInstallDryRunChangesNothing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake ffmpeg is a shell script")
 	}
-	localHome(t)
+	isolateHome(t)
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "ffmpeg"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
 	calls := fakeManager(t, service.State{Manager: "systemd", Definition: "/x/amdl.service"})
-	r := runLocal(t, "service", "install", "--wrapper", "127.0.0.1:30020", "--dry-run")
+	r := run(t, nil, "", "service", "install", "--wrapper", "127.0.0.1:30020", "--dry-run")
 	if r.code != exitOK {
 		t.Fatalf("exit %d, stderr %s", r.code, r.stderr)
 	}
@@ -161,9 +134,9 @@ func TestServiceInstallDryRunChangesNothing(t *testing.T) {
 }
 
 func TestServiceUninstallDryRunChangesNothing(t *testing.T) {
-	localHome(t)
+	isolateHome(t)
 	calls := fakeManager(t, service.State{Manager: "systemd", Definition: "/x/amdl.service", Installed: true, Active: true})
-	r := runLocal(t, "service", "uninstall", "--dry-run")
+	r := run(t, nil, "", "service", "uninstall", "--dry-run")
 	if r.code != exitOK || len(*calls) != 0 || !strings.Contains(r.stdout, `"dry_run":true`) {
 		t.Fatalf("exit %d, manager calls %v, stdout %s, stderr %s", r.code, *calls, r.stdout, r.stderr)
 	}

@@ -1,0 +1,17 @@
+# amdl mcp answers the MCP handshake although no server answers (the
+# setup's AMDL_URL is a closed port), reports the unreachable server in each
+# tool call's result, and ends when its client closes stdin.
+exec mcpclient handshake.jsonl
+stdout '"id":1,"result":\{.*"serverInfo":\{"name":"amdl"'
+stdout '"id":2,"result":\{.*server_unreachable.*"isError":true'
+
+# With a backend, the same call answers from it.
+demo-backend
+exec mcpclient handshake.jsonl
+stdout '"id":2,"result":\{.*logged_in'
+! stdout '"id":2,"result":\{.*"isError":true'
+
+-- handshake.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_status","arguments":{}}}

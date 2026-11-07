@@ -11,8 +11,8 @@ import (
 )
 
 // checkPoll is how often library check --wait asks the server how far the
-// check is.
-const checkPoll = time.Second
+// check is; tests shorten it.
+var checkPoll = time.Second
 
 // libraryCheckCmd starts a disk check. The server runs it in the background;
 // with --wait the command follows it until it is finished and prints that

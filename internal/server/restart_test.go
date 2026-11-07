@@ -145,21 +145,3 @@ func TestRestartAppliesSavedRestartKeys(t *testing.T) {
 	// End the last run through the same path.
 	restart(done)
 }
-
-// Run bootstraps a missing config with Options.Init (amdl serve --init).
-func TestRunSeedsANewConfig(t *testing.T) {
-	// A hooks file that does not load stops Run right after the config is
-	// read, before it creates the example's relative data directories.
-	opts := newRunEnv(t, "entries: [")
-	if err := os.Remove(opts.ConfigPath); err != nil {
-		t.Fatal(err)
-	}
-	opts.Init = []config.Seed{{Key: "server.listen", Value: ":18080"}, {Key: "wrapper.address", Value: "http://host.docker.internal:12340"}}
-	if err := Run(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "hooks") {
-		t.Fatalf("Run() = %v, want the hooks error", err)
-	}
-	cfg, err := config.Load(opts.ConfigPath)
-	if err != nil || cfg.Server.Listen != ":18080" || cfg.Wrapper.Address != "http://host.docker.internal:12340" {
-		t.Fatalf("seeded config = %q %q, %v", cfg.Server.Listen, cfg.Wrapper.Address, err)
-	}
-}

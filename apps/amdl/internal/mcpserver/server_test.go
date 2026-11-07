@@ -119,21 +119,20 @@ func TestToolsComeFromTheCapabilityTable(t *testing.T) {
 	for _, tl := range res.Tools {
 		got[tl.Name] = tl
 	}
+	// One tool per capability that names one, and no others; the hints
+	// each carries: TestChangingToolsAreMarkedConservatively.
+	want := 0
 	for _, c := range capability.All {
 		if c.Tool == "" {
 			continue
 		}
-		tl, ok := got[c.Tool]
-		if !ok {
+		want++
+		if _, ok := got[c.Tool]; !ok {
 			t.Errorf("tool %s is missing", c.Tool)
-			continue
-		}
-		if tl.Annotations.ReadOnlyHint != (c.Safety == capability.Read) {
-			t.Errorf("%s readOnlyHint = %v", c.Tool, tl.Annotations.ReadOnlyHint)
 		}
 	}
-	if len(got) != 37 {
-		t.Errorf("%d tools, want 37", len(got))
+	if len(got) != want {
+		t.Errorf("%d tools, want the capability table's %d", len(got), want)
 	}
 	if d := got["delete_job"].Annotations.DestructiveHint; d == nil || !*d {
 		t.Error("delete_job should be destructive")
