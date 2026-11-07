@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"image/png"
-	"os"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -114,17 +112,5 @@ func TestThreeRegionsAreAMenu(t *testing.T) {
 	tt.Frame()
 	if a.Store.Search.Region != "gb" {
 		t.Errorf("chosen %q after picking United Kingdom", a.Store.Search.Region)
-	}
-}
-
-func shot(t *testing.T, tt *ui.Tester, path string) {
-	t.Helper()
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if err := png.Encode(f, tt.Image()); err != nil {
-		t.Fatal(err)
 	}
 }
