@@ -5,22 +5,21 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
 func TestAppleLibraryCallsTheSpecRoutes(t *testing.T) {
 	var got []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body) // a failed read shows up as a wrong body below
 		got = append(got, r.Method+" "+r.URL.RequestURI()+" "+string(body))
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v1/apple-library/sync":
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = w.Write([]byte(`{"account_id":"a1","name":"a@icloud.com","region":"jp","default":false,"enabled":true,"available":true,"state":"running","current":{"id":"als_1","mode":"incremental"},"counts":{}}`))
+			_, _ = w.Write([]byte(`{"account_id":"a1","name":"a@icloud.com","region":"jp","default":false,"enabled":true,"available":true,"state":"running","current":{"id":"als_1","mode":"incremental","trigger":"manual","started_at":"2026-11-02T08:30:00Z","kind":"albums","pages_read":1,"requests":2},"counts":{"songs":0,"albums":1,"playlists":0,"artists":0}}`))
 		case "/api/v1/apple-library/status":
-			_, _ = w.Write([]byte(`{"sync_interval_minutes":30,"full_sync_hours":24,"accounts":[{"account_id":"a1","name":"a@icloud.com","region":"jp","default":true,"enabled":true,"available":false,"reason":"disabled","state":"idle","counts":{}}]}`))
+			_, _ = w.Write([]byte(`{"sync_interval_minutes":30,"full_sync_hours":24,"accounts":[{"account_id":"a1","name":"a@icloud.com","region":"jp","default":true,"enabled":true,"available":false,"reason":"disabled","state":"idle","counts":{"songs":0,"albums":0,"playlists":0,"artists":0}}]}`))
 		case "/api/v1/apple-library/playlists/p.1/tracks":
 			_, _ = w.Write([]byte(`{"playlist_id":"p.1","items":[{"position":0,"song_id":"i.1","name":"A","url":"https://music.apple.com/cn/song/1"}],"total":1}`))
 		default:
@@ -32,11 +31,6 @@ func TestAppleLibraryCallsTheSpecRoutes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"kind":"albums","items":[{"id":"l.1","catalog_id":"9","url":"https://music.apple.com/cn/album/x/9","name":"X"}],"total":1,"offset":0,"synced_at":"2026-11-02T08:30:00Z"}`))
 		}
 	}))
-	defer srv.Close()
-	c, err := New(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
 	ctx := context.Background()
 
 	page, err := c.AppleLibrary(ctx, "albums", AppleLibraryQuery{Sort: "name", Q: "x y", Limit: 100, Offset: 100, Account: "a1"})

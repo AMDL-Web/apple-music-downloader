@@ -245,6 +245,9 @@ func (s *Spec) Middleware(t testing.TB, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cw := &capture{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(cw, r)
+		if r.Context().Err() != nil {
+			return // the client went away; nobody reads what was written
+		}
 		body := cw.body.Bytes()
 		if cw.streaming {
 			body = nil
