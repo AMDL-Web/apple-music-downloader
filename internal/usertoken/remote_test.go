@@ -10,10 +10,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/config"
@@ -75,8 +77,9 @@ func (f *fakeWrapper) fetch(context.Context, string) (wrapper.TokenReply, error)
 	return r.reply, r.err
 }
 
-// endpointProvider is a Provider with GET /token answered by fetch, its store
-// in dir and every wait short unless a test lengthens it.
+// endpointProvider is a Provider with GET /token answered by fetch and its
+// store in dir, with the production refresh timing. Tests that run its loop
+// do so inside a synctest bubble, where those waits pass in virtual time.
 func endpointProvider(t *testing.T, fetch func(context.Context, string) (wrapper.TokenReply, error), dir, address string, logs *lockedBuffer) (*Provider, *remote) {
 	t.Helper()
 	p := New()
@@ -84,32 +87,24 @@ func endpointProvider(t *testing.T, fetch func(context.Context, string) (wrapper
 		Fetch: fetch, Dir: dir, Address: address,
 		Logger: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
-	r := p.remotes[implicitID]
-	r.jitter = func() time.Duration { return 0 }
-	r.floor, r.ceiling = time.Hour, time.Hour
-	r.loggedOutRetry, r.unsupportedRetry = time.Hour, time.Hour
-	r.backoffMin, r.backoffMax = time.Hour, time.Hour
-	r.nudgeSpacing = 0
-	return p, r
+	return p, p.remotes[implicitID]
 }
 
+// runLoop runs p's GET /token loops until the test ends and waits until they
+// have made their first fetches. It must run inside a synctest bubble.
 func runLoop(t *testing.T, p *Provider) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { p.RunEndpoint(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
+	synctest.Wait()
 }
 
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+// advance moves the bubble's clock by d and waits for the loops to settle.
+func advance(d time.Duration) {
+	time.Sleep(d)
+	synctest.Wait()
 }
 
 func assertNoToken(t *testing.T, logs *lockedBuffer, toks ...string) {
@@ -122,160 +117,190 @@ func assertNoToken(t *testing.T, logs *lockedBuffer, toks ...string) {
 	}
 }
 
-func tokenIs(p *Provider, cfg config.Config, want Token) func() bool {
-	return func() bool { return p.Token(cfg) == want }
+func assertToken(t *testing.T, p *Provider, want Token) {
+	t.Helper()
+	if got := p.Token(cfg0()); got != want {
+		t.Fatalf("Token = {%d bytes, %q, %q}, want {%d bytes, %q, %q}", len(got.Value), got.Source, got.Account, len(want.Value), want.Source, want.Account)
+	}
 }
 
-func storeGone(dir string) func() bool {
-	return func() bool {
-		_, err := os.Stat(filepath.Join(dir, StoreFileName))
-		return errors.Is(err, os.ErrNotExist)
+func assertCalls(t *testing.T, w *fakeWrapper, want int32) {
+	t.Helper()
+	if n := w.calls.Load(); n != want {
+		t.Fatalf("/token asked %d times, want %d", n, want)
 	}
+}
+
+func storeGone(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, StoreFileName))
+	return errors.Is(err, os.ErrNotExist)
 }
 
 func TestEndpointTokenIsUsedAndStoredPrivately(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), StoreDirName)
-	var logs lockedBuffer
-	w := &fakeWrapper{}
-	w.set(ok(endpointTok, 0))
-	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
-	runLoop(t, p)
-	waitFor(t, "the /token token", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
+	synctest.Test(t, func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), StoreDirName)
+		var logs lockedBuffer
+		w := &fakeWrapper{}
+		w.set(ok(endpointTok, 0))
+		p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
+		runLoop(t, p)
+		assertToken(t, p, Token{endpointTok, SourceWrapper, implicitID})
 
-	st, err := os.Stat(filepath.Join(dir, StoreFileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if st.Mode().Perm() != 0o600 {
-		t.Fatalf("stored copy mode %v, want 0600", st.Mode().Perm())
-	}
-	dst, err := os.Stat(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dst.Mode().Perm() != 0o700 {
-		t.Fatalf("store dir mode %v, want 0700", dst.Mode().Perm())
-	}
-	if !strings.Contains(logs.String(), "using the wrapper's token from GET /token") {
-		t.Fatalf("no log line for the new source:\n%s", logs.String())
-	}
-	assertNoToken(t, &logs, endpointTok)
+		st, err := os.Stat(filepath.Join(dir, StoreFileName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Mode().Perm() != 0o600 {
+			t.Fatalf("stored copy mode %v, want 0600", st.Mode().Perm())
+		}
+		dst, err := os.Stat(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dst.Mode().Perm() != 0o700 {
+			t.Fatalf("store dir mode %v, want 0700", dst.Mode().Perm())
+		}
+		if !strings.Contains(logs.String(), "using the wrapper's token from GET /token") {
+			t.Fatalf("no log line for the new source:\n%s", logs.String())
+		}
+		assertNoToken(t, &logs, endpointTok)
+	})
 }
 
 func TestStoredCopyServesARestart(t *testing.T) {
-	dir := t.TempDir()
-	var logs lockedBuffer
-	first := &fakeWrapper{}
-	first.set(ok(endpointTok, 0))
-	p, _ := endpointProvider(t, first.fetch, dir, testAddress, &logs)
-	runLoop(t, p)
-	waitFor(t, "the first run's token", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+		var logs lockedBuffer
+		first := &fakeWrapper{}
+		first.set(ok(endpointTok, 0))
+		p, _ := endpointProvider(t, first.fetch, dir, testAddress, &logs)
+		runLoop(t, p)
+		assertToken(t, p, Token{endpointTok, SourceWrapper, implicitID})
 
-	// The second run's wrapper is restarting: nothing answers.
-	down := &fakeWrapper{}
-	down.set(fakeReply{err: errors.New("connection refused")})
-	again, _ := endpointProvider(t, down.fetch, dir, testAddress, &logs)
-	if got := again.Token(cfg0()); got != (Token{endpointTok, SourceWrapper, implicitID}) {
-		t.Fatalf("after a restart: {%d bytes, %q}, want the stored copy", len(got.Value), got.Source)
-	}
-	runLoop(t, again)
-	waitFor(t, "a failed fetch", func() bool { return down.calls.Load() >= 1 })
-	if got := again.Token(cfg0()); got.Value != endpointTok {
-		t.Fatalf("a failed fetch dropped the stored copy: %d bytes", len(got.Value))
-	}
+		// The second run's wrapper is restarting: nothing answers.
+		down := &fakeWrapper{}
+		down.set(fakeReply{err: errors.New("connection refused")})
+		again, _ := endpointProvider(t, down.fetch, dir, testAddress, &logs)
+		if got := again.Token(cfg0()); got != (Token{endpointTok, SourceWrapper, implicitID}) {
+			t.Fatalf("after a restart: {%d bytes, %q}, want the stored copy", len(got.Value), got.Source)
+		}
+		runLoop(t, again)
+		assertCalls(t, down, 1)
+		if got := again.Token(cfg0()); got.Value != endpointTok {
+			t.Fatalf("a failed fetch dropped the stored copy: %d bytes", len(got.Value))
+		}
 
-	other, _ := endpointProvider(t, down.fetch, dir, "http://another-wrapper:12340", &logs)
-	if got := other.Token(cfg0()); got.Source != SourceNone {
-		t.Fatalf("a copy from another wrapper.address was used: %q", got.Source)
-	}
-	assertNoToken(t, &logs, endpointTok)
+		other, _ := endpointProvider(t, down.fetch, dir, "http://another-wrapper:12340", &logs)
+		if got := other.Token(cfg0()); got.Source != SourceNone {
+			t.Fatalf("a copy from another wrapper.address was used: %q", got.Source)
+		}
+		assertNoToken(t, &logs, endpointTok)
+	})
 }
 
 func TestLoggedOutDropsTheStoredCopy(t *testing.T) {
-	dir := t.TempDir()
-	if err := (tokenStore{dir: dir}).save(storedToken{Address: testAddress, MusicToken: endpointTok}); err != nil {
-		t.Fatal(err)
-	}
-	var logs lockedBuffer
-	w := &fakeWrapper{}
-	w.set(fakeReply{err: wrapper.ErrNoToken})
-	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
-	if got := p.Token(cfg0()); got.Value != endpointTok {
-		t.Fatal("the stored copy was not loaded")
-	}
-	runLoop(t, p)
-	waitFor(t, "no token after the logout", tokenIs(p, cfg0(), Token{Account: implicitID}))
-	// The token stops being used first; the copy goes and the logout is
-	// logged right after.
-	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
-	waitFor(t, "the logout's log line", func() bool { return strings.Contains(logs.String(), "no logged-in account") })
-	again, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
-	if got := again.Token(cfg0()); got != (Token{Account: implicitID}) {
-		t.Fatal("a restart brought the logged-out token back")
-	}
-	assertNoToken(t, &logs, endpointTok)
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+		if err := (tokenStore{dir: dir}).save(storedToken{Address: testAddress, MusicToken: endpointTok}); err != nil {
+			t.Fatal(err)
+		}
+		var logs lockedBuffer
+		w := &fakeWrapper{}
+		w.set(fakeReply{err: wrapper.ErrNoToken})
+		p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
+		if got := p.Token(cfg0()); got.Value != endpointTok {
+			t.Fatal("the stored copy was not loaded")
+		}
+		runLoop(t, p)
+		assertToken(t, p, Token{Account: implicitID})
+		if !storeGone(dir) {
+			t.Fatal("the stored copy survived a 503")
+		}
+		if !strings.Contains(logs.String(), "no logged-in account") {
+			t.Fatalf("the logout was not logged:\n%s", logs.String())
+		}
+		again, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
+		if got := again.Token(cfg0()); got != (Token{Account: implicitID}) {
+			t.Fatal("a restart brought the logged-out token back")
+		}
+		assertNoToken(t, &logs, endpointTok)
+	})
 }
 
 func TestNoTokenEndpointIsNotHammered(t *testing.T) {
-	var logs lockedBuffer
-	w := &fakeWrapper{}
-	w.set(fakeReply{err: wrapper.ErrTokenUnsupported})
-	p, _ := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
-	runLoop(t, p)
-	waitFor(t, "the first /token answer", func() bool { return w.calls.Load() == 1 })
-	for range 5 {
-		p.RefreshSoon()
-		time.Sleep(10 * time.Millisecond)
-	}
-	if n := w.calls.Load(); n != 1 {
-		t.Fatalf("/token asked %d times after a 404, want 1", n)
-	}
-	if got := p.Token(cfg0()); got.Value != "" {
-		t.Fatalf("after a 404: %d bytes, want none", len(got.Value))
-	}
-	if c := strings.Count(logs.String(), "has no GET /token"); c != 1 {
-		t.Fatalf("the 404 was logged %d times, want once:\n%s", c, logs.String())
-	}
+	synctest.Test(t, func(t *testing.T) {
+		var logs lockedBuffer
+		w := &fakeWrapper{}
+		w.set(fakeReply{err: wrapper.ErrTokenUnsupported})
+		p, _ := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
+		runLoop(t, p)
+		assertCalls(t, w, 1)
+		// Nudges spread over almost the whole retry interval fetch nothing.
+		for range 5 {
+			p.RefreshSoon()
+			advance(unsupportedRetry / 6)
+		}
+		assertCalls(t, w, 1)
+		if got := p.Token(cfg0()); got.Value != "" {
+			t.Fatalf("after a 404: %d bytes, want none", len(got.Value))
+		}
+		advance(unsupportedRetry / 6)
+		assertCalls(t, w, 2)
+		if c := strings.Count(logs.String(), "has no GET /token"); c != 1 {
+			t.Fatalf("the 404 was logged %d times, want once:\n%s", c, logs.String())
+		}
+	})
 }
 
 func TestRefetchesAndPicksUpTheNewToken(t *testing.T) {
-	var logs lockedBuffer
-	w := &fakeWrapper{}
-	// next_refresh_at already passed: the floor applies.
-	w.set(ok(endpointTok, 1), ok(newerTok, 1))
-	p, r := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
-	r.floor = 20 * time.Millisecond
-	runLoop(t, p)
-	waitFor(t, "the refreshed token", tokenIs(p, cfg0(), Token{newerTok, SourceWrapper, implicitID}))
-	assertNoToken(t, &logs, endpointTok, newerTok)
+	synctest.Test(t, func(t *testing.T) {
+		var logs lockedBuffer
+		w := &fakeWrapper{}
+		// next_refresh_at already passed: the floor applies.
+		w.set(ok(endpointTok, 1), ok(newerTok, 1))
+		p, _ := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
+		runLoop(t, p)
+		assertToken(t, p, Token{endpointTok, SourceWrapper, implicitID})
+		advance(refreshFloor - time.Nanosecond)
+		assertCalls(t, w, 1)
+		advance(time.Nanosecond)
+		assertCalls(t, w, 2)
+		assertToken(t, p, Token{newerTok, SourceWrapper, implicitID})
+		assertNoToken(t, &logs, endpointTok, newerTok)
+	})
 }
 
 func TestRefreshSoonFetches(t *testing.T) {
-	var logs lockedBuffer
-	w := &fakeWrapper{}
-	w.set(ok(endpointTok, 0))
-	p, _ := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
-	runLoop(t, p)
-	waitFor(t, "the first fetch", func() bool { return w.calls.Load() == 1 })
-	p.RefreshSoon()
-	waitFor(t, "the nudged fetch", func() bool { return w.calls.Load() == 2 })
+	synctest.Test(t, func(t *testing.T) {
+		var logs lockedBuffer
+		w := &fakeWrapper{}
+		w.set(ok(endpointTok, 0))
+		p, _ := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
+		runLoop(t, p)
+		assertCalls(t, w, 1)
+		advance(nudgeSpacing)
+		p.RefreshSoon()
+		synctest.Wait()
+		assertCalls(t, w, 2)
+	})
 }
 
 func TestRefreshSoonWaitsOutTheSpacing(t *testing.T) {
-	var logs lockedBuffer
-	w := &fakeWrapper{}
-	w.set(ok(endpointTok, 0))
-	p, r := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
-	r.nudgeSpacing = time.Hour
-	runLoop(t, p)
-	waitFor(t, "the first fetch", func() bool { return w.calls.Load() == 1 })
-	for range 3 {
-		p.RefreshSoon()
-	}
-	time.Sleep(50 * time.Millisecond)
-	if n := w.calls.Load(); n != 1 {
-		t.Fatalf("%d fetches, want 1: a nudge inside the spacing fetched", n)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		var logs lockedBuffer
+		w := &fakeWrapper{}
+		w.set(ok(endpointTok, 0))
+		p, _ := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
+		runLoop(t, p)
+		assertCalls(t, w, 1)
+		for range 3 {
+			p.RefreshSoon()
+		}
+		advance(nudgeSpacing - time.Nanosecond)
+		assertCalls(t, w, 1) // a nudge inside the spacing fetched
+		advance(time.Nanosecond)
+		assertCalls(t, w, 2) // the three nudges made one fetch, once allowed
+	})
 }
 
 func TestWaitAfterToken(t *testing.T) {
@@ -308,19 +333,16 @@ func TestFailureBacksOffAndKeepsTheToken(t *testing.T) {
 	w := &fakeWrapper{}
 	w.set(ok(endpointTok, 0))
 	_, r := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
-	r.backoffMin, r.backoffMax = 10*time.Millisecond, 40*time.Millisecond
 	ctx := context.Background()
 	r.fetchOnce(ctx)
 	w.set(fakeReply{err: errors.New("dial tcp: connection refused")})
 	var waits []time.Duration
-	for range 4 {
+	for range 8 {
 		waits = append(waits, r.fetchOnce(ctx))
 	}
-	want := []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond}
-	for i := range want {
-		if waits[i] != want[i] {
-			t.Fatalf("backoff %v, want %v", waits, want)
-		}
+	want := []time.Duration{backoffMin, 2 * backoffMin, 4 * backoffMin, 8 * backoffMin, 16 * backoffMin, 32 * backoffMin, backoffMax, backoffMax}
+	if !slices.Equal(waits, want) {
+		t.Fatalf("backoff %v, want %v", waits, want)
 	}
 	if r.liveToken() != endpointTok {
 		t.Fatal("a failed fetch dropped the token")
@@ -337,7 +359,8 @@ func TestFailureBacksOffAndKeepsTheToken(t *testing.T) {
 }
 
 // TestRealClientAgainstAWrapper drives the provider through wrapper.Client
-// and an HTTP wrapper: a 200, then a logout's 503.
+// and an HTTP wrapper: a 200, then a logout's 503. Real network I/O cannot
+// run in a synctest bubble, so this one shortens the waits and polls.
 func TestRealClientAgainstAWrapper(t *testing.T) {
 	var loggedIn atomic.Bool
 	loggedIn.Store(true)
@@ -366,11 +389,26 @@ func TestRealClientAgainstAWrapper(t *testing.T) {
 	var logs lockedBuffer
 	p, r := endpointProvider(t, client.MusicToken, dir, srv.URL, &logs)
 	r.floor, r.loggedOutRetry = 20*time.Millisecond, 20*time.Millisecond
-	runLoop(t, p)
-	waitFor(t, "the token over HTTP", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { p.RunEndpoint(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	tokenIs := func(want Token) func() bool { return func() bool { return p.Token(cfg0()) == want } }
+	waitFor("the token over HTTP", tokenIs(Token{endpointTok, SourceWrapper, implicitID}))
 	loggedIn.Store(false)
-	waitFor(t, "the logout", tokenIs(p, cfg0(), Token{Account: implicitID}))
-	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
+	waitFor("the logout", tokenIs(Token{Account: implicitID}))
+	waitFor("the stored copy to go after a 503", func() bool { return storeGone(dir) })
 	assertNoToken(t, &logs, endpointTok)
 }
 
@@ -394,26 +432,26 @@ func TestLeftoverTempCopyIsRemoved(t *testing.T) {
 }
 
 func TestUnwritableStoreWarnsOnce(t *testing.T) {
-	// A regular file where the store directory should be: every save fails.
-	dir := filepath.Join(t.TempDir(), StoreDirName)
-	if err := os.WriteFile(dir, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var logs lockedBuffer
-	w := &fakeWrapper{}
-	w.set(ok(endpointTok, 0))
-	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
-	runLoop(t, p)
-	waitFor(t, "the /token token", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
-	for i := int32(2); i <= 3; i++ {
-		p.RefreshSoon()
-		waitFor(t, "another fetch", func() bool { return w.calls.Load() >= i })
-	}
-	waitFor(t, "the third answer's log line", func() bool {
-		return strings.Count(logs.String(), "using the wrapper's token from GET /token") >= 3
+	synctest.Test(t, func(t *testing.T) {
+		// A regular file where the store directory should be: every save fails.
+		dir := filepath.Join(t.TempDir(), StoreDirName)
+		if err := os.WriteFile(dir, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var logs lockedBuffer
+		w := &fakeWrapper{}
+		w.set(ok(endpointTok, 0))
+		p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
+		runLoop(t, p)
+		assertToken(t, p, Token{endpointTok, SourceWrapper, implicitID})
+		advance(2 * refreshFloor)
+		assertCalls(t, w, 3)
+		if c := strings.Count(logs.String(), "using the wrapper's token from GET /token"); c != 3 {
+			t.Fatalf("%d answers logged, want 3:\n%s", c, logs.String())
+		}
+		if c := strings.Count(logs.String(), "could not store a copy"); c != 1 {
+			t.Fatalf("the unwritable store was logged %d times over 3 answers, want once:\n%s", c, logs.String())
+		}
+		assertNoToken(t, &logs, endpointTok)
 	})
-	if c := strings.Count(logs.String(), "could not store a copy"); c != 1 {
-		t.Fatalf("the unwritable store was logged %d times over 3 answers, want once:\n%s", c, logs.String())
-	}
-	assertNoToken(t, &logs, endpointTok)
 }
