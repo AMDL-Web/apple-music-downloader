@@ -44,28 +44,6 @@ func TestSubmitBatchStoresOverridesOnEveryJob(t *testing.T) {
 	}
 }
 
-func TestSubmitBatchDedupesWithinRequest(t *testing.T) {
-	manager := newTestManager(t)
-	ctx := context.Background()
-	resp := manager.SubmitBatch(ctx, []string{
-		"album|us|111",
-		"station|us|222",
-		"album|us|111", // same canonical key as the first entry
-	}, nil)
-	if len(resp.Results) != 3 {
-		t.Fatalf("results = %+v, want 3", resp.Results)
-	}
-	if resp.Results[0].Status != domain.SubmitAccepted || resp.Results[1].Status != domain.SubmitAccepted {
-		t.Fatalf("first two results = %+v, want accepted", resp.Results[:2])
-	}
-	if resp.Results[2].Status != domain.SubmitDuplicateInRequest || resp.Results[2].Error == nil || resp.Results[2].Error.Code != "duplicate_in_request" {
-		t.Fatalf("third result = %+v, want duplicate_in_request with its error code", resp.Results[2])
-	}
-	if resp.Accepted != 2 || resp.Rejected != 1 {
-		t.Fatalf("resp = %+v, want 2 accepted / 1 rejected", resp)
-	}
-}
-
 func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T) {
 	manager := newTestManager(t)
 	ctx := context.Background()
@@ -98,25 +76,77 @@ func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T)
 	}
 }
 
-func TestSubmitBatchQueueFullMarksRemainingWithoutRollback(t *testing.T) {
-	manager := newTestManager(t)
-	manager.capacity = 1
-	ctx := context.Background()
-
-	resp := manager.SubmitBatch(ctx, []string{"station|us|1", "station|us|2", "station|us|3"}, nil)
-	if resp.Results[0].Status != domain.SubmitAccepted {
-		t.Fatalf("first = %+v, want accepted", resp.Results[0])
-	}
-	for _, result := range resp.Results[1:] {
-		if result.Status != domain.SubmitQueueFull || result.Error == nil || result.Error.Code != "queue_full" {
-			t.Fatalf("remaining = %+v, want queue_full with its error code", resp.Results[1:])
-		}
-	}
-	if resp.Accepted != 1 || resp.Rejected != 2 {
-		t.Fatalf("resp = %+v, want 1 accepted / 2 rejected", resp)
+// SubmitBatch answers each URL of a batch on its own: a URL the batch already
+// named, a full queue, an invalid URL and a store failure each reject only
+// their own entry, with the status and error code clients switch on. A store
+// failure is not a verdict on the URL: it is status error with store_error,
+// which tells the client to retry, never invalid.
+func TestSubmitBatchRejectsEntries(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		setup    func(t *testing.T, m *Manager)
+		urls     []string
+		statuses []domain.SubmitStatus
+		codes    []string
+		accepted int
+	}{
+		{
+			name:     "duplicate in request",
+			urls:     []string{"album|us|111", "station|us|222", "album|us|111"},
+			statuses: []domain.SubmitStatus{domain.SubmitAccepted, domain.SubmitAccepted, domain.SubmitDuplicateInRequest},
+			codes:    []string{"", "", "duplicate_in_request"}, accepted: 2,
+		},
+		{
+			name:     "queue full keeps the accepted entry",
+			setup:    func(_ *testing.T, m *Manager) { m.capacity = 1 },
+			urls:     []string{"station|us|1", "station|us|2", "station|us|3"},
+			statuses: []domain.SubmitStatus{domain.SubmitAccepted, domain.SubmitQueueFull, domain.SubmitQueueFull},
+			codes:    []string{"", "queue_full", "queue_full"}, accepted: 1,
+		},
+		{
+			name:     "invalid url",
+			urls:     []string{"bad:not-a-url"},
+			statuses: []domain.SubmitStatus{domain.SubmitInvalid},
+			codes:    []string{"invalid_url"},
+		},
+		{
+			name: "store failure",
+			setup: func(t *testing.T, m *Manager) {
+				if err := m.store.Close(); err != nil {
+					t.Fatal(err)
+				}
+			},
+			urls:     []string{"station|us|1"},
+			statuses: []domain.SubmitStatus{domain.SubmitServerError},
+			codes:    []string{"store_error"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := newTestManager(t)
+			if tt.setup != nil {
+				tt.setup(t, manager)
+			}
+			resp := manager.SubmitBatch(context.Background(), tt.urls, nil)
+			if len(resp.Results) != len(tt.urls) {
+				t.Fatalf("results = %+v, want %d", resp.Results, len(tt.urls))
+			}
+			for i, got := range resp.Results {
+				code := ""
+				if got.Error != nil {
+					code = got.Error.Code
+				}
+				if got.Status != tt.statuses[i] || code != tt.codes[i] {
+					t.Errorf("result %d = %s/%q, want %s/%q", i, got.Status, code, tt.statuses[i], tt.codes[i])
+				}
+			}
+			if resp.Accepted != tt.accepted || resp.Rejected != len(tt.urls)-tt.accepted {
+				t.Fatalf("resp = %d accepted / %d rejected, want %d / %d", resp.Accepted, resp.Rejected, tt.accepted, len(tt.urls)-tt.accepted)
+			}
+		})
 	}
 }
 
+// An invalid URL carries the processor's own code and message.
 func TestSubmitBatchInvalidURLReportsError(t *testing.T) {
 	manager := newTestManager(t)
 	resp := manager.SubmitBatch(context.Background(), []string{"bad:not-a-url"}, nil)
@@ -126,21 +156,21 @@ func TestSubmitBatchInvalidURLReportsError(t *testing.T) {
 	}
 }
 
-// A store failure is not a verdict on the URL: it is reported as status
-// error with store_error, which tells the client to retry, and never as
-// invalid, which tells it the input is bad.
-func TestSubmitBatchStoreFailureIsErrorNotInvalid(t *testing.T) {
+// TestSubmitBatchStoresThreeSegmentKey pins the key a one-off run writes: the
+// dedup identity is what is downloaded, type, storefront and adam id. Record
+// runs dedup by their record instead and store no key.
+func TestSubmitBatchStoresThreeSegmentKey(t *testing.T) {
 	manager := newTestManager(t)
-	if err := manager.store.Close(); err != nil {
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|111"}, nil)
+	if resp.Accepted != 1 || resp.Results[0].Job == nil {
+		t.Fatalf("submit = %+v, want one accepted job", resp)
+	}
+	job, err := manager.store.GetJob(context.Background(), resp.Results[0].Job.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
-	got := resp.Results[0]
-	if got.Status != domain.SubmitServerError || got.Error == nil || got.Error.Code != "store_error" {
-		t.Fatalf("result = %+v, want status error with store_error", got)
-	}
-	if resp.Accepted != 0 || resp.Rejected != 1 {
-		t.Fatalf("resp = %+v, want 0 accepted / 1 rejected", resp)
+	if job.CanonicalKey != "station:us:111" {
+		t.Fatalf("canonical key = %q, want station:us:111", job.CanonicalKey)
 	}
 }
 
@@ -203,10 +233,8 @@ func TestJobQueuedDispatchesHook(t *testing.T) {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && atomic.LoadInt32(&calls) == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
+	// SubmitBatch dispatched the hook before it returned; draining the
+	// dispatcher waits for the call.
 	dispatcher.Shutdown(context.Background())
 
 	if got := atomic.LoadInt32(&calls); got != 1 {
@@ -340,18 +368,15 @@ func TestRetryOfQueuedCancelledJobRunsItOnce(t *testing.T) {
 	manager.Start(ctx)
 	select {
 	case <-processor.entered:
-	case <-time.After(2 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("no worker started the retried job")
 	}
-	select {
-	case id := <-processor.entered:
-		t.Errorf("job %s entered ProcessJob a second time while it was already running", id)
-	case <-time.After(300 * time.Millisecond):
-	}
 	close(processor.release)
-	shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := manager.Shutdown(shutdownCtx); err != nil {
-		t.Fatal(err)
+	waitTerminal(t, manager, jobID)
+	// Shutdown waits for both workers, so any second entry is in the
+	// channel by now.
+	shutdown(t, manager)
+	if len(processor.entered) != 0 {
+		t.Errorf("job %s entered ProcessJob a second time", <-processor.entered)
 	}
 }

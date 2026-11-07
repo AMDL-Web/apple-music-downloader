@@ -1,9 +1,7 @@
 package api
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 	"testing"
@@ -34,55 +32,22 @@ func sampleAlbum() *applemusic.Collection {
 
 func TestAlbumReturnsMetadataAndTracksInDiscOrder(t *testing.T) {
 	catalog := &fakeCatalog{t: t, album: sampleAlbum()}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
 	if want := []string{"album cn/1783644603"}; !reflect.DeepEqual(catalog.calls, want) {
 		t.Fatalf("catalog calls = %v, want %v", catalog.calls, want)
 	}
-	got := decodeBody(t, recorder.Body.Bytes())
-	tracks, _ := got["tracks"].([]any)
-	delete(got, "tracks")
-	want := map[string]any{
-		"storefront": "cn", "id": "1783644603", "url": "https://music.apple.com/cn/album/1783644603",
-		"title": "Two Discs", "artist_name": "Some Artist", "artist_url": "https://music.apple.com/cn/artist/some-artist/42",
-		"artwork_url": "https://is1.mzstatic.com/a/{w}x{h}bb.jpg", "artwork_bg_color": "101010",
-		"artwork_text_color1": "f1f1f1", "artwork_text_color2": "e2e2e2", "artwork_text_color3": "d3d3d3", "artwork_text_color4": "c4c4c4",
-		"release_date": "2026-01-02", "genre": "Pop", "track_count": float64(3), "disc_count": float64(2),
-		"content_rating": "explicit", "apple_digital_master": true, "audio_traits": []any{"lossless", "lossy-stereo"},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("album = %v\nwant %v", got, want)
-	}
-	var order []string
-	for _, tr := range tracks {
-		m := tr.(map[string]any)
-		order = append(order, fmt.Sprintf("%v.%v=%v", m["disc_number"], m["track_number"], m["id"]))
-	}
-	if want := []string{"1.1=10", "1.2=11", "2.1=12"}; !reflect.DeepEqual(order, want) {
-		t.Fatalf("track order = %v, want %v", order, want)
-	}
-	second := tracks[1].(map[string]any)
-	wantTrack := map[string]any{
-		"id": "11", "url": "https://music.apple.com/cn/song/two-discs/11", "disc_number": float64(1), "track_number": float64(2),
-		"name": "Closer", "artist_name": "Some Artist feat. Guest", "duration_ms": float64(200500), "content_rating": "explicit",
-		"apple_digital_master": true, "audio_traits": []any{"lossless"}, "has_lyrics": true,
-	}
-	if !reflect.DeepEqual(second, wantTrack) {
-		t.Fatalf("track = %v\nwant %v", second, wantTrack)
-	}
-	// A track whose catalog entry has no page falls back to a built link and
-	// leaves the optional fields out.
-	first := tracks[0].(map[string]any)
-	if want := map[string]any{"id": "10", "url": "https://music.apple.com/cn/song/10", "disc_number": float64(1), "track_number": float64(1), "name": "Opener", "artist_name": "Some Artist", "duration_ms": float64(190000)}; !reflect.DeepEqual(first, want) {
-		t.Fatalf("track = %v\nwant %v", first, want)
-	}
+	// The golden body pins the metadata, the palette, the tracks sorted by
+	// disc then track number, and the built link (without the optional
+	// fields) of a track whose catalog entry has no page.
+	assertGolden(t, "album", recorder.Body.Bytes())
 }
 
 func TestAlbumWithoutSongsAnswersAnEmptyList(t *testing.T) {
 	catalog := &fakeCatalog{t: t, album: &applemusic.Collection{ID: "5", Name: "Videos Only"}}
-	recorder := requestJSON(t, newLookupServer(catalog, func(c *config.Config) { c.Catalog.DefaultStorefront = "jp" }), http.MethodGet, "/api/v1/albums/5", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, func(c *config.Config) { c.Catalog.DefaultStorefront = "jp" }), http.MethodGet, "/api/v1/albums/5", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -95,48 +60,6 @@ func TestAlbumWithoutSongsAnswersAnEmptyList(t *testing.T) {
 	}
 }
 
-func TestAlbumRefusesBadParameters(t *testing.T) {
-	for _, path := range []string{
-		"/api/v1/albums/abc",
-		"/api/v1/albums/1%2F2",
-		"/api/v1/albums/1?storefront=x",
-	} {
-		catalog := &fakeCatalog{t: t}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
-		if len(catalog.calls) != 0 {
-			t.Fatalf("%s read the catalog: %v", path, catalog.calls)
-		}
-	}
-}
-
-func TestAlbumCatalogFailures(t *testing.T) {
-	for _, tt := range []struct {
-		err    error
-		status int
-		code   ErrorCode
-	}{
-		{fmt.Errorf("get album: %w", notFoundError{}), http.StatusNotFound, CodeCatalogNotFound},
-		{errors.New("catalog request failed: 500 Internal Server Error"), http.StatusBadGateway, CodeUpstreamError},
-		{fmt.Errorf("get album: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, CodeUpstreamTimeout},
-	} {
-		catalog := &fakeCatalog{t: t, err: tt.err}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1", ""), tt.status, tt.code)
-	}
-}
-
-// motionCatalog is fakeCatalog with the optional animated-cover read.
-type motionCatalog struct {
-	*fakeCatalog
-	art   applemusic.MotionArtwork
-	err   error
-	asked int
-}
-
-func (m *motionCatalog) MotionArtworkViaWebToken(_ context.Context, storefront, id string) (applemusic.MotionArtwork, error) {
-	m.asked++
-	return m.art, m.err
-}
-
 // An album carries its animated cover and the cover's own palette, read
 // alongside it; a failed read, or the read turned off, leaves them out and
 // the album answers as before.
@@ -144,7 +67,7 @@ func TestAlbumCarriesItsAnimatedCoverWhenItCanBeRead(t *testing.T) {
 	art := applemusic.MotionArtwork{Square: "https://mvod.itunes.apple.com/a/square.m3u8", Tall: "https://mvod.itunes.apple.com/a/tall.m3u8",
 		SquareColors: applemusic.ArtworkColors{BgColor: "5c6786", TextColor1: "ffffff", TextColor2: "eeeeee", TextColor3: "dddddd", TextColor4: "cccccc"}}
 	catalog := &motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, art: art}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -166,7 +89,7 @@ func TestAlbumCarriesItsAnimatedCoverWhenItCanBeRead(t *testing.T) {
 		"read fails": {&motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, err: errors.New("no editorialVideo")}, nil, 1},
 		"turned off": {&motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, art: art}, func(c *config.Config) { c.Catalog.MotionArtworkEnabled = false }, 0},
 	} {
-		recorder := requestJSON(t, newLookupServer(c.catalog, c.mutate), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+		recorder := requestJSON(t, newLookupServer(t, c.catalog, c.mutate), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("%s: status = %d, body %s", name, recorder.Code, recorder.Body.String())
 		}

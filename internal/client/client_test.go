@@ -5,20 +5,32 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"amdl/internal/api"
+	"amdl/internal/api/openapitest"
 	"amdl/internal/domain"
 )
 
+// contract is the backend's openapi.yaml. Every fake backend below runs behind
+// contract.Middleware, so a fake response the real server could not send
+// fails the test instead of letting client and server drift apart.
+var contract = openapitest.MustLoad(api.OpenAPI)
+
+// newTestClient returns a client of a fake backend served by h on a local
+// listener, with short retry backoffs.
 func newTestClient(t *testing.T, h http.Handler) *Client {
 	t.Helper()
-	srv := httptest.NewServer(h)
+	srv := httptest.NewServer(contract.Middleware(t, h))
 	t.Cleanup(srv.Close)
 	c, err := New(srv.URL)
 	if err != nil {
@@ -28,26 +40,108 @@ func newTestClient(t *testing.T, h http.Handler) *Client {
 	return c
 }
 
-func TestWithTimeoutOutwaitsTheHeaderBound(t *testing.T) {
-	defer func(d time.Duration) { headerTimeout = d }(headerTimeout)
-	headerTimeout = 100 * time.Millisecond
-	// A login to a wrapper amdl runs answers only after the guest has
-	// rebooted, long after the usual header bound.
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(400 * time.Millisecond)
-		fmt.Fprint(w, `{"status":"logged_in"}`)
-	}))
-	if _, err := c.Call(context.Background(), http.MethodPost, "/api/v1/wrapper/login", nil, nil); err == nil {
-		t.Fatal("the default client waited past its header bound")
-	}
-	raw, err := c.WithTimeout(5*time.Second).Call(context.Background(), http.MethodPost, "/api/v1/wrapper/login", nil, nil)
-	if err != nil || !strings.Contains(string(raw), "logged_in") {
-		t.Fatalf("WithTimeout call = %s, %v", raw, err)
-	}
-	if _, err := c.Call(context.Background(), http.MethodPost, "/api/v1/wrapper/login", nil, nil); err == nil {
-		t.Fatal("WithTimeout changed the original client's bound")
+// writeJSON answers like the backend: a JSON content type, then the body.
+func writeJSON(w http.ResponseWriter, status int, body string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = io.WriteString(w, body)
+}
+
+// encodeJSON answers v as JSON like the backend.
+func encodeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// pipeListener is a net.Listener over in-memory pipes. Inside a synctest
+// bubble a goroutine blocked on a pipe is durably blocked, which a real
+// socket is not, so the bubble's clock can jump over the server's waits.
+type pipeListener struct {
+	conns chan net.Conn
+	done  chan struct{}
+	once  sync.Once
+}
+
+func newPipeListener() *pipeListener {
+	return &pipeListener{conns: make(chan net.Conn), done: make(chan struct{})}
+}
+
+func (l *pipeListener) Accept() (net.Conn, error) {
+	select {
+	case c := <-l.conns:
+		return c, nil
+	case <-l.done:
+		return nil, net.ErrClosed
 	}
 }
+
+func (l *pipeListener) Close() error   { l.once.Do(func() { close(l.done) }); return nil }
+func (l *pipeListener) Addr() net.Addr { return pipeAddr{} }
+
+func (l *pipeListener) DialContext(ctx context.Context, _, _ string) (net.Conn, error) {
+	client, server := net.Pipe()
+	select {
+	case l.conns <- server:
+		return client, nil
+	case <-l.done:
+		return nil, net.ErrClosed
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+type pipeAddr struct{}
+
+func (pipeAddr) Network() string { return "pipe" }
+func (pipeAddr) String() string  { return "pipe" }
+
+func TestWithTimeoutOutwaitsTheHeaderBound(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		// A login to a wrapper amdl runs answers only after the guest has
+		// rebooted, long after the usual header bound.
+		const reboot = 2 * headerTimeoutForTest
+		ln := newPipeListener()
+		srv := &http.Server{Handler: contract.Middleware(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-time.After(reboot):
+			case <-r.Context().Done(): // the client gave up
+				return
+			}
+			writeJSON(w, http.StatusOK, `{"status":"logged_in"}`)
+		}))}
+		go func() { _ = srv.Serve(ln) }()
+		defer srv.Close()
+
+		defer func(d time.Duration) { headerTimeout = d }(headerTimeout)
+		headerTimeout = headerTimeoutForTest
+		c, err := New("http://amdl.test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		transport := c.api.Transport.(*http.Transport)
+		transport.DialContext = ln.DialContext
+		defer transport.CloseIdleConnections()
+
+		start := time.Now()
+		if _, err := c.Call(t.Context(), http.MethodPost, "/api/v1/wrapper/login", nil, nil); err == nil {
+			t.Fatal("the default client waited past its header bound")
+		}
+		if waited := time.Since(start); waited != headerTimeoutForTest {
+			t.Errorf("the default client gave up after %v, want its header bound %v", waited, headerTimeoutForTest)
+		}
+		raw, err := c.WithTimeout(time.Hour).Call(t.Context(), http.MethodPost, "/api/v1/wrapper/login", nil, nil)
+		if err != nil || !strings.Contains(string(raw), "logged_in") {
+			t.Fatalf("WithTimeout call = %s, %v", raw, err)
+		}
+		if _, err := c.Call(t.Context(), http.MethodPost, "/api/v1/wrapper/login", nil, nil); err == nil {
+			t.Fatal("WithTimeout changed the original client's bound")
+		}
+	})
+}
+
+// headerTimeoutForTest stands in for the 20 s header bound; in the synctest
+// bubble it costs no wall time.
+const headerTimeoutForTest = 20 * time.Second
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
@@ -170,15 +264,15 @@ func (s *feedServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	switch r.URL.Path {
 	case "/api/v1/downloads":
-		l := DownloadList{Downloads: []domain.Job{{ID: "a", Status: domain.JobRunning}}, EventCursor: max(s.newest, 10)}
+		l := DownloadList{Downloads: []domain.Job{{ID: "a", Type: "song", Status: domain.JobRunning}}, EventCursor: max(s.newest, 10)}
 		if s.replaceAfter > 0 && s.served >= s.replaceAfter {
 			l = DownloadList{Downloads: []domain.Job{}, EventCursor: s.newest}
 		}
-		_ = json.NewEncoder(w).Encode(l)
+		encodeJSON(w, l)
 	case "/api/v1/downloads/events":
 		s.cursors = append(s.cursors, r.URL.Query().Get("cursor"))
 		if len(s.conns) == 0 {
-			w.WriteHeader(http.StatusBadRequest)
+			writeJSON(w, http.StatusBadRequest, `{"error":{"code":"invalid_request","message":"cursor is past the newest event"}}`)
 			return
 		}
 		msgs := s.conns[0]
@@ -197,7 +291,7 @@ func (s *feedServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func TestFollowFeedResumesFromLastEvent(t *testing.T) {
 	srv := &feedServer{conns: [][]domain.DownloadFeedMessage{
-		{{Type: "download_upserted", EventID: 11, Job: &domain.Job{ID: "a", Status: domain.JobCompleted}}},
+		{{Type: "download_upserted", EventID: 11, Job: &domain.Job{ID: "a", Type: "song", Status: domain.JobCompleted}}},
 		{{Type: "download_deleted", EventID: 12, JobID: "a"}},
 	}}
 	c := newTestClient(t, srv)
@@ -232,8 +326,8 @@ func TestFollowFeedResumesFromLastEvent(t *testing.T) {
 // once they passed it.
 func TestFollowFeedStartsOverWhenTheBackendHasFewerEvents(t *testing.T) {
 	srv := &feedServer{replaceAfter: 1, conns: [][]domain.DownloadFeedMessage{
-		{{Type: "download_upserted", EventID: 11, Job: &domain.Job{ID: "a", Status: domain.JobCompleted}}},
-		{{Type: "download_upserted", EventID: 1, Job: &domain.Job{ID: "b", Status: domain.JobQueued}}},
+		{{Type: "download_upserted", EventID: 11, Job: &domain.Job{ID: "a", Type: "song", Status: domain.JobCompleted}}},
+		{{Type: "download_upserted", EventID: 1, Job: &domain.Job{ID: "b", Type: "song", Status: domain.JobQueued}}},
 	}}
 	c := newTestClient(t, srv)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -277,7 +371,7 @@ func TestFollowJobConfirmsTerminalAfter204(t *testing.T) {
 			if details > 1 {
 				status = domain.JobCompleted
 			}
-			_ = json.NewEncoder(w).Encode(DownloadDetail{Job: domain.Job{ID: "j", Status: status}, EventCursor: 3})
+			encodeJSON(w, DownloadDetail{Job: domain.Job{ID: "j", Type: "song", Status: status}, Items: []domain.JobItem{}, Hooks: []domain.HookState{}, EventCursor: 3})
 		}
 	}))
 	var events []domain.Event
@@ -314,7 +408,7 @@ func TestFollowJobStopsAtTerminalWithoutWaitingForHooks(t *testing.T) {
 			status = domain.JobCompleted
 			hooks = []domain.HookState{{Name: "notify", Status: "running"}}
 		}
-		_ = json.NewEncoder(w).Encode(DownloadDetail{Job: domain.Job{ID: "j", Status: status}, Hooks: hooks, EventCursor: 3})
+		encodeJSON(w, DownloadDetail{Job: domain.Job{ID: "j", Type: "song", Status: status}, Items: []domain.JobItem{}, Hooks: hooks, EventCursor: 3})
 	}))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -330,8 +424,7 @@ func TestFollowJobStopsAtTerminalWithoutWaitingForHooks(t *testing.T) {
 
 func TestFollowJobGone(t *testing.T) {
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprint(w, `{"error":{"code":"job_not_found","message":"no such job"}}`)
+		writeJSON(w, http.StatusNotFound, `{"error":{"code":"job_not_found","message":"no such job"}}`)
 	}))
 	if err := c.FollowJob(context.Background(), "x", JobHandlers{}); !errors.Is(err, ErrJobGone) {
 		t.Fatalf("err = %v", err)

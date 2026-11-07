@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"testing"
 )
@@ -14,10 +13,10 @@ func TestSearchSendsTheQueryAndDecodesGroups(t *testing.T) {
 			q.Get("storefront") != "us" || q.Get("limit") != "3" || q.Has("offset") {
 			t.Errorf("request = %s", r.URL)
 		}
-		fmt.Fprint(w, `{"term":"igor","storefront":"us",
+		writeJSON(w, http.StatusOK, `{"term":"igor","storefront":"us",
 			"albums":{"items":[{"id":"1463409338","type":"album","name":"IGOR","url":"https://music.apple.com/us/album/igor/1463409338",
 				"artist_name":"Tyler, The Creator","track_count":12,"audio_traits":["lossless"],
-				"resource":{"kind":"album","id":"1","state":"partial","tracks_done":9,"tracks_wanted":12,"withheld_count":1,"paused":false}}],"next_offset":3},
+				"resource":{"kind":"album","id":"1","state":"partial","tracks_done":9,"tracks_wanted":12,"withheld_count":1,"wanted_all":true,"paused":false}}],"next_offset":3},
 			"artists":{"items":[]}}`)
 	}))
 	r, err := c.Search(context.Background(), SearchQuery{Term: "igor", Types: []string{"albums", "artists"}, Storefront: "us", Limit: 3})
@@ -41,7 +40,7 @@ func TestArtistAlbums(t *testing.T) {
 		if r.URL.Path != "/api/v1/artists/420368335/albums" || r.URL.Query().Get("offset") != "25" {
 			t.Errorf("request = %s", r.URL)
 		}
-		fmt.Fprint(w, `{"storefront":"us","artist":{"id":"420368335","type":"artist","name":"Tyler, The Creator","url":"u"},
+		writeJSON(w, http.StatusOK, `{"storefront":"us","artist":{"id":"420368335","type":"artist","name":"Tyler, The Creator","url":"u"},
 			"albums":{"items":[{"id":"1","type":"album","name":"A","url":"u1"}]}}`)
 	}))
 	r, err := c.ArtistAlbums(context.Background(), "420368335", PageQuery{Offset: 25})
@@ -55,8 +54,8 @@ func TestAlbum(t *testing.T) {
 		if r.URL.Path != "/api/v1/albums/1783644603" || r.URL.Query().Get("storefront") != "cn" {
 			t.Errorf("request = %s", r.URL)
 		}
-		fmt.Fprint(w, `{"storefront":"cn","id":"1783644603","url":"u","title":"T","track_count":2,"disc_count":2,
-			"resource":{"kind":"album","id":"1783644603","state":"partial","tracks_done":1,"tracks_wanted":2,"withheld_count":0,"paused":false},
+		writeJSON(w, http.StatusOK, `{"storefront":"cn","id":"1783644603","url":"u","title":"T","track_count":2,"disc_count":2,
+			"resource":{"kind":"album","id":"1783644603","state":"partial","tracks_done":1,"tracks_wanted":2,"withheld_count":0,"wanted_all":true,"paused":false},
 			"tracks":[{"id":"1","url":"s1","disc_number":1,"track_number":1,"name":"A","duration_ms":1000,"has_lyrics":true,"state":"done"},
 			{"id":"2","url":"s2","disc_number":2,"track_number":1,"name":"B","state":"failed"}]}`)
 	}))

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -45,7 +44,7 @@ func TestSystemInfo(t *testing.T) {
 
 	hub := events.NewHub()
 	// Never started, so the admitted job stays in the queue.
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 2, slog.Default())
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 2, quietLogger)
 	if resp := manager.SubmitBatch(context.Background(), []string{"album|us|1"}, nil); resp.Accepted != 1 {
 		t.Fatalf("submit: %+v", resp.Results)
 	}
@@ -159,7 +158,7 @@ func TestSystemInfo(t *testing.T) {
 // A pool size <= 0 runs as 1 (limits.NewSemaphore), so /system reports 1;
 // the decrypt and wrapper pools are fixed sizes.
 func TestSystemInfoReportsEffectivePoolSizes(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	cfg := config.Default()
 	cfg.Download.MaxParallelDownloads = 0
 	server.cfg = config.NewStore(cfg)
@@ -177,7 +176,7 @@ func TestSystemInfoReportsEffectivePoolSizes(t *testing.T) {
 
 // A request limit <= 0 runs as 1, so startup.max_parallel_requests reports 1.
 func TestSystemInfoStartupReportsEffectiveRequestLimit(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	cfg := config.Default()
 	cfg.Catalog.MaxParallelRequests = 0
 	server.cfg = config.NewStore(cfg)

@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -352,12 +351,17 @@ type rig struct {
 	proc    *simProcessor
 	catalog *simCatalog
 	feed    *feedModel
+	// milestones wakes on every overview milestone the hub publishes.
+	milestones <-chan struct{}
 	// statsDays is the days value of the last GET /stats read.
 	statsDays int
 }
 
 func newRig(t *testing.T, albums, playlists map[string][]string) *rig {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("the consistency rig drives a whole backend for seconds; it runs without -short")
+	}
 	dbPath := filepath.Join(t.TempDir(), "amdl.db")
 	store, err := db.Open(dbPath)
 	if err != nil {
@@ -373,7 +377,7 @@ func newRig(t *testing.T, albums, playlists map[string][]string) *rig {
 	manager := jobs.NewManager(store, hub, proc, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	manager.SetConfig(cfgStore.Get)
 	server := newServer(t, Deps{Config: cfgStore, Store: store, Hub: hub, Manager: manager, Catalog: catalog})
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	manager.Start(context.Background())
 	t.Cleanup(func() {
 		server.EndStreams()
@@ -384,7 +388,9 @@ func newRig(t *testing.T, albums, playlists map[string][]string) *rig {
 		}
 		ts.Close()
 	})
-	r := &rig{t: t, base: ts.URL + "/api/v1", dbPath: dbPath, http: ts.Client(), store: store, manager: manager, cfg: cfgStore, proc: proc, catalog: catalog}
+	milestones, stop := hub.SubscribeAll()
+	t.Cleanup(stop)
+	r := &rig{t: t, base: ts.URL + "/api/v1", dbPath: dbPath, http: ts.Client(), store: store, manager: manager, cfg: cfgStore, proc: proc, catalog: catalog, milestones: milestones}
 	r.feed = r.subscribe()
 	return r
 }
@@ -477,25 +483,43 @@ func (r *rig) add(urls ...string) []domain.SubmitResult {
 // queues nothing more, and the feed has delivered every event up to the
 // cursor of that quiet GET /downloads: the point where a client's model
 // and a fresh read must agree.
+//
+// It waits on the hub's milestone wakes and the feed's message signal, not on
+// a polling interval. Two quiet windows remain, because nothing else marks
+// those points: the picker queues a record's next run shortly after the event
+// that woke it, and a run's upsert and its record's resource_updated share one
+// cursor, so lastID reaching it does not mean both arrived.
 func (r *rig) settled() {
 	r.t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	quiet := 0
+	const (
+		pickerQuiet = 100 * time.Millisecond
+		feedQuiet   = 50 * time.Millisecond
+	)
+	deadline := time.After(10 * time.Second)
 	var list struct {
 		StatusCounts domain.JobStatusCounts `json:"status_counts"`
 		EventCursor  int64                  `json:"event_cursor"`
 	}
-	for quiet < 5 {
-		r.call(http.MethodGet, "/downloads?limit=1", "", http.StatusOK, &list)
-		if list.StatusCounts.Queued == 0 && list.StatusCounts.Running == 0 {
-			quiet++
-		} else {
-			quiet = 0
+	for {
+		// Drain the wake first so a milestone written after this read wakes
+		// the wait below.
+		select {
+		case <-r.milestones:
+		default:
 		}
-		if time.Now().After(deadline) {
+		r.call(http.MethodGet, "/downloads?limit=1", "", http.StatusOK, &list)
+		window := (<-chan time.Time)(nil)
+		if list.StatusCounts.Queued == 0 && list.StatusCounts.Running == 0 {
+			window = time.After(pickerQuiet)
+		}
+		select {
+		case <-r.milestones:
+			continue
+		case <-window:
+		case <-deadline:
 			r.t.Fatalf("runs did not settle: %+v", list.StatusCounts)
 		}
-		time.Sleep(20 * time.Millisecond)
+		break
 	}
 	// The feed sends only milestones, so its cursor stops at the last one.
 	milestones, err := r.store.ListMilestoneEventsAfterLimit(context.Background(), 0, 0)
@@ -515,16 +539,17 @@ func (r *rig) settled() {
 		if err != nil {
 			r.t.Fatal(err)
 		}
+		window := (<-chan time.Time)(nil)
 		if reached {
-			// Messages that share the cursor (a run's upsert and its
-			// record's resource_updated) are written back to back.
-			time.Sleep(50 * time.Millisecond)
-			return
+			window = time.After(feedQuiet)
 		}
-		if time.Now().After(deadline) {
+		select {
+		case <-r.feed.changed:
+		case <-window:
+			return
+		case <-deadline:
 			r.t.Fatalf("the feed stopped short of milestone %d", want)
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -538,6 +563,8 @@ type feedModel struct {
 	counts  domain.JobStatusCounts
 	lastID  int64
 	err     error
+	// changed gets a (coalesced) signal after each message is applied.
+	changed chan struct{}
 }
 
 func recordKeyOf(kind domain.ResourceKind, id string) string { return string(kind) + "/" + id }
@@ -557,7 +584,7 @@ func (r *rig) subscribe() *feedModel {
 	if resp.StatusCode != http.StatusOK {
 		r.t.Fatalf("feed = %d", resp.StatusCode)
 	}
-	m := &feedModel{runs: map[string]domain.Job{}, records: map[string]json.RawMessage{}, gone: map[string]bool{}}
+	m := &feedModel{runs: map[string]domain.Job{}, records: map[string]json.RawMessage{}, gone: map[string]bool{}, changed: make(chan struct{}, 1)}
 	go func() {
 		defer resp.Body.Close()
 		reader := bufio.NewReader(resp.Body)
@@ -594,6 +621,12 @@ func (r *rig) subscribe() *feedModel {
 func (m *feedModel) apply(name string, msg domain.DownloadFeedMessage, resource json.RawMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	defer func() {
+		select {
+		case m.changed <- struct{}{}:
+		default:
+		}
+	}()
 	m.counts = msg.StatusCounts
 	if msg.EventID > m.lastID {
 		m.lastID = msg.EventID

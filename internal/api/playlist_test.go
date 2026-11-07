@@ -1,8 +1,6 @@
 package api
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -30,7 +28,7 @@ func samplePlaylist() *applemusic.Collection {
 // order (not by their albums' disc and track), numbered from 1 on disc 1.
 func TestPlaylistReturnsItsSongsInItsOwnOrder(t *testing.T) {
 	catalog := &fakeCatalog{t: t, playlist: samplePlaylist()}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/playlists/pl.f4d106fed2bd41149aaacabb233eb5eb?storefront=CN", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/playlists/pl.f4d106fed2bd41149aaacabb233eb5eb?storefront=CN", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -58,34 +56,5 @@ func TestPlaylistReturnsItsSongsInItsOwnOrder(t *testing.T) {
 	}
 	if want := []string{"1.1=30", "1.2=20"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("track order = %v, want %v", order, want)
-	}
-}
-
-func TestPlaylistRefusesBadParameters(t *testing.T) {
-	for _, path := range []string{
-		"/api/v1/playlists/123",
-		"/api/v1/playlists/pl.a%2Fb",
-		"/api/v1/playlists/pl.abc?storefront=x",
-	} {
-		catalog := &fakeCatalog{t: t}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
-		if len(catalog.calls) != 0 {
-			t.Fatalf("%s read the catalog: %v", path, catalog.calls)
-		}
-	}
-}
-
-func TestPlaylistCatalogFailures(t *testing.T) {
-	for _, tt := range []struct {
-		err    error
-		status int
-		code   ErrorCode
-	}{
-		{fmt.Errorf("get playlist: %w", notFoundError{}), http.StatusNotFound, CodeCatalogNotFound},
-		{errors.New("catalog request failed: 500 Internal Server Error"), http.StatusBadGateway, CodeUpstreamError},
-		{fmt.Errorf("get playlist: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, CodeUpstreamTimeout},
-	} {
-		catalog := &fakeCatalog{t: t, err: tt.err}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/playlists/pl.abc", ""), tt.status, tt.code)
 	}
 }

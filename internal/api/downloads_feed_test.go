@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,14 +22,10 @@ import (
 // live delete notification. Deletes carry a persisted tombstone cursor so a
 // client can resume past them.
 func TestDownloadsFeedPushesUpsertsAndDeletes(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
 	ctx := context.Background()
 	job1 := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", CanonicalKey: "song:1", Status: domain.JobCompleted}
@@ -42,7 +36,7 @@ func TestDownloadsFeedPushesUpsertsAndDeletes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	getCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -127,14 +121,10 @@ func TestDownloadsFeedPushesUpsertsAndDeletes(t *testing.T) {
 }
 
 func TestDownloadsFeedReplaysDeleteAfterSnapshotCursor(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
 	ctx := context.Background()
 	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", CanonicalKey: "song:1", Status: domain.JobCompleted}
@@ -149,7 +139,7 @@ func TestDownloadsFeedReplaysDeleteAfterSnapshotCursor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	getCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -201,14 +191,10 @@ func TestDownloadsFeedReplaysDeleteAfterSnapshotCursor(t *testing.T) {
 // strict id>afterID). Events are seeded before the connection so they all land
 // in a single initial drain batch.
 func TestDownloadsFeedBatchUsesPerJobCursor(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
 	ctx := context.Background()
 	for _, id := range []string{"jobA", "jobB"} {
@@ -228,7 +214,7 @@ func TestDownloadsFeedBatchUsesPerJobCursor(t *testing.T) {
 		t.Fatalf("expected evA.ID < evB.ID, got %d, %d", evA.ID, evB.ID)
 	}
 
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	getCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -310,7 +296,7 @@ func TestDownloadsFeedReplaysMilestonesAcrossDatabasePages(t *testing.T) {
 	}
 
 	hub := events.NewHub()
-	server := &Server{store: store, hub: hub, manager: jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())}
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)})
 	sink := &recordingSink{onSend: func(n int) {
 		if n == 2 {
 			cancel()
@@ -343,7 +329,7 @@ func TestDownloadsFeedDeletesAJobWhoseLatestEventFollowsItsTombstone(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
 	job := domain.Job{ID: "raced", Input: "album|us|1", Type: "album", CanonicalKey: "album:1", Status: domain.JobCompleted}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
@@ -360,7 +346,7 @@ func TestDownloadsFeedDeletesAJobWhoseLatestEventFollowsItsTombstone(t *testing.
 		t.Fatal(err)
 	}
 
-	server := &Server{store: store, hub: hub, manager: manager}
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 	sink := &recordingSink{onSend: func(int) { cancel() }}
 	server.runDownloadsFeed(ctx, sink, finished.ID, make(chan struct{}), streamTicks{})
 	if len(sink.frames) != 1 {
@@ -406,16 +392,12 @@ func (r *recordingSink) keepalive() error {
 // promptly. The 3s deadline is below the keepalive interval, so it fails if
 // the head isn't flushed up front.
 func TestDownloadsFeedFlushesHeadWithoutBacklog(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	getCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -456,7 +438,7 @@ func TestDownloadsFeedSendsARunningJobsProgressAsItMoves(t *testing.T) {
 	}
 
 	hub := events.NewHub()
-	server := &Server{store: store, hub: hub, manager: jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())}
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)})
 	ticks := make(chan time.Time)
 	sent := make(chan struct{}, 4)
 	sink := &recordingSink{onSend: func(int) { sent <- struct{}{} }}

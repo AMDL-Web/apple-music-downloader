@@ -8,69 +8,28 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"amdl/internal/config"
 	"amdl/internal/logging"
-	"gopkg.in/yaml.v3"
 )
 
+// GET /config answers every runtime key of the default config (restart keys
+// included) and none of the file-only sections (server, database, tools),
+// with persisted false: an in-memory store writes nothing back. The golden
+// body pins every key and default; a changed default shows up in its diff.
 func TestGetConfigReturnsEditableFields(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
+	server := newServer(t, Deps{Config: config.NewStore(config.Default())})
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/config", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	var resp struct {
-		Config    map[string]json.RawMessage `json:"config"`
-		Persisted bool                       `json:"persisted"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Persisted {
-		t.Fatal("persisted = true, runtime config is never written back to disk")
-	}
-	for _, section := range []string{"catalog", "download", "logging", "simulate", "wrapper"} {
-		if _, ok := resp.Config[section]; !ok {
-			t.Fatalf("config missing mutable section %q: %s", section, recorder.Body.String())
-		}
-	}
-	for _, section := range []string{"server", "database", "tools"} {
-		if _, ok := resp.Config[section]; ok {
-			t.Fatalf("config exposes file-only section %q: %s", section, recorder.Body.String())
-		}
-	}
-	var download map[string]any
-	if err := json.Unmarshal(resp.Config["download"], &download); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"max_running_jobs", "max_parallel_downloads"} {
-		if _, ok := download[key]; !ok {
-			t.Fatalf("download section lacks the restart key %s", key)
-		}
-	}
-	if download["cover_format"] != "jpg" {
-		t.Fatalf("download.cover_format = %v, want jpg", download["cover_format"])
-	}
-	var catalog map[string]any
-	if err := json.Unmarshal(resp.Config["catalog"], &catalog); err != nil {
-		t.Fatal(err)
-	}
-	if len(catalog) != 6 || catalog["album_track_url_mode"] != "song" ||
-		catalog["motion_artwork_enabled"] != true || catalog["language"] != "zh-Hans_CN" {
-		t.Fatalf("catalog section = %v, want every catalog key", catalog)
-	}
-	var logging map[string]any
-	if err := json.Unmarshal(resp.Config["logging"], &logging); err != nil {
-		t.Fatal(err)
-	}
-	if len(logging) != 4 || logging["level"] != "info" || logging["access_log"] != false || logging["console"] != true {
-		t.Fatalf("logging section = %v, want every logging key", logging)
-	}
+	assertGolden(t, "config_default", recorder.Body.Bytes())
 }
 
 func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	store := config.NewStore(config.Default())
-	server := &Server{cfg: store}
+	server := newServer(t, Deps{Config: store})
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
 		`{"download":{"embed_lyrics":false,"cover_format":"png"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"album_track_url_mode":"album"}}`)
@@ -96,43 +55,12 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	}
 }
 
-// The per-type path templates became download.library_path_format; a client
-// still sending one is told which key it named instead of having it dropped.
-func TestUpdateConfigRejectsRemovedPathFormats(t *testing.T) {
-	for _, key := range []string{"song_path_format", "album_path_format", "artist_path_format"} {
-		store := config.NewStore(config.Default())
-		server := &Server{cfg: store}
-		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
-			`{"download":{"`+key+`":"x/{SongName}"}}`)
-		if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), key) {
-			t.Fatalf("%s: status = %d, body = %s; want 400 naming the removed key", key, recorder.Code, recorder.Body.String())
-		}
-	}
-}
-
-// The keys amdl no longer reads are refused like any unknown key, so a
-// client that still sends one learns it at once.
-func TestUpdateConfigRejectsRetiredKeys(t *testing.T) {
-	for _, body := range []string{
-		`{"catalog":{"media_user_token":"configured-token"}}`,
-		`{"wrapper":{"data_dir":"/wrapper"}}`,
-		`{"catalog":{"media_user_token_priority":"request"}}`,
-	} {
-		store := config.NewStore(config.Default())
-		server := &Server{cfg: store}
-		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", body)
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("%s: status = %d, body = %s; want 400", body, recorder.Code, recorder.Body.String())
-		}
-	}
-}
-
 func TestConfigResponsesHideTheWrapperToken(t *testing.T) {
 	const token = "wrapper-static-token-9f3c"
 	cfg := config.Default()
 	cfg.Wrapper.Token = token
 	store := config.NewStore(cfg)
-	routes := (&Server{cfg: store}).Routes()
+	routes := newServer(t, Deps{Config: store}).Routes()
 	tokenIn := func(body string) string {
 		t.Helper()
 		var resp struct {
@@ -215,7 +143,7 @@ func TestReloadConfigAppliesManualFileEdits(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	base := config.Default()
 	writeConfigFile(t, path, base)
-	server := &Server{cfg: config.NewFileStore(base, path)}
+	server := newServer(t, Deps{Config: config.NewFileStore(base, path)})
 
 	// Edit the file behind the running store, as a user would with an editor.
 	edited := base
@@ -274,7 +202,7 @@ func TestReloadConfigAppliesManualFileEdits(t *testing.T) {
 func TestUpdateConfigWithInvalidFileIsInvalidConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	writeConfigFile(t, path, config.Default())
-	server := &Server{cfg: config.NewFileStore(config.Default(), path)}
+	server := newServer(t, Deps{Config: config.NewFileStore(config.Default(), path)})
 	broken := []byte("download: [")
 	if err := os.WriteFile(path, broken, 0o600); err != nil {
 		t.Fatal(err)
@@ -292,7 +220,7 @@ func TestUpdateConfigWithInvalidFileIsInvalidConfig(t *testing.T) {
 
 func TestUpdateConfigPersistsToBackingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	server := &Server{cfg: config.NewFileStore(config.Default(), path)}
+	server := newServer(t, Deps{Config: config.NewFileStore(config.Default(), path)})
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"download":{"cover_format":"png"}}`)
 	if recorder.Code != http.StatusOK {
@@ -339,11 +267,20 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 		{name: "no log output left", body: `{"logging":{"console":false,"buffer_size":0}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "logging"},
 		{name: "list given a string", body: `{"download":{"quality_priority":"bogus"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.quality_priority must be a list, got a string"},
 		{name: "number given a string", body: `{"download":{"max_attempts":"abc"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.max_attempts must be a whole number, got a string"},
+		// Removed path formats and retired keys are refused by name, so a
+		// client still sending one learns it at once instead of having it
+		// dropped.
+		{name: "removed song path format", body: `{"download":{"song_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "song_path_format"},
+		{name: "removed album path format", body: `{"download":{"album_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "album_path_format"},
+		{name: "removed artist path format", body: `{"download":{"artist_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "artist_path_format"},
+		{name: "retired media user token", body: `{"catalog":{"media_user_token":"configured-token"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "media_user_token"},
+		{name: "retired wrapper data dir", body: `{"wrapper":{"data_dir":"/wrapper"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "data_dir"},
+		{name: "retired token priority", body: `{"catalog":{"media_user_token_priority":"request"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "media_user_token_priority"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := config.NewStore(config.Default())
-			server := &Server{cfg: store}
+			server := newServer(t, Deps{Config: store})
 			recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", tc.body)
 			assertErrorCode(t, recorder, tc.status, tc.code)
 			if tc.want != "" && !strings.Contains(recorder.Body.String(), tc.want) {

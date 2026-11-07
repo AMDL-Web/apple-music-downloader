@@ -246,7 +246,9 @@ func TestDispatchRunsMatchingWebhookAndRecordsSuccessEvent(t *testing.T) {
 	}
 }
 
-func TestDispatchWebhookFailureRetriesAndRecordsFailure(t *testing.T) {
+// A webhook answering a non-2xx status fails the attempt and records
+// hook_failed. TestDispatchRetriesAfterTheRetryDelay covers the retries.
+func TestDispatchWebhookFailureRecordsFailure(t *testing.T) {
 	var attempts int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&attempts, 1)
@@ -255,7 +257,7 @@ func TestDispatchWebhookFailureRetriesAndRecordsFailure(t *testing.T) {
 	defer server.Close()
 
 	cfg := Config{Enabled: true, Entries: []Entry{
-		{Name: "flaky", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL, MaxAttempts: 3},
+		{Name: "flaky", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
 	}}
 	collector := newEventCollector(2) // hook_started + hook_failed
 	d := NewDispatcher(cfg, collector.record, discardLogger())
@@ -263,17 +265,11 @@ func TestDispatchWebhookFailureRetriesAndRecordsFailure(t *testing.T) {
 	evs := collector.wait(t)
 	d.Shutdown(context.Background())
 
-	if got := atomic.LoadInt32(&attempts); got != 3 {
-		t.Fatalf("attempts = %d, want 3 (max_attempts = 3)", got)
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("attempts = %d, want 1 (max_attempts unset)", got)
 	}
-	var sawFailed bool
-	for _, ev := range evs {
-		if ev.Type == "hook_failed" {
-			sawFailed = true
-		}
-	}
-	if !sawFailed {
-		t.Fatalf("events = %+v, want a hook_failed event", evs)
+	if last := evs[len(evs)-1]; last.Type != domain.EventHookFailed || !strings.Contains(last.Message, "500") {
+		t.Fatalf("last event = %s %q, want hook_failed naming the 500", last.Type, last.Message)
 	}
 }
 
@@ -328,14 +324,9 @@ func TestPendingTracksInFlightHookExecution(t *testing.T) {
 		t.Fatal("Pending before Dispatch = true, want false")
 	}
 	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
-
-	deadline := time.After(2 * time.Second)
-	for !d.Pending("job-1") {
-		select {
-		case <-deadline:
-			t.Fatal("Pending never became true after Dispatch launched the hook")
-		case <-time.After(time.Millisecond):
-		}
+	// Dispatch counts the execution before it returns, so no wait is needed.
+	if !d.Pending("job-1") {
+		t.Fatal("Pending after Dispatch = false while the hook is blocked")
 	}
 
 	close(release) // let the blocked webhook call, and hook_succeeded, proceed
@@ -347,9 +338,6 @@ func TestPendingTracksInFlightHookExecution(t *testing.T) {
 	}
 }
 
-// TestPendingIsNilSafe mirrors Dispatch's existing nil-receiver contract so
-// callers (e.g. jobs.Manager.HooksPending) don't need to branch on whether
-// hooks are configured at all.
 // A stream that saw a job's last hook event may still have read the hook as
 // pending; OnIdle is how it learns, at once, that nothing more will come.
 func TestOnIdleRunsWhenTheLastHookEnds(t *testing.T) {
@@ -382,6 +370,9 @@ func TestOnIdleRunsWhenTheLastHookEnds(t *testing.T) {
 	}
 }
 
+// TestPendingIsNilSafe mirrors Dispatch's existing nil-receiver contract so
+// callers (e.g. jobs.Manager.HooksPending) don't need to branch on whether
+// hooks are configured at all.
 func TestPendingIsNilSafe(t *testing.T) {
 	var d *Dispatcher
 	if d.Pending("job-1") {

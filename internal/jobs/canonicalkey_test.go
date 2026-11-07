@@ -1,27 +1,6 @@
 package jobs
 
-import (
-	"context"
-	"testing"
-)
-
-// TestSubmitBatchStoresThreeSegmentKey pins the key a one-off run writes: the
-// dedup identity is what is downloaded, type, storefront and adam id. Record
-// runs dedup by their record instead and store no key.
-func TestSubmitBatchStoresThreeSegmentKey(t *testing.T) {
-	manager := newTestManager(t)
-	resp := manager.SubmitBatch(context.Background(), []string{"station|us|111"}, nil)
-	if resp.Accepted != 1 || resp.Results[0].Job == nil {
-		t.Fatalf("submit = %+v, want one accepted job", resp)
-	}
-	job, err := manager.store.GetJob(context.Background(), resp.Results[0].Job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if job.CanonicalKey != "station:us:111" {
-		t.Fatalf("canonical key = %q, want station:us:111", job.CanonicalKey)
-	}
-}
+import "testing"
 
 func TestParseCanonicalKey(t *testing.T) {
 	for _, tc := range []struct {

@@ -1,9 +1,10 @@
 package events
 
 import (
+	"runtime"
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"amdl/internal/domain"
 )
@@ -26,9 +27,8 @@ func TestHubWakesSubscriberOfTheJob(t *testing.T) {
 
 	hub.Publish(domain.Event{ID: 1, JobID: "job-1", Type: domain.EventItemProgress})
 
-	select {
-	case <-ch:
-	case <-time.After(time.Second):
+	// Publish wakes synchronously, so the wake is already pending.
+	if !received(ch) {
 		t.Fatal("subscriber of job-1 was not woken")
 	}
 	if received(other) {
@@ -110,24 +110,34 @@ func TestHubCancelIsIdempotentAndClosesChannel(t *testing.T) {
 }
 
 func TestHubPublishNeverBlocksOnSlowSubscriber(t *testing.T) {
-	hub := NewHub()
-	// Never read from either channel: a slow SSE client.
-	_, cancel := hub.Subscribe("job-1")
-	defer cancel()
-	_, cancelAll := hub.SubscribeAll()
-	defer cancelAll()
+	synctest.Test(t, func(t *testing.T) {
+		hub := NewHub()
+		// Never read from either channel: a slow SSE client.
+		_, cancel := hub.Subscribe("job-1")
+		defer cancel()
+		_, cancelAll := hub.SubscribeAll()
+		defer cancelAll()
 
-	done := make(chan struct{})
-	go func() {
-		for i := 0; i < 10000; i++ {
-			hub.Publish(domain.Event{ID: int64(i), JobID: "job-1", Type: domain.EventJobStarted})
+		done := make(chan struct{})
+		go func() {
+			for i := 0; i < 100; i++ {
+				hub.Publish(domain.Event{ID: int64(i), JobID: "job-1", Type: domain.EventJobStarted})
+			}
+			close(done)
+		}()
+		synctest.Wait() // the publisher has finished or is durably blocked
+		if !isClosed(done) {
+			t.Fatal("Publish blocked on a subscriber that never reads")
 		}
-		close(done)
-	}()
+	})
+}
+
+func isClosed(ch <-chan struct{}) bool {
 	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Publish blocked on a subscriber that never reads")
+	case <-ch:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -148,7 +158,7 @@ func TestHubConcurrentSubscribePublishCancel(t *testing.T) {
 					for range ch {
 					}
 				}()
-				time.Sleep(time.Millisecond)
+				runtime.Gosched() // let publishes interleave with the subscription
 				cancel()
 				cancel()
 			}()

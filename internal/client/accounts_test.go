@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -49,15 +48,15 @@ func TestFindAccount(t *testing.T) {
 
 func TestAccountCallsTheSpecRoutes(t *testing.T) {
 	var got []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		got = append(got, r.Method+" "+r.URL.RequestURI()+" "+string(body))
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/accounts":
-			_, _ = w.Write([]byte(`{"accounts":[{"id":"a1","name":"a@icloud.com","region":"us","position":0,"default":true,"library_sync":true,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z"}]}`))
+			_, _ = w.Write([]byte(`{"accounts":[{"id":"a1","name":"a@icloud.com","region":"us","position":0,"default":true,"library_sync":true,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z","needs_login":false}]}`))
 		case r.Method == http.MethodPatch:
-			_, _ = w.Write([]byte(`{"id":"a1","name":"","region":"us","position":0,"default":true,"library_sync":false,"apple_library":true,"state":"active","added_at":"2026-11-02T08:30:00Z"}`))
+			_, _ = w.Write([]byte(`{"id":"a1","name":"","region":"us","position":0,"default":true,"library_sync":false,"apple_library":true,"state":"active","added_at":"2026-11-02T08:30:00Z","needs_login":false}`))
 		case r.Method == http.MethodDelete:
 			_, _ = w.Write([]byte(`{"deleted":"a/1","logged_out":true}`))
 		default:
@@ -65,11 +64,6 @@ func TestAccountCallsTheSpecRoutes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":{"code":"account_not_found","message":"no account has this id"}}`))
 		}
 	}))
-	defer srv.Close()
-	c, err := New(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
 	ctx := context.Background()
 
 	list, err := c.ListAccounts(ctx)
@@ -112,12 +106,12 @@ func TestAccountCallsTheSpecRoutes(t *testing.T) {
 
 func TestResolveAccountsRewritesOnlyWhatIsThere(t *testing.T) {
 	calls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		_, _ = w.Write([]byte(`{"accounts":[{"id":"a1","name":"a@icloud.com","region":"us","state":"active"},{"id":"b2","name":"b@icloud.com","region":"jp","state":"active"}]}`))
+		writeJSON(w, http.StatusOK, `{"accounts":[`+
+			`{"id":"a1","name":"a@icloud.com","region":"us","position":0,"default":true,"library_sync":true,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z","needs_login":false},`+
+			`{"id":"b2","name":"b@icloud.com","region":"jp","position":1,"default":false,"library_sync":true,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z","needs_login":false}]}`)
 	}))
-	defer srv.Close()
-	c, _ := New(srv.URL)
 	ctx := context.Background()
 	v := map[string]any{"kind": "albums", "limit": 5}
 	if err := c.ResolveAccounts(ctx, v); err != nil || calls != 0 {

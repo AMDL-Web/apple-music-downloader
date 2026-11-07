@@ -1,0 +1,59 @@
+{
+  "event_cursor": 0,
+  "hooks": [],
+  "items": [
+    {
+      "adam_id": "",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/track/{w}x{h}bb.jpg",
+      "created_at": "<time>",
+      "has_lyrics": true,
+      "id": "item1",
+      "index": 1,
+      "job_id": "job1",
+      "kind": "",
+      "progress": {
+        "decrypt": 0,
+        "download": 0,
+        "download_bytes": 0,
+        "remuxed": false,
+        "resolved": false,
+        "saved": false,
+        "tagged": false,
+        "verified": false
+      },
+      "slot": "main",
+      "status": "queued",
+      "title": "Track",
+      "updated_at": "<time>"
+    }
+  ],
+  "job": {
+    "artist_name": "Album Artist",
+    "artist_url": "https://music.apple.com/us/artist/album-artist/1",
+    "artwork_bg_color": "1a1a1a",
+    "artwork_text_color1": "ffffff",
+    "artwork_text_color2": "eeeeee",
+    "artwork_text_color3": "cccccc",
+    "artwork_text_color4": "aaaaaa",
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg",
+    "cancelled_items": 0,
+    "completed_items": 0,
+    "created_at": "<time>",
+    "curator_name": "Curator",
+    "failed_items": 0,
+    "genre": "Pop",
+    "id": "job1",
+    "input": "album|us|1",
+    "priority": 0,
+    "progress": 0,
+    "release_date": "2024-06-01",
+    "skipped_items": 0,
+    "status": "running",
+    "storefront": "us",
+    "title": "Album",
+    "total_items": 1,
+    "trigger": "manual",
+    "type": "album",
+    "updated_at": "<time>"
+  }
+}

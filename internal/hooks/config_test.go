@@ -73,103 +73,26 @@ entries:
 	}
 }
 
-func TestLoadConfigRejectsMixingCreationAndTerminalEvents(t *testing.T) {
-	path := writeHooksConfig(t, `
-entries:
-  - name: "mixed"
-    type: "webhook"
-    events: ["job_queued", "job_finished"]
-    url: "http://example.local"
-`)
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "cannot be combined with terminal events") {
-		t.Fatalf("LoadConfig() error = %v, want creation/terminal mix rejection", err)
-	}
-}
-
-func TestLoadConfigRejectsDuplicateNames(t *testing.T) {
-	path := writeHooksConfig(t, `
-entries:
-  - name: "dup"
-    type: "webhook"
-    events: ["job_finished"]
-    url: "http://example.local"
-  - name: "dup"
-    type: "exec"
-    events: ["job_failed"]
-    command: "/bin/true"
-`)
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "duplicate hook name") {
-		t.Fatalf("LoadConfig() error = %v, want duplicate hook name error", err)
-	}
-}
-
-func TestLoadConfigRejectsUnknownType(t *testing.T) {
-	path := writeHooksConfig(t, `
-entries:
-  - name: "bad"
-    type: "telegram"
-    events: ["job_finished"]
-`)
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "type must be one of") {
-		t.Fatalf("LoadConfig() error = %v, want type validation error", err)
-	}
-}
-
-func TestLoadConfigRejectsUnknownEvent(t *testing.T) {
-	path := writeHooksConfig(t, `
-entries:
-  - name: "bad"
-    type: "webhook"
-    events: ["item_completed"]
-    url: "http://example.local"
-`)
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "unsupported event") {
-		t.Fatalf("LoadConfig() error = %v, want unsupported event error", err)
-	}
-}
-
-func TestLoadConfigRejectsWebhookWithoutURL(t *testing.T) {
-	path := writeHooksConfig(t, `
-entries:
-  - name: "bad"
-    type: "webhook"
-    events: ["job_finished"]
-`)
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "url is required") {
-		t.Fatalf("LoadConfig() error = %v, want url required error", err)
-	}
-}
-
-func TestLoadConfigRejectsExecWithoutCommand(t *testing.T) {
-	path := writeHooksConfig(t, `
-entries:
-  - name: "bad"
-    type: "exec"
-    events: ["job_finished"]
-`)
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "command is required") {
-		t.Fatalf("LoadConfig() error = %v, want command required error", err)
-	}
-}
-
-func TestLoadConfigRejectsUnknownJobType(t *testing.T) {
-	path := writeHooksConfig(t, `
-entries:
-  - name: "bad"
-    type: "webhook"
-    events: ["job_finished"]
-    job_types: ["single"]
-    url: "http://example.local"
-`)
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "unsupported job type") {
-		t.Fatalf("LoadConfig() error = %v, want unsupported job type error", err)
-	}
-}
-
-func TestLoadConfigRejectsUnknownField(t *testing.T) {
-	path := writeHooksConfig(t, "unknown_field: true\n")
-	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "unknown_field") {
-		t.Fatalf("LoadConfig() error = %v, want unknown field error", err)
+// LoadConfig refuses each invalid hooks.yaml with an error naming the problem.
+func TestLoadConfigRejects(t *testing.T) {
+	const webhook = "    type: webhook\n    url: \"http://example.local\"\n"
+	for _, tt := range []struct {
+		name, yaml, want string
+	}{
+		{"creation and terminal events mixed", "entries:\n  - name: mixed\n" + webhook + "    events: [job_queued, job_finished]\n", "cannot be combined with terminal events"},
+		{"duplicate names", "entries:\n  - name: dup\n" + webhook + "    events: [job_finished]\n  - name: dup\n    type: exec\n    events: [job_failed]\n    command: /bin/true\n", "duplicate hook name"},
+		{"unknown type", "entries:\n  - name: bad\n    type: telegram\n    events: [job_finished]\n", "type must be one of"},
+		{"unknown event", "entries:\n  - name: bad\n" + webhook + "    events: [item_completed]\n", "unsupported event"},
+		{"webhook without url", "entries:\n  - name: bad\n    type: webhook\n    events: [job_finished]\n", "url is required"},
+		{"exec without command", "entries:\n  - name: bad\n    type: exec\n    events: [job_finished]\n", "command is required"},
+		{"unknown job type", "entries:\n  - name: bad\n" + webhook + "    events: [job_finished]\n    job_types: [single]\n", "unsupported job type"},
+		{"unknown field", "unknown_field: true\n", "unknown_field"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := LoadConfig(writeHooksConfig(t, tt.yaml)); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("LoadConfig() error = %v, want one containing %q", err, tt.want)
+			}
+		})
 	}
 }
 

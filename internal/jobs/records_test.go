@@ -138,22 +138,6 @@ func startManager(t *testing.T, m *Manager) {
 	})
 }
 
-// waitRun waits up to 5 s for a run to reach a terminal status.
-func waitRun(t *testing.T, store *db.Store, id string) domain.Job {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		job, err := store.GetJob(context.Background(), id)
-		if err == nil && job.Status.IsTerminal() {
-			return job
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("run %s did not finish: %+v (%v)", id, job, err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
 func fileState(t *testing.T, store *db.Store, album, song, slot string) domain.File {
 	t.Helper()
 	f, err := store.GetFile(context.Background(), domain.FileKey{OwnerKind: domain.ResourceAlbum, OwnerID: album, SongID: song, Slot: slot})
@@ -329,7 +313,7 @@ func TestRecordRunPlansAndReportsSlots(t *testing.T) {
 	ctx := context.Background()
 
 	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
-	done := waitRun(t, store, run.ID)
+	done := waitTerminal(t, m, run.ID)
 	if done.Status != domain.JobFailed {
 		t.Fatalf("run = %s %q, want failed: one slot failed", done.Status, done.Error)
 	}
@@ -373,7 +357,7 @@ func TestRunThatNeverPlansCountsNoSlotFailure(t *testing.T) {
 	ctx := context.Background()
 
 	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
-	done := waitRun(t, store, run.ID)
+	done := waitTerminal(t, m, run.ID)
 	if done.Status != domain.JobFailed {
 		t.Fatalf("run = %s, want failed: it planned nothing", done.Status)
 	}
@@ -411,7 +395,7 @@ func TestNonRetryableRunErrorGivesUpNoSlot(t *testing.T) {
 			ctx := context.Background()
 
 			run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
-			if done := waitRun(t, store, run.ID); done.Status != domain.JobFailed {
+			if done := waitTerminal(t, m, run.ID); done.Status != domain.JobFailed {
 				t.Fatalf("run = %s, want failed", done.Status)
 			}
 			want, failures := domain.AudioPending, 0
@@ -436,7 +420,7 @@ func TestUnresolvedRecordBacksOffAfterAFailedRun(t *testing.T) {
 	ctx := context.Background()
 
 	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
-	if done := waitRun(t, store, run.ID); done.Status != domain.JobFailed {
+	if done := waitTerminal(t, m, run.ID); done.Status != domain.JobFailed {
 		t.Fatalf("run = %s, want failed", done.Status)
 	}
 	m.pickOnce(ctx)
@@ -470,7 +454,7 @@ func TestCancelPausesTheRecordAndResumeRunsIt(t *testing.T) {
 	if err := m.Cancel(ctx, run.ID); err != nil {
 		t.Fatal(err)
 	}
-	done := waitRun(t, store, run.ID)
+	done := waitTerminal(t, m, run.ID)
 	if done.Status != domain.JobCancelled || done.Error != "paused" {
 		t.Fatalf("run = %s %q, want cancelled by the pause", done.Status, done.Error)
 	}
@@ -495,7 +479,7 @@ func TestCancelPausesTheRecordAndResumeRunsIt(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no run after Resume")
 	}
-	if done := waitRun(t, store, resumed.ID); done.Status != domain.JobCompleted {
+	if done := waitTerminal(t, m, resumed.ID); done.Status != domain.JobCompleted {
 		t.Fatalf("resumed run = %s %q, want completed", done.Status, done.Error)
 	}
 	if f := fileState(t, store, "100", "1", domain.SlotMain); f.AudioState != domain.AudioDone {
@@ -524,7 +508,7 @@ func TestResetAndRetryQueueRunsWithTriggerReset(t *testing.T) {
 		t.Fatalf("reset with a queued run = %v, want ErrRunActive", err)
 	}
 	startManager(t, m)
-	if done := waitRun(t, store, run.ID); done.Status != domain.JobFailed {
+	if done := waitTerminal(t, m, run.ID); done.Status != domain.JobFailed {
 		t.Fatalf("first run = %s, want failed", done.Status)
 	}
 	if f := fileState(t, store, "100", "2", domain.SlotMain); f.AudioState != domain.AudioGivenUp {
@@ -539,7 +523,7 @@ func TestResetAndRetryQueueRunsWithTriggerReset(t *testing.T) {
 	if len(retried) != 2 || retried[0].Trigger != domain.TriggerReset {
 		t.Fatalf("runs after retry = %+v, want a new reset run", retried)
 	}
-	waitRun(t, store, retried[0].ID)
+	waitTerminal(t, m, retried[0].ID)
 	if plan := p.lastPlan(); len(plan.Slots) != 1 || plan.Slots[0].SongID != "2" {
 		t.Fatalf("retry plan = %+v, want only the given-up slot", plan.Slots)
 	}
@@ -548,7 +532,7 @@ func TestResetAndRetryQueueRunsWithTriggerReset(t *testing.T) {
 	if err != nil || result.Slots != 1 || result.Run == nil || result.Run.Trigger != domain.TriggerReset {
 		t.Fatalf("reset = %+v (%v), want one slot and a reset run", result, err)
 	}
-	waitRun(t, store, result.Run.ID)
+	waitTerminal(t, m, result.Run.ID)
 	plan := p.lastPlan()
 	if len(plan.Slots) != 1 || !plan.Slots[0].Replace || plan.Slots[0].FixedPath == "" {
 		t.Fatalf("reset plan = %+v, want the done slot replaced at its stored path", plan.Slots)
@@ -574,7 +558,7 @@ func TestRetryDownloadsMissingFiles(t *testing.T) {
 	startManager(t, m)
 
 	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
-	if done := waitRun(t, store, run.ID); done.Status != domain.JobFailed {
+	if done := waitTerminal(t, m, run.ID); done.Status != domain.JobFailed {
 		t.Fatalf("first run = %s, want failed", done.Status)
 	}
 	failSong2 = false
@@ -582,7 +566,7 @@ func TestRetryDownloadsMissingFiles(t *testing.T) {
 	if err != nil || reset.Run == nil {
 		t.Fatalf("reset = %+v (%v), want a run", reset, err)
 	}
-	waitRun(t, store, reset.Run.ID)
+	waitTerminal(t, m, reset.Run.ID)
 	key := domain.FileKey{OwnerKind: domain.ResourceAlbum, OwnerID: "100", SongID: "1", Slot: domain.SlotMain}
 	if marked, err := store.MarkFileMissing(ctx, key, time.Now().UTC()); err != nil || !marked {
 		t.Fatalf("mark missing = %v (%v)", marked, err)
@@ -592,7 +576,7 @@ func TestRetryDownloadsMissingFiles(t *testing.T) {
 	if err != nil || res.Job == nil {
 		t.Fatalf("retry with only a missing file = %+v (%v), want a queued run", res, err)
 	}
-	waitRun(t, store, res.Job.ID)
+	waitTerminal(t, m, res.Job.ID)
 	if plan := p.lastPlan(); len(plan.Slots) != 1 || plan.Slots[0].SongID != "1" {
 		t.Fatalf("retry plan = %+v, want the missing slot", plan.Slots)
 	}
@@ -611,7 +595,7 @@ func TestSubmitAgainDownloadsMissingFiles(t *testing.T) {
 	startManager(t, m)
 
 	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
-	if done := waitRun(t, store, run.ID); done.Status != domain.JobCompleted {
+	if done := waitTerminal(t, m, run.ID); done.Status != domain.JobCompleted {
 		t.Fatalf("first run = %s, want completed", done.Status)
 	}
 	key := domain.FileKey{OwnerKind: domain.ResourceAlbum, OwnerID: "100", SongID: "2", Slot: domain.SlotMain}
@@ -623,7 +607,7 @@ func TestSubmitAgainDownloadsMissingFiles(t *testing.T) {
 	if again.Status != domain.SubmitAccepted || again.Job == nil {
 		t.Fatalf("submit with a missing file = %+v, want an accepted run", again)
 	}
-	waitRun(t, store, again.Job.ID)
+	waitTerminal(t, m, again.Job.ID)
 	if plan := p.lastPlan(); len(plan.Slots) != 1 || plan.Slots[0].SongID != "2" {
 		t.Fatalf("plan = %+v, want the missing slot", plan.Slots)
 	}
@@ -640,7 +624,7 @@ func TestSubmitKeepsTheQualityOfADownloadedRecord(t *testing.T) {
 	startManager(t, m)
 
 	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
-	waitRun(t, store, run.ID)
+	waitTerminal(t, m, run.ID)
 	aac := &config.DownloadOverrides{QualityPriority: &[]string{"aac"}}
 	if res := m.SubmitBatch(ctx, []string{"album|us|100"}, aac).Results[0]; res.Status != domain.SubmitAlreadyDownloaded {
 		t.Fatalf("submit with aac = %+v, want already_downloaded", res)
@@ -864,7 +848,7 @@ func TestRecoveredRunKeepsASlotFailedBeforeTheRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	startManager(t, m2)
-	done := waitRun(t, store, run.ID)
+	done := waitTerminal(t, m2, run.ID)
 	if done.Status != domain.JobFailed || done.FailedItems != 1 || done.CompletedItems != 1 {
 		t.Fatalf("recovered run = %s (completed %d, failed %d), want failed with one item failed and one completed",
 			done.Status, done.CompletedItems, done.FailedItems)
@@ -874,5 +858,116 @@ func TestRecoveredRunKeepsASlotFailedBeforeTheRestart(t *testing.T) {
 	}
 	if f := fileState(t, store, "100", "2", domain.SlotMain); f.AudioState != domain.AudioDone {
 		t.Fatalf("slot 2 = %s, want done", f.AudioState)
+	}
+}
+
+// albumMark is album id's record mark, as search hits carry it.
+func albumMark(t *testing.T, store *db.Store, id string) domain.ResourceMark {
+	t.Helper()
+	marks, err := store.RecordMarks(context.Background(), domain.ResourceAlbum, []string{id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, ok := marks[id]
+	if !ok {
+		t.Fatalf("no mark for album %s", id)
+	}
+	return m
+}
+
+// One song of an album downloaded first leaves a record complete in itself
+// whose mark says it wants only that song; the album link then downloads
+// the tracks it lacks instead of answering already_downloaded.
+func TestAlbumAfterOneOfItsSongsDownloadsTheRest(t *testing.T) {
+	p := &recordProcessor{dir: t.TempDir(), tracks: []string{"1", "2"}}
+	m, store := newRecordManager(t, p, config.Default())
+	ctx := context.Background()
+	startManager(t, m)
+
+	song := m.SubmitBatch(ctx, []string{"song|us|1|100"}, nil).Results[0]
+	if song.Job == nil {
+		t.Fatalf("song add = %+v, want a run", song)
+	}
+	waitTerminal(t, m, song.Job.ID)
+	if mark := albumMark(t, store, "100"); mark.State != domain.RecordComplete || mark.WantedAll || mark.TracksWanted != 1 {
+		t.Fatalf("mark after the song = %+v, want complete with wanted_all false", mark)
+	}
+
+	album := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0]
+	if album.Status != domain.SubmitAccepted || album.Job == nil {
+		t.Fatalf("album add = %+v, want an accepted run", album)
+	}
+	waitTerminal(t, m, album.Job.ID)
+	if plan := p.lastPlan(); len(plan.Slots) != 1 || plan.Slots[0].SongID != "2" {
+		t.Fatalf("plan = %+v, want only the missing track", plan.Slots)
+	}
+	if mark := albumMark(t, store, "100"); mark.State != domain.RecordComplete || !mark.WantedAll || mark.TracksDone != 2 {
+		t.Fatalf("mark after the album = %+v, want the whole album done", mark)
+	}
+}
+
+// The whole album added while a run of one of its songs runs is taken: the
+// picker downloads the rest after that run. A second add of the same song
+// asks for nothing new and still answers duplicate_active.
+func TestAlbumAddWhileASongRunsIsAccepted(t *testing.T) {
+	p := &recordProcessor{dir: t.TempDir(), tracks: []string{"1", "2"}, hold: make(chan struct{}), started: make(chan domain.Job, 4)}
+	m, store := newRecordManager(t, p, config.Default())
+	ctx := context.Background()
+	startManager(t, m)
+
+	song := m.SubmitBatch(ctx, []string{"song|us|1|100"}, nil).Results[0]
+	if song.Job == nil {
+		t.Fatalf("song add = %+v, want a run", song)
+	}
+	select {
+	case <-p.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the song's run did not start")
+	}
+
+	album := m.SubmitBatch(ctx, []string{"album|us|100"}, nil)
+	if got := album.Results[0]; album.Accepted != 1 || got.Status != domain.SubmitAccepted || got.Job != nil ||
+		got.Resource == nil || got.Resource.ID != "100" {
+		t.Fatalf("album add during the song's run = %+v, want accepted without a run", got)
+	}
+	again := m.SubmitBatch(ctx, []string{"song|us|1|100"}, nil).Results[0]
+	if again.Status != domain.SubmitDuplicateActive || again.ExistingJobID != song.Job.ID {
+		t.Fatalf("the same song again = %+v, want duplicate_active for %s", again, song.Job.ID)
+	}
+
+	close(p.hold)
+	waitTerminal(t, m, song.Job.ID)
+	// The run planned after the album add, so it downloads both tracks.
+	if a, err := store.GetAlbum(ctx, "100"); err != nil || a.TracksDone != 2 {
+		t.Fatalf("album 100 = %+v (%v), want 2 tracks done", a, err)
+	}
+}
+
+// A song link without its album names a song an album record already
+// lists: it is added there at once, without a catalog read, and answers
+// already_downloaded when its track is done, or queues a run for it.
+func TestSongLinkOfAHeldSongAnswersAtOnce(t *testing.T) {
+	p := &recordProcessor{dir: t.TempDir(), tracks: []string{"1", "2"}}
+	m, store := newRecordManager(t, p, config.Default())
+	ctx := context.Background()
+	startManager(t, m)
+
+	first := m.SubmitBatch(ctx, []string{"song|us|1|100"}, nil).Results[0]
+	waitTerminal(t, m, first.Job.ID)
+
+	held := m.SubmitBatch(ctx, []string{"song|us|1"}, nil).Results[0]
+	if held.Status != domain.SubmitAlreadyDownloaded || held.Resource == nil || held.Resource.ID != "100" {
+		t.Fatalf("bare link of a downloaded song = %+v, want already_downloaded naming album 100", held)
+	}
+	other := m.SubmitBatch(ctx, []string{"song|us|2"}, nil).Results[0]
+	if other.Status != domain.SubmitAccepted || other.Job == nil {
+		t.Fatalf("bare link of a listed song = %+v, want an accepted run", other)
+	}
+	if pending, err := store.ListPending(ctx, ""); err != nil || len(pending) != 0 {
+		t.Fatalf("pending adds = %+v (%v), want none", pending, err)
+	}
+	waitTerminal(t, m, other.Job.ID)
+	if f := fileState(t, store, "100", "2", domain.SlotMain); f.AudioState != domain.AudioDone {
+		t.Fatalf("song 2 = %s, want done", f.AudioState)
 	}
 }
