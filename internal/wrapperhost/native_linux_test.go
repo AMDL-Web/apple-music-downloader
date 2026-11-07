@@ -133,10 +133,7 @@ func TestNativeManagerRunsWithoutQEMU(t *testing.T) {
 	if !h.NativeNext(true) {
 		t.Error("a native install updates natively")
 	}
-	s, err := NewSupervisor(h, "/nonexistent/qemu", "kvm", io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newWatchedSupervisor(t, h, "/nonexistent/qemu", "kvm", io.Discard)
 	s.fetcher = &fakeFetcher{}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

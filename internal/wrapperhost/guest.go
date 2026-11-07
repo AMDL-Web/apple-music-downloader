@@ -214,6 +214,9 @@ func statusOf(ctx context.Context, port int) (regions []string, err error) {
 // errExited means QEMU ended before the guest answered.
 var errExited = errors.New("QEMU exited")
 
+// readyPoll spaces waitReady's status requests.
+var readyPoll = 250 * time.Millisecond
+
 // waitReady waits until the guest answers /status, QEMU exits or timeout.
 func (g *guest) waitReady(ctx context.Context, port int, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -231,7 +234,7 @@ func (g *guest) waitReady(ctx context.Context, port int, timeout time.Duration) 
 				return fmt.Errorf("the wrapper did not answer within %s", timeout)
 			}
 			return ctx.Err()
-		case <-time.After(250 * time.Millisecond):
+		case <-time.After(readyPoll):
 		}
 	}
 }

@@ -81,17 +81,26 @@ type artifactServer struct {
 	// "cut" sends half of the range and drops the connection.
 	inject func(start int64) string
 
+	// together, when set, holds the first ranged blob requests until that
+	// many are in flight at once.
+	together int64
+	arrived  atomic.Int64
+	allIn    chan struct{}
+
 	served   atomic.Int64
 	epoch    atomic.Int64
 	resolves atomic.Int64
 	requests atomic.Int64
+	ranged   atomic.Int64 // blob requests that asked for a range
+	inFlight atomic.Int64
+	peak     atomic.Int64 // most blob requests in flight at once
 	token    atomic.Int64
 	srv      *httptest.Server
 }
 
-func newArtifactServer(t *testing.T, body []byte, rate int) *artifactServer {
+func newArtifactServer(t testing.TB, body []byte, rate int) *artifactServer {
 	t.Helper()
-	a := &artifactServer{body: body}
+	a := &artifactServer{body: body, allIn: make(chan struct{})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/"+GuestRepo+"/releases/download/guest-c00000000000/"+GuestArtifact+".zip", func(w http.ResponseWriter, r *http.Request) {
 		a.resolves.Add(1)
@@ -99,6 +108,24 @@ func newArtifactServer(t *testing.T, body []byte, rate int) *artifactServer {
 	})
 	mux.HandleFunc("/blob/{tok}", func(w http.ResponseWriter, r *http.Request) {
 		a.requests.Add(1)
+		n := a.inFlight.Add(1)
+		defer a.inFlight.Add(-1)
+		for p := a.peak.Load(); n > p && !a.peak.CompareAndSwap(p, n); p = a.peak.Load() {
+		}
+		if r.Header.Get("Range") != "" {
+			a.ranged.Add(1)
+			if a.together > 0 {
+				if k := a.arrived.Add(1); k == a.together {
+					close(a.allIn)
+				} else if k < a.together {
+					select {
+					case <-a.allIn:
+					case <-r.Context().Done():
+						return
+					}
+				}
+			}
+		}
 		if r.PathValue("tok") != fmt.Sprint(a.token.Load()) {
 			http.Error(w, "<Error>AuthenticationFailed</Error>", http.StatusForbidden)
 			return
@@ -154,7 +181,7 @@ func randomBody(n int) []byte {
 }
 
 // shrink makes chunks and backoffs small enough for a test's tiny files.
-func shrink(t *testing.T) {
+func shrink(t testing.TB) {
 	t.Helper()
 	c, a, b, m := chunkSize, chunkAttempts, chunkBackoff, maxBackoff
 	chunkSize, chunkAttempts, chunkBackoff, maxBackoff = 64<<10, 4, time.Millisecond, 5*time.Millisecond
@@ -172,21 +199,20 @@ func sameFile(t *testing.T, path string, want []byte) {
 	}
 }
 
-func TestRangedDownloadBeatsOneStream(t *testing.T) {
+// A download fetches its ranges over defaultConns connections at once: the
+// server holds the first ranged requests until that many are in flight, so a
+// download that fetched one range at a time would never finish.
+func TestRangedDownloadFetchesRangesConcurrently(t *testing.T) {
 	shrink(t)
-	a := newArtifactServer(t, randomBody(2<<20), 4<<20)
+	a := newArtifactServer(t, randomBody(2<<20), 0)
+	a.together = defaultConns
 	dir := t.TempDir()
-
-	start := time.Now()
-	if err := Download(context.Background(), streamOnly{a.link()}, a.pin(), filepath.Join(dir, "one.zip"), nil); err != nil {
-		t.Fatal(err)
-	}
-	one := time.Since(start)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	var inside atomic.Int32
 	var last int64
-	start = time.Now()
-	err := Download(context.Background(), a.link(), a.pin(), filepath.Join(dir, "many.zip"), func(p Progress) {
+	err := Download(ctx, a.link(), a.pin(), filepath.Join(dir, "many.zip"), func(p Progress) {
 		if inside.Add(1) != 1 {
 			t.Error("report called from two goroutines at once")
 		}
@@ -197,19 +223,47 @@ func TestRangedDownloadBeatsOneStream(t *testing.T) {
 		last = p.Done
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("download whose first %d ranges must be in flight together: %v", defaultConns, err)
 	}
-	many := time.Since(start)
-	size := float64(len(a.body))
-	t.Logf("one stream %v (%.0f KB/s), %d connections %v (%.0f KB/s)", one, size/1024/one.Seconds(), defaultConns, many, size/1024/many.Seconds())
-	// defaultConns times faster at best; half that leaves room for a busy
-	// machine and the race detector.
-	if many*defaultConns/2 > one {
-		t.Errorf("%d connections took %v against %v for one stream; want at least %d times faster", defaultConns, many, one, defaultConns/2)
+	if got := a.peak.Load(); got != defaultConns {
+		t.Errorf("%d requests were in flight at most, want %d", got, defaultConns)
+	}
+	if chunks := int64(len(a.body)) / chunkSize; a.ranged.Load() != chunks || a.requests.Load() != chunks {
+		t.Errorf("%d blob requests, %d of them ranged; want one ranged request for each of the %d chunks", a.requests.Load(), a.ranged.Load(), chunks)
 	}
 	sameFile(t, filepath.Join(dir, "many.zip"), a.body)
 	if _, err := os.Stat(filepath.Join(dir, "many.zip.parts")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the parts outlived a finished download: %v", err)
+	}
+}
+
+// BenchmarkRangedDownload compares one stream with defaultConns ranged
+// connections over links limited to 4 MB/s each, as the blob host limits a
+// connection; the ranged download should be close to defaultConns times
+// faster.
+func BenchmarkRangedDownload(b *testing.B) {
+	for _, tc := range []struct {
+		name  string
+		fetch func(*artifactServer) Fetcher
+	}{
+		{"stream", func(a *artifactServer) Fetcher { return streamOnly{a.link()} }},
+		{"ranged", func(a *artifactServer) Fetcher { return a.link() }},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			shrink(b)
+			a := newArtifactServer(b, randomBody(2<<20), 4<<20)
+			dir := b.TempDir()
+			b.SetBytes(int64(len(a.body)))
+			for b.Loop() {
+				path := filepath.Join(dir, "a.zip")
+				if err := Download(context.Background(), tc.fetch(a), a.pin(), path, nil); err != nil {
+					b.Fatal(err)
+				}
+				if err := os.Remove(path); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

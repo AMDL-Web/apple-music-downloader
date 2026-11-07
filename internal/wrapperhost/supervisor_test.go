@@ -186,7 +186,9 @@ func TestClientsOutwaitALogin(t *testing.T) {
 	}
 }
 
-func init() { pollEvery = 50 * time.Millisecond; readyTimeout = 20 * time.Second }
+func init() {
+	pollEvery, readyTimeout, readyPoll, bootBackoff = 50*time.Millisecond, 20*time.Second, 10*time.Millisecond, 10*time.Millisecond
+}
 
 type syncBuffer struct {
 	mu sync.Mutex
@@ -225,10 +227,7 @@ func startFake(t *testing.T, accel string, prep func(Home), fetcher Fetcher) (*S
 		prep(h)
 	}
 	log := &syncBuffer{}
-	s, err := NewSupervisor(h, exe, accel, log)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newWatchedSupervisor(t, h, exe, accel, log)
 	s.fetcher = &fakeFetcher{}
 	if fetcher != nil {
 		s.fetcher = fetcher
@@ -247,16 +246,55 @@ func startFake(t *testing.T, accel string, prep func(Home), fetcher Fetcher) (*S
 	return s, h, log
 }
 
-func waitMode(t *testing.T, s *Supervisor, mode string) {
+// changes are the state updates of supervisors made by newWatchedSupervisor.
+var changes sync.Map // *Supervisor -> chan struct{} (closed and replaced on each update)
+
+// newWatchedSupervisor is NewSupervisor whose state updates waitState can
+// wait for.
+func newWatchedSupervisor(t *testing.T, h Home, exe, accel string, log io.Writer) *Supervisor {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		if s.Managed().Mode == mode {
+	s, err := NewSupervisor(h, exe, accel, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	changed := make(chan struct{})
+	s.stateChanged = func() {
+		mu.Lock()
+		close(changed)
+		changed = make(chan struct{})
+		mu.Unlock()
+	}
+	changes.Store(s, func() <-chan struct{} { mu.Lock(); defer mu.Unlock(); return changed })
+	t.Cleanup(func() { changes.Delete(s) })
+	return s
+}
+
+// waitState returns once cond holds for s's state, checking it again on each
+// of s's state updates. The 15 s limit only turns a hang into a failure.
+func waitState(t *testing.T, s *Supervisor, what string, cond func() bool) {
+	t.Helper()
+	next, ok := changes.Load(s)
+	if !ok {
+		t.Fatal("waitState needs a supervisor from newWatchedSupervisor")
+	}
+	timeout := time.After(15 * time.Second)
+	for {
+		changed := next.(func() <-chan struct{})()
+		if cond() {
 			return
 		}
-		time.Sleep(25 * time.Millisecond)
+		select {
+		case <-changed:
+		case <-timeout:
+			t.Fatalf("%s: never happened; state %+v", what, s.Managed())
+		}
 	}
-	t.Fatalf("mode = %s, want %s", s.Managed().Mode, mode)
+}
+
+func waitMode(t *testing.T, s *Supervisor, mode string) {
+	t.Helper()
+	waitState(t, s, "mode "+mode, func() bool { return s.Managed().Mode == mode })
 }
 
 func TestTokenPrefixesAreRedacted(t *testing.T) {
@@ -449,10 +487,7 @@ func TestGuestWithoutAPayloadPinDoesNotBoot(t *testing.T) {
 	if err := writeJSON(h.path("installed.json"), in); err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewSupervisor(h, exe, "tcg", &syncBuffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := newWatchedSupervisor(t, h, exe, "tcg", &syncBuffer{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.Run(ctx); close(done) }()
@@ -482,13 +517,7 @@ func TestAGuestThatExitsKeepsItsAccelerator(t *testing.T) {
 	t.Setenv("AMDL_FAKE_QEMU_MODE", "guest-exit")
 	s, _, _ := startFake(t, "kvm", nil, nil)
 	fails := func() int { s.mu.Lock(); defer s.mu.Unlock(); return s.fails }
-	deadline := time.Now().Add(10 * time.Second)
-	for fails() < 2 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if n := fails(); n < 2 {
-		t.Fatalf("%d failed boots, want the guest to exit at least twice", n)
-	}
+	waitState(t, s, "the guest exits twice", func() bool { return fails() >= 2 })
 	if m := s.Managed(); m.Accel != "kvm" || m.AccelFallback {
 		t.Errorf("accel %s, fallback %v: a guest that exits on its own is no fault of kvm", m.Accel, m.AccelFallback)
 	}
@@ -533,14 +562,11 @@ func (g gatedFetcher) Fetch(ctx context.Context, a Asset, offset int64, w io.Wri
 func TestTheHostDownloadsAMissingPayloadBeforeBooting(t *testing.T) {
 	gate := gatedFetcher{open: make(chan struct{})}
 	s, h, _ := startFake(t, "tcg", func(h Home) { os.RemoveAll(h.path(payloadDir)) }, gate)
-	deadline := time.Now().Add(10 * time.Second)
 	var m wrapper.Managed
-	for time.Now().Before(deadline) {
-		if m = s.Managed(); m.Download != nil && m.Download.DoneBytes > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitState(t, s, "the payload download shows progress", func() bool {
+		m = s.Managed()
+		return m.Download != nil && m.Download.DoneBytes > 0
+	})
 	if m.Mode != "starting" || m.Download == nil || m.Download.TotalBytes != int64(len(fakePayload)) || m.Download.DoneBytes != int64(len(fakePayload)/2) {
 		t.Fatalf("while the payload downloads: %+v (download %+v)", m, m.Download)
 	}
