@@ -20,7 +20,9 @@ const go = process.env.GO || 'go';
 const bin = `${out}/bin/console-e2e`;
 // docker.sh builds the server on the host and runs the tests in the
 // Playwright image, which has no Go: it names the binary to start instead.
-const build = process.env.CONSOLE_E2E_PREBUILT ? 'true' : `"${go}" build -cover -o "${bin}" ./apps/console/e2e/server`;
+// -buildvcs=false: in CI's container the checkout belongs to another user,
+// so git will not report its status, and the test server needs no stamp.
+const build = process.env.CONSOLE_E2E_PREBUILT ? 'true' : `"${go}" build -buildvcs=false -cover -o "${bin}" ./apps/console/e2e/server`;
 
 export default defineConfig({
   testDir: './tests',

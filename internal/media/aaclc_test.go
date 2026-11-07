@@ -117,13 +117,17 @@ func TestWidevineDecryptStreamsRealCENCToFlatFile(t *testing.T) {
 	// decoded PCM: the flat file carries an edit list that newer ffmpeg (9.x)
 	// honours by trimming the padding of the last frame, while the fragmented
 	// source has none, so decoded PCM lengths differ by ffmpeg version even
-	// though the audio is identical.
+	// though the audio is identical. The last frame's duration is left out
+	// too: ffmpeg 6 writes the padding-trimmed duration (136) into the
+	// fragmented source and ffmpeg 9 the full frame (1024), while the flat
+	// file always carries the full frame and trims through its edit list.
 	got, want := readAudioSamples(t, flatPath), readAudioSamples(t, plainPath)
 	if len(want) == 0 || len(got) != len(want) {
 		t.Fatalf("streamed AAC-LC output has %d samples, want %d", len(got), len(want))
 	}
 	for i := range want {
-		if got[i].dur != want[i].dur || !bytes.Equal(got[i].data, want[i].data) {
+		durDiffers := got[i].dur != want[i].dur && i < len(want)-1
+		if durDiffers || !bytes.Equal(got[i].data, want[i].data) {
 			t.Fatalf("sample %d differs: got %d bytes/dur %d, want %d bytes/dur %d",
 				i, len(got[i].data), got[i].dur, len(want[i].data), want[i].dur)
 		}

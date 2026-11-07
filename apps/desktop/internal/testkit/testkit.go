@@ -42,7 +42,15 @@ const Stall = 30 * time.Second
 // cond change: a cond that builds a frame may be what sends the request it
 // waits for, and its answer is posted. It fails the test if nothing is
 // posted for Stall while cond does not hold.
-func (th *Thread) Until(cond func() bool) {
+func (th *Thread) Until(cond func() bool) { th.until(cond, true) }
+
+// UntilExact is Until that tries cond after each posted func, so it stops
+// at the first state where cond holds and leaves what came later queued: a
+// test that waits for a request to be sent can look at the screen before
+// the answer is applied, however fast the answer arrives.
+func (th *Thread) UntilExact(cond func() bool) { th.until(cond, false) }
+
+func (th *Thread) until(cond func() bool, drain bool) {
 	th.t.Helper()
 	var stall *time.Timer
 	for !cond() {
@@ -53,9 +61,11 @@ func (th *Thread) Until(cond func() bool) {
 		select {
 		case fn := <-th.queue:
 			fn()
-			// What arrived meanwhile goes first: the answer waited on may
-			// queue behind every cover that loads.
-			th.Drain()
+			if drain {
+				// What arrived meanwhile goes first: the answer waited on
+				// may queue behind every cover that loads.
+				th.Drain()
+			}
 			stall.Reset(Stall)
 		case <-stall.C:
 			th.t.Fatalf("nothing was posted for %v and the condition never held", Stall)

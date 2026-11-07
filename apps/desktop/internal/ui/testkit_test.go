@@ -22,6 +22,13 @@ const refresh = time.Second / 60
 // the store's pauses are over at once.
 func threadApp(t *testing.T, s mode.Settings, c *client.Client, covers http.RoundTripper) (*App, func(until func() bool)) {
 	t.Helper()
+	a, th := threadAppOn(t, s, c, covers)
+	return a, th.Until
+}
+
+// threadAppOn is threadApp returning the thread itself.
+func threadAppOn(t *testing.T, s mode.Settings, c *client.Client, covers http.RoundTripper) (*App, *testkit.Thread) {
+	t.Helper()
 	a, _ := newTestApp(s)
 	th := testkit.NewThread(t)
 	a.Store = store.New(th.Post, nil)
@@ -31,7 +38,7 @@ func threadApp(t *testing.T, s mode.Settings, c *client.Client, covers http.Roun
 	}
 	a.Store.Connect(c)
 	t.Cleanup(a.Store.Close)
-	return a, th.Until
+	return a, th
 }
 
 // demoApp is an App on the demo's in-memory backend (threadApp), covers
@@ -53,7 +60,9 @@ func demoOver(t *testing.T, routes map[string]http.HandlerFunc) (*App, func(unti
 // of the backdrop's light counts as one of anything else.
 func liveApp(t *testing.T, s mode.Settings) (*App, func(until func() bool)) {
 	t.Helper()
-	a, run := threadApp(t, s, testkit.Serve(t, http.HandlerFunc(fakeAmdl)), nil)
+	a, th := threadAppOn(t, s, testkit.Serve(t, http.HandlerFunc(fakeAmdl)), nil)
 	a.FlatBackdrop = false
-	return a, run
+	// The flicker tests look at the frames between a request and its
+	// answer, so run stops at the first state where its condition holds.
+	return a, th.UntilExact
 }
