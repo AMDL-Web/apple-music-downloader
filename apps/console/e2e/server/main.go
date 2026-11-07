@@ -22,7 +22,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -174,7 +173,7 @@ func rewriteArtwork(resp *http.Response) error {
 	}
 	resp.Header.Del("Content-Length")
 	resp.ContentLength = -1
-	resp.Body = &lineRewriter{src: bufio.NewReader(resp.Body), closer: resp.Body, sse: strings.HasPrefix(ct, "text/event-stream")}
+	resp.Body = &lineRewriter{src: bufio.NewReader(resp.Body), closer: resp.Body}
 	return nil
 }
 
@@ -187,10 +186,6 @@ type lineRewriter struct {
 	src    *bufio.Reader
 	closer io.Closer
 	buf    []byte
-	// sse is whether the body is an event stream, whose events are named.
-	sse bool
-	// named is whether the event being read has an event: line.
-	named bool
 }
 
 func (l *lineRewriter) Read(p []byte) (int, error) {
@@ -199,7 +194,7 @@ func (l *lineRewriter) Read(p []byte) (int, error) {
 		if len(line) == 0 {
 			return 0, err
 		}
-		l.buf = append(l.eventName(line), bytes.ReplaceAll(line, demoArt, ownArt)...)
+		l.buf = bytes.ReplaceAll(line, demoArt, ownArt)
 	}
 	n := copy(p, l.buf)
 	l.buf = l.buf[n:]
@@ -207,26 +202,3 @@ func (l *lineRewriter) Read(p []byte) (int, error) {
 }
 
 func (l *lineRewriter) Close() error { return l.closer.Close() }
-
-// eventName returns the event: line to put before line, if any. The real
-// API names every event of the downloads feed after its type, and the
-// console reads only named ones; the demo's feed sends them unnamed, so an
-// unnamed event gets the name of the type in its data.
-func (l *lineRewriter) eventName(line []byte) []byte {
-	switch {
-	case !l.sse:
-	case len(bytes.TrimSpace(line)) == 0:
-		l.named = false
-	case bytes.HasPrefix(line, []byte("event:")):
-		l.named = true
-	case bytes.HasPrefix(line, []byte("data: {")) && !l.named:
-		var msg struct {
-			Type string `json:"type"`
-		}
-		if json.Unmarshal(line[len("data: "):], &msg) == nil && msg.Type != "" {
-			l.named = true
-			return []byte("event: " + msg.Type + "\n")
-		}
-	}
-	return nil
-}

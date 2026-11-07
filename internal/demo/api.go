@@ -455,7 +455,7 @@ func (b *Backend) feedStream(w http.ResponseWriter, r *http.Request) {
 		case <-tick.C:
 			err = s.ping()
 		case msg := <-ch:
-			err = s.send(msg.EventID, "", msg)
+			err = s.send(msg.EventID, msg.Type, msg)
 		}
 		if err != nil {
 			return // the client stopped reading
