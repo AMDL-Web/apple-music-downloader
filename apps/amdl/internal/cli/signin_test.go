@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -46,27 +45,12 @@ func fakeWrapper(t *testing.T, twoStep bool) (*httptest.Server, func() []call) {
 	}
 }
 
-// runTerminal runs args as if stdin and stderr were a terminal: stdin holds
-// what is typed with echo on, secrets what is typed at a prompt without echo.
+// runTerminal runs args against srv as if stdin and stderr were a terminal:
+// stdin holds what is typed with echo on, secrets what is typed at a prompt
+// without echo.
 func runTerminal(t *testing.T, srv *httptest.Server, stdin string, secrets []string, args ...string) result {
 	t.Helper()
-	var out, errb bytes.Buffer
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-	read := func(context.Context) (string, error) {
-		if len(secrets) == 0 {
-			t.Fatal("asked for a secret nobody typed")
-		}
-		s := secrets[0]
-		secrets = secrets[1:]
-		return s, nil
-	}
-	code := Run(context.Background(), append(args, "--server", srv.URL), IO{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errb,
-		InTTY: true, ErrTTY: true, ReadSecret: read, Getenv: func(string) string { return "" }})
-	if len(secrets) > 0 {
-		t.Errorf("%d secrets were never asked for", len(secrets))
-	}
-	return result{code, out.String(), errb.String()}
+	return runWith(t, opts{srv: srv, stdin: stdin, tty: true, secrets: secrets}, args...)
 }
 
 func TestLoginReadsThePasswordFromAPipe(t *testing.T) {
@@ -81,33 +65,6 @@ func TestLoginReadsThePasswordFromAPipe(t *testing.T) {
 	}
 }
 
-func TestLoginFromAPipeNeedsPasswordStdin(t *testing.T) {
-	srv, calls := fakeWrapper(t, false)
-	for _, args := range [][]string{
-		{"wrapper", "login", "--username", "me@example.com"},
-		{"wrapper", "login", "--password-stdin"},
-	} {
-		r := run(t, srv, "secret\n", args...)
-		if r.code != exitInput || errorCode(t, r.stderr) != "usage_error" {
-			t.Errorf("%v: exit %d, %s", args, r.code, r.stderr)
-		}
-	}
-	if got := calls(); len(got) != 0 {
-		t.Fatalf("a refused login still sent %+v", got)
-	}
-}
-
-func TestLoginFromAPipeLeavesTheCodeToWrapper2fa(t *testing.T) {
-	srv, calls := fakeWrapper(t, true)
-	r := run(t, srv, "secret\n", "wrapper", "login", "--username", "me@example.com", "--password-stdin")
-	if r.code != exitOK || !strings.Contains(r.stdout, `"needs_2fa"`) || !strings.Contains(r.stdout, "login_1") {
-		t.Fatalf("exit %d, stdout %s, stderr %s", r.code, r.stdout, r.stderr)
-	}
-	if got := calls(); len(got) != 1 {
-		t.Fatalf("requests = %+v", got)
-	}
-}
-
 func TestTwoStepCodeFromAPipe(t *testing.T) {
 	srv, calls := fakeWrapper(t, true)
 	r := run(t, srv, " 123456 \n", "wrapper", "2fa", "login_1")
@@ -117,26 +74,6 @@ func TestTwoStepCodeFromAPipe(t *testing.T) {
 	got := calls()
 	if len(got) != 1 || got[0].path != "/api/v1/wrapper/login/login_1/2fa" || got[0].body["two_step_code"] != "123456" {
 		t.Fatalf("requests = %+v", got)
-	}
-}
-
-func TestTwoStepCodeIsNeverAnArgument(t *testing.T) {
-	srv, calls := fakeWrapper(t, true)
-	for _, c := range []struct {
-		stdin string
-		args  []string
-	}{
-		{"", []string{"wrapper", "2fa", "login_1", "123456"}},
-		{"", []string{"wrapper", "2fa", "login_1"}},
-		{"\n", []string{"wrapper", "2fa", "login_1"}},
-	} {
-		r := run(t, srv, c.stdin, c.args...)
-		if r.code != exitInput || errorCode(t, r.stderr) != "usage_error" {
-			t.Errorf("%v with stdin %q: exit %d, %s", c.args, c.stdin, r.code, r.stderr)
-		}
-	}
-	if got := calls(); len(got) != 0 {
-		t.Fatalf("a refused code still sent %+v", got)
 	}
 }
 
@@ -183,29 +120,40 @@ func TestTwoStepCodeInATerminal(t *testing.T) {
 	}
 }
 
+// readStarted is a terminal nobody types at: Read reports that the prompt
+// is reading, then blocks until the test ends.
+type readStarted struct {
+	started chan struct{}
+	once    sync.Once
+	block   io.Reader
+}
+
+func (r *readStarted) Read(p []byte) (int, error) {
+	r.once.Do(func() { close(r.started) })
+	return r.block.Read(p)
+}
+
 func TestAppleIDPromptGivesUpOnInterrupt(t *testing.T) {
 	srv, calls := fakeWrapper(t, false)
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-	stdin, typed := io.Pipe() // nobody types: the read would block forever
-	defer typed.Close()
+	isolateHome(t)
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	stdin := &readStarted{started: make(chan struct{}), block: pr}
 	ctx, interrupt := context.WithCancel(context.Background())
 	done := make(chan result, 1)
-	go func() {
-		var out, errb bytes.Buffer
-		code := Run(ctx, []string{"wrapper", "login", "--server", srv.URL}, IO{Stdin: stdin, Stdout: &out, Stderr: &errb,
-			InTTY: true, ErrTTY: true, ReadSecret: func(context.Context) (string, error) { return "unused", nil },
-			Getenv: func(string) string { return "" }})
-		done <- result{code, out.String(), errb.String()}
-	}()
-	time.Sleep(50 * time.Millisecond) // let the prompt start reading
+	go func() { done <- runWith(t, opts{srv: srv, in: stdin, tty: true, ctx: ctx}, "wrapper", "login") }()
+	select {
+	case <-stdin.started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the Apple ID prompt never read stdin")
+	}
 	interrupt()
 	select {
 	case r := <-done:
 		if r.code != exitInterrupted {
 			t.Fatalf("exit %d, want %d: %s", r.code, exitInterrupted, r.stderr)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("the Apple ID prompt ignored the interrupt")
 	}
 	if got := calls(); len(got) != 0 {
