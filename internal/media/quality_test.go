@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
@@ -208,23 +209,27 @@ audio.m3u8
 	}))
 	defer manifest.Close()
 
-	cfg := config.Default()
-	cfg.Download.MaxAttempts = 2
-	calls := &callLog{}
-	service := newTestQualityService(cfg, fakeDownloaderCatalog{song: applemusic.Song{
-		ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album", HiResLossless: true,
-	}}, fakeDownloaderWrapper{status: readyWrapper, m3u8: manifest.URL + "/master.m3u8", calls: calls})
+	// The server runs outside the bubble; the retry backoff runs on its clock.
+	synctest.Test(t, func(t *testing.T) {
+		cfg := config.Default()
+		cfg.Download.MaxAttempts = 2
+		calls := &callLog{}
+		d := newTestDownloader(&Downloader{cfg: cfg, http: bubbleClient(), catalog: fakeDownloaderCatalog{song: applemusic.Song{
+			ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album", HiResLossless: true,
+		}}, wrapper: fakeDownloaderWrapper{status: readyWrapper, m3u8: manifest.URL + "/master.m3u8", calls: calls}})
+		service := NewQualityService(d)
 
-	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if wrapperCalls := len(calls.with("wrapper m3u8 ")); wrapperCalls != 2 || masterHits.Load() != 2 {
-		t.Fatalf("retry calls = wrapper:%d master:%d, want wrapper:2 master:2", wrapperCalls, masterHits.Load())
-	}
-	if len(result.Tracks) != 1 || len(result.Tracks[0].Qualities) == 0 || !result.Tracks[0].Qualities[0].Available {
-		t.Fatalf("qualities after retry = %#v", result.Tracks)
-	}
+		result, err := service.QueryQuality(t.Context(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if wrapperCalls := len(calls.with("wrapper m3u8 ")); wrapperCalls != 2 || masterHits.Load() != 2 {
+			t.Fatalf("retry calls = wrapper:%d master:%d, want wrapper:2 master:2", wrapperCalls, masterHits.Load())
+		}
+		if len(result.Tracks) != 1 || len(result.Tracks[0].Qualities) == 0 || !result.Tracks[0].Qualities[0].Available {
+			t.Fatalf("qualities after retry = %#v", result.Tracks)
+		}
+	})
 }
 
 // hiResManifests serves the two masters of a hi-res-lossless track the

@@ -388,7 +388,7 @@ func TestSimulatedTrackMatchesTheRealLifecycle(t *testing.T) {
 		d := newTestDownloader(&Downloader{
 			cfg: cfg, catalog: fakeDownloaderCatalog{song: song},
 			wrapper: fakeDownloaderWrapper{lyrics: simulatedLyricsTTML},
-			http:    server.Client(), tools: NewToolChecker(cfg.Tools),
+			http:    bubbleClient(), tools: NewToolChecker(cfg.Tools),
 		})
 		reporter := &recordingReporter{}
 		if err := d.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"},
@@ -403,7 +403,9 @@ func TestSimulatedTrackMatchesTheRealLifecycle(t *testing.T) {
 	}
 
 	real := run(t, false)
-	simulated := run(t, true)
+	// Simulate's transfer pauses run on the virtual clock.
+	var simulated []lifecycleStep
+	synctest.Test(t, func(t *testing.T) { simulated = run(t, true) })
 	if len(real) != len(simulated) {
 		t.Fatalf("real lifecycle has %d steps, simulated %d\nreal: %+v\nsimulated: %+v", len(real), len(simulated), real, simulated)
 	}
