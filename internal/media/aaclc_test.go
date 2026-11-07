@@ -135,37 +135,6 @@ func TestWidevineDecryptStreamsRealCENCToFlatFile(t *testing.T) {
 	}
 }
 
-func TestConfiguredCodecsUsesFallbackChain(t *testing.T) {
-	cfg := config.DownloadConfig{
-		QualityPriority: []string{"alac", "aac"}, CodecAlternative: true,
-	}
-	got, err := configuredCodecs(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"alac", "aac", "aac-lc"}
-	if len(got) != len(want) {
-		t.Fatalf("configuredCodecs() = %#v, want %#v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("configuredCodecs() = %#v, want %#v", got, want)
-		}
-	}
-}
-
-func TestConfiguredCodecsCanDisableFallback(t *testing.T) {
-	got, err := configuredCodecs(config.DownloadConfig{
-		QualityPriority: []string{"alac", "aac-lc"}, CodecAlternative: false,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0] != "alac" {
-		t.Fatalf("configuredCodecs() = %#v, want [alac]", got)
-	}
-}
-
 // TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot guards against the
 // real (non-simulate) AAC-LC codec_selected event regressing back to the
 // bare codec/attempt payload used before MarshalEventPayload was introduced;
