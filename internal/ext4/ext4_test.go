@@ -15,7 +15,8 @@ import (
 )
 
 // The testdata images were made with mke2fs -d (e2fsprogs 1.47) from one
-// small tree shaped like wrapper-lite's data directory, with a made-up token.
+// small tree shaped like wrapper-lite's data directory, with a made-up token;
+// testdata/mkimages.sh rebuilds them (see testdata/README.md).
 //
 //	std4k      ext4, 4 KiB blocks, the features of upstream's data.img
 //	std1k      the same with 1 KiB blocks
@@ -138,11 +139,15 @@ func TestUnknownIncompatFeature(t *testing.T) {
 // read of a disk the guest is writing might see: errors are fine, a panic or
 // a hang is not.
 func TestTornImage(t *testing.T) {
+	stride := 97
+	if testing.Short() {
+		stride = 997 // a tenth of the sweep; FuzzReadFile explores further
+	}
 	for _, name := range []string{"std4k", "std1k", "bigdir", "ext2"} {
 		img := load(t, name)
 		// The superblock, group descriptors, inode tables and the first
 		// directory and extent blocks all sit in the first 1 MiB.
-		for off := 1024; off < 1<<20; off += 97 {
+		for off := 1024; off < 1<<20; off += stride {
 			was := img[off]
 			for _, v := range []byte{0x00, 0xff, was ^ 0x80} {
 				img[off] = v
