@@ -1,0 +1,24 @@
+# A destructive command asks for --yes, and --dry-run prints the request
+# instead of sending it; the backend's state shows that neither sent it.
+demo-backend
+
+exits 10 amdl jobs delete demo-0001
+! stdout .
+stderr '"code":"confirmation_required"'
+
+exec amdl jobs delete demo-0001 --dry-run
+stdout '"method":"DELETE"'
+stdout '"url":"http://[^"]*/api/v1/downloads/demo-0001\?record=true"'
+
+exec amdl jobs get demo-0001
+stdout '"id":"demo-0001"'
+
+exec amdl jobs delete demo-0001 --yes
+exits 3 amdl jobs get demo-0001
+stderr '"code":"job_not_found"'
+
+# An account named by its region is asked about the same way.
+exits 10 amdl accounts delete us
+stderr '"code":"confirmation_required"'
+exec amdl accounts
+stdout '"region":"us"'

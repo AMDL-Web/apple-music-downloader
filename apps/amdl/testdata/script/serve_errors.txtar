@@ -1,0 +1,50 @@
+# A backend that cannot start makes amdl serve exit 1 with serve_failed and
+# the cause. An error the backend already logged is not printed again.
+
+# A config that does not load.
+exits 1 amdl serve --config bad/config.yaml --no-console
+stderr '"code":"serve_failed"'
+stderr 'load config'
+
+# A webhook whose url is no URL: the error names the hook entry, and it is in
+# the log once rather than printed again on stderr.
+exits 1 amdl serve --config good/config.yaml --hooks badhook.yaml --no-console
+stderr '"code":"serve_failed"'
+stderr 'hooks.entries\[\\"refresh\\"\]'
+stdout -count=1 'level=ERROR.*hooks.entries'
+! stderr 'amdl backend failed'
+
+# An address another process listens on.
+holdport BUSY
+exits 1 amdl serve --config busy/config.yaml --no-console --init server.listen=$BUSY --init simulate.enabled=true
+stderr 'listen on'
+
+# --init seeds a config serve creates, even when the start fails later (here
+# on a hooks file that does not load, before anything else is created).
+exits 1 amdl serve --config new/config.yaml --hooks broken.yaml --no-console --init server.listen=:18080 --init wrapper.address=http://host.docker.internal:12340
+stderr hooks
+grep 'listen: "?:18080"?' new/config.yaml
+grep 'address: "?http://host.docker.internal:12340"?' new/config.yaml
+! exists new/data
+
+-- bad/config.yaml --
+nope: 1
+-- good/config.yaml --
+server:
+  listen: "127.0.0.1:0"
+database:
+  path: "data/db/amdl.db"
+download:
+  downloads_dir: "data/downloads"
+  temp_dir: "data/tmp"
+simulate:
+  enabled: true
+-- badhook.yaml --
+enabled: true
+entries:
+  - name: refresh
+    type: webhook
+    events: [job_finished]
+    url: media-server.local/refresh
+-- broken.yaml --
+entries: [

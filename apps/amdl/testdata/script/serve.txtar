@@ -1,0 +1,28 @@
+# amdl serve creates a missing config from the built-in example with the
+# --init values, listens on server.listen, stops cleanly (exit 0) on an
+# interrupt, and starts again on the files it left: the store it closed
+# opens again.
+[windows] skip 'stops the server with an interrupt'
+freeport ADDR
+exec amdl serve --config cfg/config.yaml --hooks cfg/hooks.yaml --no-console --init server.listen=$ADDR --init simulate.enabled=true &srv&
+waithealthy http://$ADDR
+exec amdl --server http://$ADDR system get
+stdout '"simulate":true'
+exec amdl --server http://$ADDR jobs list
+stdout '"downloads":\[\]'
+kill -INT srv
+wait srv
+stdout 'created config from example'
+stdout 'amdl backend listening'
+stdout 'shutdown complete'
+grep 'listen: "?'$ADDR'"?' cfg/config.yaml
+
+# The second start reads the config the first wrote; no --init needed.
+exec amdl serve --config cfg/config.yaml --hooks cfg/hooks.yaml --no-console &again&
+waithealthy http://$ADDR
+exec amdl --server http://$ADDR jobs list
+stdout '"downloads":\[\]'
+kill -INT again
+wait again
+! stdout 'created config'
+stdout 'shutdown complete'

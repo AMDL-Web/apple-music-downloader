@@ -1,0 +1,26 @@
+# amdl --help lists the commands.
+exec amdl --help
+stdout 'amdl jobs list'
+stdout 'amdl wrapper login'
+
+# A group's name lists the group's commands as JSON, with --help or without,
+# and no other group's.
+exec amdl jobs
+stdout '"group":"jobs"'
+stdout '"command":"amdl jobs list"'
+stdout '"command":"amdl jobs get <job_id>"'
+stdout '"command":"amdl jobs retry <job_id>"'
+! stdout 'amdl library list'
+! stderr .
+cp stdout jobs.json
+exec amdl jobs --help
+cmp stdout jobs.json
+
+# A nested group lists only its own commands.
+exec amdl library sync
+stdout 'amdl library sync reset'
+! stdout 'amdl library list'
+
+# A command's --help succeeds without a server.
+exec amdl jobs list --help
+stdout '\-\-status'

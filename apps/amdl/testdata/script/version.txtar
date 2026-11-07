@@ -1,0 +1,17 @@
+# amdl version prints the client's build, and the server's when one answers;
+# with none answering it still succeeds and says why the server part is
+# missing.
+exec amdl version
+stdout '^\{"client":\{"build_date":"[^"]*","commit":"[^"]*","version":"[^"]+"\},"server":\{"error":".*connection refused.*"\}\}$'
+! stderr .
+cp stdout version.json
+
+# --version, -v and -V are the same command, also after a global flag.
+exec amdl --version
+cmp stdout version.json
+exec amdl -v
+cmp stdout version.json
+exec amdl -V
+cmp stdout version.json
+exec amdl --quiet --version
+cmp stdout version.json
