@@ -82,8 +82,12 @@ func waitJob(t *testing.T, m *Manager, jobID, what string, cond func() bool) {
 // wakes.
 func waitQueueDrained(t *testing.T, store *db.Store, feed <-chan struct{}) {
 	t.Helper()
-	guard := time.NewTimer(time.Minute)
+	// It fails on a stall (no job finished for stall), not on total time:
+	// the race detector on a slow runner takes minutes for a big backlog.
+	const stall = 20 * time.Second
+	guard := time.NewTimer(stall)
 	defer guard.Stop()
+	last := -1
 	for {
 		left, err := store.ListRecoverableJobs(context.Background())
 		if err != nil {
@@ -92,10 +96,23 @@ func waitQueueDrained(t *testing.T, store *db.Store, feed <-chan struct{}) {
 		if len(left) == 0 {
 			return
 		}
+		if len(left) != last {
+			last = len(left)
+			guard.Reset(stall)
+		}
 		select {
 		case <-feed:
+			// One read for every event already queued: a read per event
+			// competes with the workers for the database.
+			for drained := false; !drained; {
+				select {
+				case <-feed:
+				default:
+					drained = true
+				}
+			}
 		case <-guard.C:
-			t.Fatalf("%d jobs never finished", len(left))
+			t.Fatalf("%d jobs never finished (none for %v)", len(left), stall)
 		}
 	}
 }

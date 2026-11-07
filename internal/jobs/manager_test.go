@@ -294,8 +294,8 @@ func TestRecoverUnfinishedHandlesMoreThanQueueCapacityWithoutLoss(t *testing.T) 
 		}
 	}
 	close(processor.release)
-	// The race detector on a slow runner took 12.6 s for the 300 jobs; the
-	// wait's guard is a minute.
+	// The race detector on a slow runner takes a minute or more for the 300
+	// jobs; the wait fails only when no job finishes for a while.
 	waitQueueDrained(t, store, feed)
 	shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
