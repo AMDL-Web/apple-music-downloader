@@ -3,10 +3,8 @@ package ui
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -17,6 +15,7 @@ import (
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/setup"
 	"amdl/apps/desktop/internal/store"
+	"amdl/apps/desktop/internal/testkit"
 	"amdl/internal/client"
 	"amdl/internal/domain"
 )
@@ -155,11 +154,7 @@ func restOn(tt *ui.Tester, text string) frameSnap {
 
 // fakeAmdl is a backend whose every answer is ready at once.
 func fakeAmdl(w http.ResponseWriter, r *http.Request) {
-	reply := func(code int, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(code)
-		_ = json.NewEncoder(w).Encode(v)
-	}
+	reply := func(code int, v any) { testkit.Reply(w, code, v) }
 	switch r.Method + " " + r.URL.Path {
 	case "POST /api/v1/wrapper/login":
 		reply(http.StatusUnauthorized, map[string]any{"error": map[string]string{"code": "authentication_failed", "message": "wrong"}})
@@ -173,38 +168,6 @@ func fakeAmdl(w http.ResponseWriter, r *http.Request) {
 			{ID: "1", Type: "song", Name: "Elma", URL: "https://music.apple.com/us/song/elma/1", ArtistName: "Yorushika"}}}})
 	default:
 		http.NotFound(w, r)
-	}
-}
-
-// liveApp is an App whose store follows a fake backend. The answers queue up
-// until run applies them, in order, on the test's goroutine, as the UI
-// thread would, until the condition holds.
-func liveApp(t *testing.T, s mode.Settings) (*App, func(until func() bool)) {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(fakeAmdl))
-	t.Cleanup(srv.Close)
-	a, _ := newTestApp(s)
-	// A flash of the light counts as one of anything else.
-	a.FlatBackdrop = false
-	queue := make(chan func(), 256)
-	a.Store = store.New(func(fn func()) { queue <- fn }, nil)
-	c, err := client.New(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.Store.Connect(c)
-	t.Cleanup(a.Store.Close)
-	return a, func(until func() bool) {
-		t.Helper()
-		deadline := time.After(10 * time.Second)
-		for !until() {
-			select {
-			case fn := <-queue:
-				fn()
-			case <-deadline:
-				t.Fatal("the fake backend's answer never arrived")
-			}
-		}
 	}
 }
 

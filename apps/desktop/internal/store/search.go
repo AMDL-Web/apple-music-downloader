@@ -168,7 +168,7 @@ func (s *Store) WantSearch(term string) {
 	// The list keeps its height while typing pauses.
 	q.Term, q.Status, q.Stale, q.Err, q.More, q.Sent = term, SearchLoading, q.Result != nil, "", nil, time.Time{}
 	gen, ctx := q.gen, s.ctx
-	time.AfterFunc(searchDelay, func() {
+	s.after(searchDelay, func() {
 		s.postIf(ctx, func() {
 			if s.Search.gen == gen {
 				s.startSearch(term)

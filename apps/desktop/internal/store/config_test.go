@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
-	"amdl/internal/client"
+	"amdl/apps/desktop/internal/testkit"
 )
 
 // fakeBackend answers the configuration and login routes as the API
@@ -27,10 +26,9 @@ type fakeBackend struct {
 	down      int
 	restarted bool
 	// stall holds POST /wrapper/login until it is closed or the client
-	// goes away, which gone counts.
-	stall   chan struct{}
-	stalled int
-	gone    int
+	// goes away; stalled and gone get a value as each happens.
+	stall         chan struct{}
+	stalled, gone chan struct{}
 }
 
 // body is the i-th request body the backend read.
@@ -51,28 +49,18 @@ func (f *fakeBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// A server sees the client go away only once the body is read, as
 		// the backend's handler reads it before it calls the wrapper.
 		_, _ = io.Copy(io.Discard, r.Body)
-		f.mu.Lock()
-		f.stalled++
-		f.mu.Unlock()
+		f.stalled <- struct{}{}
 		select {
 		case <-stall:
 		case <-r.Context().Done():
-			f.mu.Lock()
-			f.gone++
-			f.mu.Unlock()
+			f.gone <- struct{}{}
 			return
 		}
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	reply := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v) // the test reads what arrives
-	}
-	fail := func(status int, code, msg string) {
-		reply(status, map[string]any{"error": map[string]string{"code": code, "message": msg}})
-	}
+	reply := func(status int, v any) { testkit.Reply(w, status, v) }
+	fail := func(status int, code, msg string) { testkit.Fail(w, status, code, msg) }
 	body, _ := io.ReadAll(r.Body)
 	switch r.Method + " " + r.URL.Path {
 	case "GET /api/v1/config":
@@ -119,34 +107,6 @@ func (f *fakeBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// live connects a store to the fake backend. Its posts queue up and run on
-// the test's goroutine in settle, as the UI thread runs them.
-func live(t *testing.T, f http.Handler) (*Store, func(until func() bool)) {
-	t.Helper()
-	srv := httptest.NewServer(f)
-	t.Cleanup(srv.Close)
-	queue := make(chan func(), 256)
-	s := New(func(fn func()) { queue <- fn }, nil)
-	c, err := client.New(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Connect(c)
-	t.Cleanup(s.Close)
-	return s, func(until func() bool) {
-		t.Helper()
-		deadline := time.After(10 * time.Second)
-		for !until() {
-			select {
-			case fn := <-queue:
-				fn()
-			case <-deadline:
-				t.Fatal("the backend's answer never arrived")
-			}
-		}
-	}
-}
-
 func TestSetConfigSendsOneKeyAndKeepsTheOldValueWhenRefused(t *testing.T) {
 	f := &fakeBackend{config: map[string]map[string]any{
 		"download": {"cover_size": "5000x5000", "max_attempts": 3, "embed_cover": true},
@@ -185,36 +145,27 @@ func TestSetConfigSendsOneKeyAndKeepsTheOldValueWhenRefused(t *testing.T) {
 }
 
 func TestCancelEndsTheLoginOnTheBackend(t *testing.T) {
-	f := &fakeBackend{config: map[string]map[string]any{}, stall: make(chan struct{})}
+	f := &fakeBackend{config: map[string]map[string]any{}, stall: make(chan struct{}),
+		stalled: make(chan struct{}, 1), gone: make(chan struct{}, 1)}
 	s, settle := live(t, f)
 	s.StartLogin("someone@example.invalid", "not-a-real-password")
 	if !s.Login.Busy {
 		t.Fatal("the login is not under way")
 	}
-	count := func(n *int) int { f.mu.Lock(); defer f.mu.Unlock(); return *n }
-	for deadline := time.Now().Add(5 * time.Second); count(&f.stalled) == 0; {
-		if time.Now().After(deadline) {
-			t.Fatal("the login never reached the backend")
+	wait := func(c chan struct{}, what string) {
+		t.Helper()
+		select {
+		case <-c:
+		case <-time.After(testkit.Stall):
+			t.Fatal(what)
 		}
-		time.Sleep(5 * time.Millisecond)
 	}
+	wait(f.stalled, "the login never reached the backend")
 	s.CancelLogin()
 	if s.Login.Busy || s.Login.LoginID != "" || s.Login.Err != "" {
 		t.Fatalf("after Cancel %+v; want the form back", s.Login)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		f.mu.Lock()
-		gone := f.gone
-		f.mu.Unlock()
-		if gone == 1 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the backend never saw the canceled request go away")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	wait(f.gone, "the backend never saw the canceled request go away")
 	// A retry right away is a login of its own: the canceled answer, posted
 	// late, does not end it.
 	f.mu.Lock()

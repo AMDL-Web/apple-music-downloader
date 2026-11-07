@@ -3,7 +3,6 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/store"
+	"amdl/apps/desktop/internal/testkit"
 	"amdl/internal/client"
 )
 
@@ -184,29 +184,7 @@ func (f *fakeAccounts) sent() []string {
 
 func TestAccountSwitchesSendTheChangeAndTakeItBackWhenRefused(t *testing.T) {
 	fake := &fakeAccounts{list: threeAccounts(), refuse: "apple_library"}
-	srv := httptest.NewServer(fake)
-	t.Cleanup(srv.Close)
-	a, _ := newTestApp(remoteSettings())
-	queue := make(chan func(), 256)
-	a.Store = store.New(func(fn func()) { queue <- fn }, nil)
-	c, err := client.New(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.Store.Connect(c)
-	t.Cleanup(a.Store.Close)
-	run := func(until func() bool) {
-		t.Helper()
-		deadline := time.After(10 * time.Second)
-		for !until() {
-			select {
-			case fn := <-queue:
-				fn()
-			case <-deadline:
-				t.Fatal("the fake backend's answer never arrived")
-			}
-		}
-	}
+	a, run := threadApp(t, remoteSettings(), testkit.Serve(t, fake), nil)
 	a.GoSettings("account")
 	sv := &a.Store.Server
 	sv.Read = time.Now()

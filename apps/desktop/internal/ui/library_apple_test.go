@@ -1,10 +1,7 @@
 package ui
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,76 +10,40 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/artwork"
 	"amdl/apps/desktop/internal/store"
+	"amdl/apps/desktop/internal/testkit"
 	"amdl/internal/client"
-	"amdl/internal/demo"
 	"amdl/internal/domain"
 )
 
-// bulkApple is the demo's backend with an Apple library of albums albums,
-// "Album 0000" on, served a page at a time as the API does.
-type bulkApple struct {
-	rt     http.RoundTripper
-	albums []domain.AppleLibraryItem
+// appleAlbums answers GET /apple-library/albums from albums a page at a
+// time, as the API does.
+func appleAlbums(albums []domain.AppleLibraryItem) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		off, _ := strconv.Atoi(q.Get("offset"))
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		// The API's most per page.
+		limit = min(max(limit, 1), 200)
+		off = min(off, len(albums))
+		testkit.Reply(w, http.StatusOK, client.AppleLibraryPage{Kind: "albums", Items: albums[off:min(off+limit, len(albums))], Total: len(albums), Offset: off})
+	}
 }
 
-func (b *bulkApple) RoundTrip(r *http.Request) (*http.Response, error) {
-	if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apple-library/albums" {
-		return b.rt.RoundTrip(r)
-	}
-	q := r.URL.Query()
-	off, _ := strconv.Atoi(q.Get("offset"))
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	// The API's most per page.
-	limit = min(max(limit, 1), 200)
-	off = min(off, len(b.albums))
-	page := client.AppleLibraryPage{Kind: "albums", Items: b.albums[off:min(off+limit, len(b.albums))], Total: len(b.albums), Offset: off}
-	body, err := json.Marshal(page)
-	if err != nil {
-		return nil, err
-	}
-	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}},
-		Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
-}
-
-// bulkApp is demoApp with an Apple library of n albums, shown in a w×800
-// window on the Apple tab.
+// bulkApp is demoApp with an Apple library of n albums, "Album 0000" on,
+// shown in a w×800 window on the Apple tab.
 func bulkApp(t *testing.T, n, w int) (*App, *ui.Tester, func(until func() bool)) {
 	t.Helper()
-	a, _ := newTestApp(remoteSettings())
-	b := &bulkApple{rt: demo.New(time.Now).Transport()}
+	var albums []domain.AppleLibraryItem
 	for i := range n {
 		id := strconv.Itoa(9100000 + i)
-		b.albums = append(b.albums, domain.AppleLibraryItem{ID: "l." + id, CatalogID: id, URL: "https://music.apple.com/us/album/x/" + id,
+		albums = append(albums, domain.AppleLibraryItem{ID: "l." + id, CatalogID: id, URL: "https://music.apple.com/us/album/x/" + id,
 			Name: fmt.Sprintf("Album %04d", i), ArtistName: fmt.Sprintf("Artist %d", i%37)})
 		if i%7 == 1 {
-			b.albums[i].Name += " (Deluxe Edition) [Remastered] and Other Songs From the Long Night"
+			albums[i].Name += " (Deluxe Edition) [Remastered] and Other Songs From the Long Night"
 		}
 	}
-	c, err := client.NewWith(demo.Address, b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	queue := make(chan func(), 1024)
-	post := func(fn func()) { queue <- fn }
-	a.Store = store.New(post, nil)
-	a.Art = artwork.NewWith(post, b)
-	a.Store.Connect(c)
-	t.Cleanup(a.Store.Close)
-	run := func(until func() bool) {
-		t.Helper()
-		deadline := time.After(30 * time.Second)
-		for !until() {
-			select {
-			case fn := <-queue:
-				fn()
-			case <-time.After(50 * time.Millisecond):
-			case <-deadline:
-				t.Fatal("timed out")
-			}
-		}
-	}
+	a, run := demoOver(t, map[string]http.HandlerFunc{"GET /api/v1/apple-library/albums": appleAlbums(albums)})
 	s := a.Store
 	run(func() bool { return s.Loaded })
 	a.Go(ScreenLibrary)

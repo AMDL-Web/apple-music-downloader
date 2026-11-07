@@ -26,6 +26,8 @@ type Store struct {
 	post     func(func())
 	notifier Notifier
 	now      func() time.Time
+	// after runs a function once a pause is over (SetAfter).
+	after func(time.Duration, func())
 
 	client *client.Client
 	ctx    context.Context
@@ -109,7 +111,7 @@ type Notice struct {
 // New returns an empty store. post runs a function on the UI thread and
 // redraws; notifier may be nil.
 func New(post func(func()), notifier Notifier) *Store {
-	s := &Store{post: post, notifier: notifier, now: time.Now}
+	s := &Store{post: post, notifier: notifier, now: time.Now, after: afterFunc}
 	s.reset()
 	return s
 }
@@ -132,6 +134,14 @@ func (s *Store) reset() {
 // of a screen sets to its tester's, so that "how long has it waited" means
 // the same to both.
 func (s *Store) SetClock(now func() time.Time) { s.now = now }
+
+// SetAfter replaces how the store waits out a pause before it acts: for
+// typing to pause before a search starts (searchDelay), and for the backend
+// to find the wrapper's accounts again (AccountsSettle). after runs f once
+// d is over, on any goroutine; a test runs it at once or on its own clock.
+func (s *Store) SetAfter(after func(d time.Duration, f func())) { s.after = after }
+
+func afterFunc(d time.Duration, f func()) { time.AfterFunc(d, f) }
 
 // SetNotifier sets who hears about finished jobs.
 func (s *Store) SetNotifier(n Notifier) { s.notifier = n }

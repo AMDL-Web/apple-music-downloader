@@ -136,7 +136,7 @@ func (s *Store) refreshAccounts() {
 		return
 	}
 	ctx := s.ctx
-	time.AfterFunc(AccountsSettle, func() { s.postIf(ctx, s.refreshServer) })
+	s.after(AccountsSettle, func() { s.postIf(ctx, s.refreshServer) })
 }
 
 // AccountChanging reports whether a change to an account waits for its
