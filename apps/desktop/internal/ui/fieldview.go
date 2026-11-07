@@ -476,21 +476,6 @@ func (a *App) setField(c *ui.Context, k *Tokens, f *configField, items []string,
 	})
 }
 
-// iconButton is a small square button with an icon and a name for
-// assistive technology.
-func iconButton(c *ui.Context, k *Tokens, key string, ic *ui.SVG, name string, disabled bool) ui.Element {
-	b := ui.ButtonBase(c.Key(key)).Size(26, 26).Radius(radiusInner).Center().Label(name).Tooltip(name).Disabled(disabled)
-	col := k.Muted
-	if disabled {
-		col = k.Track
-	} else if b.Hovered() {
-		b.Background(k.Raise2)
-		col = k.Fg
-	}
-	b.Cursor(ui.CursorPointer).Children(func() { ui.Icon(c, ic).FontSize(13).TextColor(col) })
-	return b
-}
-
 // confirmDialog asks before a change that cannot be taken back, or that
 // makes libraries download again, applies.
 func (a *App) confirmDialog(c *ui.Context, k *Tokens) {

@@ -306,11 +306,12 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 
 | 命令 | 作用 |
 | --- | --- |
-| `make check` | CI 门禁：gofmt 检查、构建、vet、测试、竞态检测、`govulncheck`、Node 脚本测试 |
-| `make test`、`make race` | 测试套件，不带或带竞态检测 |
-| `make cover` | 带覆盖率文件（`coverage.out`）的测试套件，并打印汇总；CI 把汇总显示在运行页上 |
-| `make cover-ui`、`make cover-rest` | 与 CI 一致拆开的 `make cover`：桌面端 ui 包（`SHARD=k/n` 只跑它的第 k/n 片测试），以及其余所有包 |
-| `make race-ui`、`make race-app`、`make race-rest` | 与 CI 一致拆开的竞态检测：桌面端 ui 包（`SHARD=k/n` 只跑一片测试）、桌面端 app 包，以及其余所有包 |
+| `make verify` | 提交前的快速检查：gofmt 检查、vet、staticcheck、Go 测试、Node 脚本测试 |
+| `make check` | CI 门禁：gofmt 检查、构建、vet、staticcheck、测试、竞态检测、`govulncheck`、Node 脚本测试 |
+| `make test`、`make race` | 全部 Go 测试（单元、集成、`amdl` 端到端脚本），不带或带竞态检测 |
+| `make test-short` | 跳过较慢集成测试的 Go 测试 |
+| `make cover` | 跨包统计覆盖率的 Go 测试（输出在 `build/cover/`），并打印汇总；CI 把汇总显示在运行页上 |
+| `make console-e2e` | 网页控制台的浏览器测试（Playwright，见 [apps/console/e2e](apps/console/e2e/README.md)） |
 | `make dev` | 以模拟模式在 `127.0.0.1:18080` 启动 API，配置和数据库是 `data/dev/` 下的临时文件 |
 | `make docker` | 在本地构建容器镜像 |
 | `node apps/site/build.mjs --serve 8080` | 构建官网，并在 `127.0.0.1:8080` 上预览 |

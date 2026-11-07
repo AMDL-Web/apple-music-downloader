@@ -3,10 +3,10 @@ name: CI
 # Build, test and scan every push to main and dev (work lands on dev directly)
 # and every pull request. Setup steps install the toolchain README.md lists
 # (Go, Node.js, ffmpeg); each check step then calls one Makefile target, so
-# `make check` locally runs what this workflow runs. Here `make cover-ui` and
-# `make cover-rest` stand for `make test`, run as parallel jobs (the ui one in
-# slices), and the race detector runs as `make race-ui` (in slices),
-# `make race-app` and `make race-rest`, which together are `make race`.
+# `make check` locally runs what this workflow runs. Here `make cover` stands
+# for `make test` (the same tests, with a coverage summary), and it and
+# `make race` run as parallel jobs. The console's browser tests
+# (`make console-e2e`) run as their own job in the Playwright image.
 #
 # A change to only documentation, the website or the console skips the
 # Go jobs and runs the light one (changes job); Build and test still requires
@@ -67,9 +67,9 @@ jobs:
           [ -n "$files" ] || echo "the changed paths are unknown; every optional job runs"
           printf '%s\n' "$files" | node .github/scripts/changed-paths.mjs
 
-  # Formatting, the build, vet, the browser build of the terminal interface,
-  # the vulnerability scan and the script tests: everything in `make check` but
-  # the tests, which run in the test and race jobs.
+  # Formatting, the build, vet, staticcheck, the browser build of the terminal
+  # interface, the vulnerability scan and the script tests: everything in
+  # `make check` but the tests, which run in the test and race jobs.
   unit:
     name: Build and checks
     needs: changes
@@ -99,6 +99,9 @@ jobs:
       - name: Vet
         run: make vet
 
+      - name: Staticcheck
+        run: make lint
+
       # apps/amdl/web compiles only with the js files apps/amdl/web/build adds
       # to bubbletea and atotto/clipboard; red after a bump of either means a
       # shim no longer fits the new release.
@@ -111,27 +114,23 @@ jobs:
       - name: Script tests
         run: make node-test
 
-  # The same packages as `make test`, plus a statement-coverage summary on each
-  # run page (display only: no threshold, and it never fails a run), in parallel
-  # jobs. The desktop ui package alone takes about as long as every other
-  # package together, so its tests are cut into three slices by name
-  # (.github/scripts/shard.mjs): every test is in exactly one. The rest is every
-  # other package, cut from one `go list ./...` in the Makefile.
+  # Every Go test (`make test`: unit, integration and the amdl end-to-end
+  # scripts) with a coverage summary on the run page (display only: no
+  # threshold, and it never fails a run), and the same tests under the race
+  # detector, as two parallel jobs.
   test:
-    name: Tests (${{ matrix.name }})
+    name: ${{ matrix.name }}
     needs: changes
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
-      # Keep the other jobs running so one run shows every failure.
+      # Keep the other job running so one run shows every failure.
       fail-fast: false
       matrix:
         include:
-          - { name: rest, target: cover-rest, shard: '' }
-          - { name: desktop ui 1/3, target: cover-ui, shard: 1/3 }
-          - { name: desktop ui 2/3, target: cover-ui, shard: 2/3 }
-          - { name: desktop ui 3/3, target: cover-ui, shard: 3/3 }
+          - { name: Tests, target: cover }
+          - { name: Race detector, target: race }
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -146,7 +145,8 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/go
         with:
-          scope: test-${{ matrix.target }}
+          name: ${{ matrix.target }}
+          scope: ${{ matrix.target }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -161,61 +161,62 @@ jobs:
           phase: wait
 
       - name: Test
-        env:
-          SHARD: ${{ matrix.shard }}
         run: make ${{ matrix.target }}
 
-  # The race detector is the slowest check, so it runs apart from the build job,
-  # in parallel shards: the desktop ui package in two slices of its tests, the
-  # app package (TestRenderSetupShots alone takes minutes under the detector)
-  # and every other package. The Makefile cuts them from one `go list ./...`,
-  # so every package is in exactly one, and a package added later cannot fall
-  # through.
-  race:
-    name: Race detector (${{ matrix.name }})
+  # The console's browser tests (apps/console/e2e): Playwright against the real
+  # embedded console and the in-memory demo backend, with axe accessibility
+  # checks and screenshot comparisons. It runs in the Playwright image, which
+  # has Chromium and is where the screenshot baselines are made. It runs for a
+  # change to the console, the API spec or the demo backend (changes job), and
+  # for every push to dev.
+  console-e2e:
+    name: Console browser tests
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    if: needs.changes.outputs.console == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      # Keep the other shards running so one run shows every failing shard.
-      fail-fast: false
-      matrix:
-        include:
-          - { name: desktop ui 1/2, target: race-ui, shard: 1/2 }
-          - { name: desktop ui 2/2, target: race-ui, shard: 2/2 }
-          - { name: desktop app, target: race-app, shard: '' }
-          - { name: rest, target: race-rest, shard: '' }
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
+      options: --ipc=host
+    timeout-minutes: 15
+    env:
+      CONSOLE_E2E_SCREENSHOTS: '1'
+      HOME: /root
+    defaults:
+      run:
+        working-directory: apps/console/e2e
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - name: Install ffmpeg
-        uses: ./.github/actions/ffmpeg
-        with:
-          phase: start
-
       - name: Set up Go
         uses: ./.github/actions/go
-        with:
-          name: race
-          scope: race-${{ matrix.target }}
 
-      # The media tests skip without ffmpeg, as in the test jobs.
-      - name: Wait for ffmpeg
-        uses: ./.github/actions/ffmpeg
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
-          phase: wait
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: apps/console/e2e/package-lock.json
 
-      - name: Race detector
-        env:
-          SHARD: ${{ matrix.shard }}
-        run: make ${{ matrix.target }}
+      - name: Install the test dependencies
+        run: npm ci
+
+      - name: Browser tests
+        run: npm test
+
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: console-e2e-report-${{ github.sha }}
+          path: apps/console/e2e/out/
+          retention-days: 14
 
   # For a change to only documentation, the website or the console: the
-  # checks that can see it. The repository checks (links and paths), the console's Go tests, the Go tests that read a console or docs
+  # checks that can see it. The repository checks (links and paths), the
+  # console's Go tests, the Go tests that read a console or docs
   # file (tools/repocheck TestLightPathsReadByGoTestsAreCovered keeps that list
   # complete), the Node tests of the scripts, console and website, and a
   # build that compiles what the console embeds.
@@ -283,7 +284,7 @@ jobs:
   # until the defect is fixed.
   build-and-test:
     name: Build and test
-    needs: [changes, unit, test, race, light, temaridiff, dist, upgrade, docker, guestboot]
+    needs: [changes, unit, test, light, console-e2e, temaridiff, dist, upgrade, docker, guestboot]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -292,9 +293,9 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           GO: ${{ needs.changes.outputs.go }}
-          GATED: unit test race temaridiff dist upgrade docker
+          GATED: unit test temaridiff dist upgrade docker
           LIGHT: light
-          OPTIONAL: guestboot
+          OPTIONAL: guestboot console-e2e
           ADVISORY: ''
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'

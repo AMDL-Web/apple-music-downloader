@@ -5,10 +5,11 @@
 .DEFAULT_GOAL := help
 
 GO ?= go
-# ci.yml runs `make vuln`, so this is the only govulncheck version pin.
+# ci.yml runs `make vuln` and `make lint`, so these are the only version pins.
 GOVULNCHECK_VERSION ?= v1.9.0
+STATICCHECK_VERSION ?= v0.8.2
 # Package directories, which leaves out dot-directories such as nested
-# worktrees under .claude/worktrees/ that `gofmt -l .` would descend into.
+# worktrees that `gofmt -l .` would descend into.
 GO_DIRS = $(shell $(GO) list -e -f '{{.Dir}}' ./... | sed 's|^$(CURDIR)/||')
 NODE_TESTS = $(wildcard .github/scripts/*.test.mjs apps/console/jstest/*.test.mjs apps/site/*.test.mjs deploy/install/*.test.mjs deploy/packaging/*.test.mjs)
 
@@ -24,10 +25,10 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet tui-web test cover cover-ui cover-rest race race-ui race-app race-rest vuln node-test check temaridiff guestboot upgradecheck docker dist dist-check desktop desktop-web site
+.PHONY: help build run dev fmt fmt-check vet tui-web test test-short cover race lint vuln node-test verify check console-e2e temaridiff guestboot upgradecheck docker dist dist-check desktop desktop-web site
 
 help: ## List the targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-13s %s\n", $$1, $$2 }'
 
 build: ## Compile every package, then bin/amdl with the version stamped from git
 	$(GO) build ./...
@@ -66,84 +67,58 @@ vet: ## go vet every package, and the desktop app's browser build and guest boot
 tui-web: ## Build the terminal interface's browser demo into apps/amdl/build/web/
 	$(GO) run ./apps/amdl/web/build -out apps/amdl/build/web -ldflags "-s -w $(LDFLAGS)"
 
-test: ## Run the test suite
+# The test layers (CONTRIBUTING.md#tests): unit and integration tests are
+# plain `go test`; internal/media/integration and the API consistency rig skip
+# under -short; the end-to-end scripts in apps/amdl/testdata/script drive the
+# real amdl binary through testscript and run with the rest.
+test: ## Run every Go test: unit, integration and the amdl end-to-end scripts
 	$(GO) test ./...
 
-COVER_PROFILE ?= coverage.out
+test-short: ## Run the Go tests without the slow integration ones (-short)
+	$(GO) test -short ./...
 
-# The slow packages, which CI runs apart so its jobs go in parallel: the
-# desktop ui package takes most of the test time (its tests are cut into slices
-# with SHARD=k/n), and ui and app take most of the race time (app is one test,
-# TestRenderSetupShots, that alone runs for minutes under the detector). The shards
-# and the remainder are cut from one `go list ./...` with these patterns, so
-# every package is in exactly one of them and a package added later cannot fall
-# through; a selection that comes out empty fails, because an empty list would
-# make `go test` run the current directory.
-UI_RE = ^amdl/apps/desktop/internal/ui(/|$$)
-APP_RE = ^amdl/apps/desktop/internal/app(/|$$)
+# `make cover` counts every package's statements across every test package,
+# so tests in internal/media/integration count for internal/media and the
+# end-to-end scripts (whose amdl subprocesses write to the same coverage
+# directory) count for the packages they reach. The summary is display only,
+# with no threshold; one that cannot be built warns and never fails the run.
+COVER_DIR = build/cover
+COVER_PROFILE = $(COVER_DIR)/coverage.out
 
-# $(call run-tests,<go test flags>,<grep flags and pattern>) tests the packages
-# `go list ./...` shows that grep selects. With SHARD=k/n it runs only the k-th
-# of n slices of the one package's tests (every n-th name of `go test -list`,
-# .github/scripts/shard.mjs), so the slices together hold every test once.
-define run-tests
-@list="$$($(GO) list ./...)" || exit 1; \
-pkgs="$$(printf '%s\n' "$$list" | grep $(2))"; \
-test -n "$$pkgs" || { echo "no package matches $(2)" >&2; exit 1; }; \
-echo "$$(printf '%s\n' "$$pkgs" | wc -l | tr -d ' ') package(s)$(if $(SHARD), shard $(SHARD))"; \
-if [ -z "$(SHARD)" ]; then $(GO) test $(1) $$pkgs; else \
-	test "$$(printf '%s\n' "$$pkgs" | wc -l)" -eq 1 || { echo "SHARD needs exactly one package" >&2; exit 1; }; \
-	re="$$($(GO) test -list . $$pkgs | node .github/scripts/shard.mjs $(SHARD))" || exit 1; \
-	$(GO) test $(1) -run "$$re" $$pkgs; fi
-endef
+cover: ## Run the Go tests with coverage across packages and print a summary
+	@rm -rf build/cover && mkdir -p build/cover/data
+	$(GO) test -cover -covermode=set -coverpkg=./... ./... -args -test.gocoverdir=$(CURDIR)/$(COVER_DIR)/data
+	$(GO) tool covdata textfmt -i=$(COVER_DIR)/data -o=$(COVER_PROFILE)
+	@summary="$$(sh .github/scripts/cover-summary.sh $(COVER_PROFILE))" \
+		&& echo "$$summary" \
+		&& { [ -z "$$GITHUB_STEP_SUMMARY" ] || echo "$$summary" >> "$$GITHUB_STEP_SUMMARY"; } \
+		|| echo "cover: no coverage summary" >&2
 
-# The statement-coverage summary of $(COVER_PROFILE): display only, with no
-# threshold. One that cannot be built warns and never fails the run.
-define cover-summary
-@summary="$$(sh .github/scripts/cover-summary.sh $(COVER_PROFILE))" \
-	&& echo "$$summary" \
-	&& { [ -z "$$GITHUB_STEP_SUMMARY" ] || echo "$$summary" >> "$$GITHUB_STEP_SUMMARY"; } \
-	|| echo "cover: no coverage summary" >&2
-endef
-
-# CI's test steps. The same packages as `make test`, with a statement-coverage
-# profile on top, in two kinds of job: cover-ui SHARD=k/n runs a slice of the
-# desktop ui package's tests, and cover-rest every other package.
-cover: ## Run the test suite with a coverage profile and print a summary
-	$(GO) test -covermode=set -coverprofile=$(COVER_PROFILE) ./...
-	$(cover-summary)
-
-cover-ui: ## Coverage run of the desktop ui package (SHARD=k/n for one slice of its tests), a CI test job
-	$(call run-tests,-covermode=set -coverprofile=$(COVER_PROFILE),-E '$(UI_RE)')
-	$(cover-summary)
-
-cover-rest: ## Coverage run of every package but the desktop ui, a CI test job
-	$(call run-tests,-covermode=set -coverprofile=$(COVER_PROFILE),-Ev '$(UI_RE)')
-	$(cover-summary)
-
-race: ## Run the test suite under the race detector
+race: ## Run the Go tests under the race detector
 	$(GO) test -race ./...
 
-# CI runs the race detector as parallel jobs: the desktop ui package in slices
-# (SHARD=k/n), the app package, and the rest.
-race-ui: ## Race detector on the desktop ui package (SHARD=k/n for one slice of its tests), a CI shard
-	$(call run-tests,-race,-E '$(UI_RE)')
-
-race-app: ## Race detector on the desktop app package, a CI shard
-	$(call run-tests,-race,-E '$(APP_RE)')
-
-race-rest: ## Race detector on every package but the desktop ui and app, a CI shard
-	$(call run-tests,-race,-Ev '$(UI_RE)|$(APP_RE)')
+lint: ## Run staticcheck (checks in staticcheck.conf)
+	$(GO) run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
 
 vuln: ## Scan dependencies with govulncheck
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-node-test: ## Run the Node tests for release tooling, the guard hook, console JS and the website build
+node-test: ## Run the Node tests for release tooling, console JS, install scripts and the website build
 	@command -v node >/dev/null 2>&1 || { echo "node-test: node is not installed; install Node.js 26 or newer (CI uses 26)" >&2; exit 1; }
 	@if [ -z "$(strip $(NODE_TESTS))" ]; then echo "node-test: no *.test.mjs files found"; exit 1; fi
 	node --test $(NODE_TESTS)
 
-check: fmt-check build vet tui-web test race vuln node-test ## The CI gate: everything above, in CI's order (CI splits test and race into parallel jobs)
+# The quick local gate: what to run before a commit.
+verify: fmt-check vet lint test node-test ## Format, vet, staticcheck, the Go tests and the Node tests
+
+check: fmt-check build vet lint tui-web test race vuln node-test ## The CI gate: everything above, in CI's order (CI runs test and race as parallel jobs)
+
+# The console's browser tests (apps/console/e2e/README.md): Playwright against
+# the real embedded console and the in-memory demo backend. Needs Node.js and
+# Chromium (npx playwright install chromium); CI runs them as their own job in
+# the Playwright image, where the screenshot baselines are made.
+console-e2e: ## Run the console's browser tests (Playwright)
+	cd apps/console/e2e && npm ci && GO=$(GO) npm test
 
 temaridiff: ## Compare internal/fairplay with upstream Temari (own CI job; downloads Temari's cdylib)
 	cd tools/temaridiff && $(GO) test -count=1 ./...
@@ -210,14 +185,12 @@ desktop-web: ## Build the desktop app's browser demo into apps/desktop/build/web
 	$(DESKTOP_MYGO) -platform web
 
 # The website as GitHub Pages publishes it (.github/workflows/pages.yml): the
-# desktop and terminal demos, a frame of the terminal interface from its
-# snapshot test, the pages, and the Open Graph card, which needs Chrome
+# desktop and terminal demos, a frame of the terminal interface (the golden
+# file its test keeps current), the pages, and the Open Graph card, which needs Chrome
 # (apps/site/og.mjs).
 SITE_OUT ?= apps/site/dist
 SITE_BASE ?= https://amdl.lyjw.me/
 
 site: desktop-web tui-web ## Build the website with its demos into SITE_OUT (default apps/site/dist/)
-	mkdir -p apps/site/build
-	AMDL_TUI_SNAPSHOTS=$(CURDIR)/apps/site/build $(GO) test -count=1 -run '^TestEveryLineFitsTheTerminal$$' ./apps/amdl/internal/tui/
-	node apps/site/build.mjs --base $(SITE_BASE) --out $(SITE_OUT) --desktop apps/desktop/build/web --tui apps/site/build/tui-100.ansi --tui-web apps/amdl/build/web
+	node apps/site/build.mjs --base $(SITE_BASE) --out $(SITE_OUT) --desktop apps/desktop/build/web --tui apps/amdl/internal/tui/testdata/frame-100.ansi --tui-web apps/amdl/build/web
 	node apps/site/og.mjs --out $(SITE_OUT)

@@ -72,12 +72,6 @@ func (f *appleCopy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *appleCopy) listReads() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.reads
-}
-
 // inOrder reports whether items are the list's first len(items), each once.
 func inOrder(items []domain.AppleLibraryItem, kind string) error {
 	for i, it := range items {
@@ -118,8 +112,6 @@ func TestTheAppleTabReachesEveryItemOfALongLibrary(t *testing.T) {
 // needs no run: accepted, with no job. The read of the records can be held.
 type appleKeep struct {
 	hold chan struct{}
-	mu   sync.Mutex
-	kept bool
 	// part serves the album's record as one wanting only the track added
 	// by hand, done: the record of an album a 1.x install downloaded one
 	// song of.

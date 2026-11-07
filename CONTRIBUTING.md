@@ -60,11 +60,30 @@ Run the same gate CI runs before you push:
 make check
 ```
 
-It runs, in order: `gofmt` check, build, vet, tests, the race detector, `govulncheck`
-and the Node script tests. CI runs the tests with a coverage summary (`make cover-ui`, `make cover-rest`)
-and the race detector (`make race-ui`, `make race-app`, `make race-rest`) as parallel jobs.
-`make help` lists the narrower targets, and `make dev` starts the API in simulate mode
-on `127.0.0.1:18080`, which needs no wrapper.
+It runs, in order: `gofmt` check, build, vet, staticcheck, tests, the race detector,
+`govulncheck` and the Node script tests. `make verify` is the quicker subset to run
+before a commit. CI runs the tests with a coverage summary (`make cover`) and the race
+detector (`make race`) as parallel jobs, and the console's browser tests
+(`make console-e2e`) as a job of their own. `make help` lists the narrower targets, and
+`make dev` starts the API in simulate mode on `127.0.0.1:18080`, which needs no wrapper.
+
+## Tests
+
+| Layer | Where | Notes |
+| --- | --- | --- |
+| Static | `make vet`, `make lint` (staticcheck), `tools/repocheck` | repocheck keeps Markdown links and path pointers honest |
+| Unit | `*_test.go` next to the code | Table-driven; concurrency and timeouts on `testing/synctest`'s virtual clock, not real sleeps |
+| Integration | real listeners (`httptest`), a real SQLite store; `internal/media/integration` | The slow ones skip under `go test -short` |
+| End to end | `apps/amdl/testdata/script/*.txtar` | testscript drives the real `amdl` binary: CLI, MCP, `serve`, a download against the demo backend |
+| Contract | `internal/api/openapitest` | Every API test response is checked against `internal/api/openapi.yaml` |
+| Browser | `apps/console/e2e` | Playwright on the console's main paths, axe accessibility checks, a few screenshots |
+
+A bug fix comes with a test that fails without the fix. Golden files live under each
+package's `testdata/` and are rewritten with `go test ./<package> -update` after a
+deliberate change; review the diff before committing. Exceptions: the output-path goldens
+in `internal/media` have no `-update` and are edited by hand, since a changed path makes
+libraries download again, and the desktop stills are rewritten with
+`go test ./apps/desktop/internal/golden -update` (review the PNG diff).
 
 The API in `internal/api/openapi.yaml`, config keys, the DB schema and output paths
 are contracts.

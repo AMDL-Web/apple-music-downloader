@@ -12,6 +12,7 @@ import (
 
 	"amdl/internal/client"
 	"amdl/internal/domain"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -91,7 +92,6 @@ func frame(m *model, w int) string {
 func TestEveryLineFitsTheTerminal(t *testing.T) {
 	m := sample(t)
 	withResults(m)
-	dir := os.Getenv("AMDL_TUI_SNAPSHOTS")
 	for _, w := range []int{200, 120, 100, 72, 46, 40, 30} {
 		full := frame(m, w)
 		for i, line := range strings.Split(full, "\n") {
@@ -99,17 +99,11 @@ func TestEveryLineFitsTheTerminal(t *testing.T) {
 				t.Errorf("width %d: line %d is %d columns: %q", w, i, lw, line)
 			}
 		}
-		// The site build's frame (Makefile site); testdata/frame-100.ansi
-		// is the same frame, committed.
-		if dir != "" {
-			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("tui-%d.ansi", w)), []byte(full), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		}
 	}
 }
 
-// The sample's frames, colours included, are testdata/frame-<width>.ansi;
+// The sample's frames, colours included, are testdata/frame-<width>.ansi
+// (the website shows frame-100.ansi; Makefile site);
 // go test ./apps/amdl/internal/tui -run TestFrames -update rewrites them
 // after a deliberate change to the look (review the diff with cat -v, or in
 // a terminal with cat).

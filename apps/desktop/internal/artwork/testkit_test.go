@@ -38,7 +38,6 @@ type window struct {
 	c      *Cache
 	posted chan func()
 	clock  time.Time
-	mu     sync.Mutex
 }
 
 func newWindow(t *testing.T, rt http.RoundTripper) *window {

@@ -1,7 +1,7 @@
 .DS_Store
 .worktrees/
 .claude/worktrees/
-# Personal Claude Code settings; the shared hooks live in .claude/settings.json.
+# Personal Claude Code settings.
 .claude/settings.local.json
 
 # Runtime data produced by the rewritten backend.
@@ -9,20 +9,20 @@ data/
 # make build output.
 /bin/
 # make cover output.
-/coverage.out
+/build/cover/
 /dist/
 # make desktop and make desktop-web output.
 /apps/desktop/build/
 # make tui-web output.
 /apps/amdl/build/
-# node apps/site/build.mjs output, and the terminal frame make site renders.
+# node apps/site/build.mjs output.
 /apps/site/dist/
 /apps/site/build/
 
 test/
 
 # docs/ holds the reference documentation the README links to, so it is
-# tracked. Agent plans and design scratch stay local.
+# tracked. Plans and design scratch stay local.
 /docs/superpowers/
 
 *.p8

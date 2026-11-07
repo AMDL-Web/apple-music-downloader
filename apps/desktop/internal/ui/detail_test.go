@@ -86,19 +86,6 @@ func openFixture(a *App, j *store.Job) *store.Job {
 	return held
 }
 
-// tickDetail moves the running tracks on, as their progress events do.
-func tickDetail(j *store.Job, i int) {
-	for n := range j.Items {
-		it := &j.Items[n]
-		switch it.Status {
-		case domain.ItemDownloading:
-			it.Progress.Download = float64((i*7+n*13)%100) / 100
-		case domain.ItemDecrypting:
-			it.Progress.Decrypt = float64((i*5+n*11)%100) / 100
-		}
-	}
-}
-
 func newDetailTester(t *testing.T, w, h int) (*App, *store.Job, *ui.Tester) {
 	t.Helper()
 	a, _ := newTestApp(remoteSettings())

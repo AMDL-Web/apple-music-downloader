@@ -383,7 +383,7 @@ func (m *Manager) RetryRun(ctx context.Context, jobID string) (RecordDownloadRes
 	// would be added now: an album, a song or a catalog playlist becomes a
 	// record, or joins the one it has, so what it downloads counts as
 	// downloaded; a station is a one-off run again.
-	valid := ValidationResult{Type: job.Type, Storefront: job.Storefront}
+	var valid ValidationResult
 	key := job.CanonicalKey
 	if t, sf, id, ok := ParseCanonicalKey(job.CanonicalKey); ok {
 		valid = ValidationResult{Type: t, Storefront: sf, ID: id}

@@ -107,12 +107,6 @@ func (c *counts) set(k any, v int) {
 	c.changed = make(chan struct{})
 }
 
-func (c *counts) get(k any) int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.n[k]
-}
-
 func (c *counts) max(k any) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()

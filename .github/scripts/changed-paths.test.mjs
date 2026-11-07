@@ -22,6 +22,9 @@ test('the console browser tests run for the console, the API spec and the CI fil
   }
   assert.equal(classify(['README.md', 'docs/api.md', 'apps/site/build.mjs', 'internal/jobs/jobs.go', 'internal/api/events.go']).console, false);
   assert.equal(classify(['internal/jobs/jobs.go', 'apps/console/static/js/api.js']).console, true);
+  for (const f of ['internal/demo/api.go', 'internal/domain/event.go', 'go.sum']) {
+    assert.equal(classify([f]).console, true, f);
+  }
 });
 
 test('one matching path among many is enough', () => {
@@ -54,7 +57,7 @@ test('light files that Go tests read are light, not Go changes', () => {
 
 test('anything else, embedded Markdown included, runs the Go jobs', () => {
   for (const f of ['internal/jobs/jobs.go', 'apps/amdl/skill/SKILL.md', 'configs/config.example.yaml', 'Makefile', 'go.mod',
-    '.github/workflows/ci.yml', '.github/scripts/shard.mjs', 'deploy/server/Dockerfile', 'tools/upgradecheck/run.sh', 'apps/desktop/internal/ui/x.go']) {
+    '.github/workflows/ci.yml', 'deploy/server/Dockerfile', 'tools/upgradecheck/run.sh', 'apps/desktop/internal/ui/x.go']) {
     assert.equal(classify([f]).go, true, f);
   }
   assert.equal(classify(['docs/api.md', 'internal/jobs/jobs.go']).go, true);

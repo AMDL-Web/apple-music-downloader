@@ -375,10 +375,7 @@ func (e *env) confirm(what string) error {
 
 func splitList(s string) []string {
 	var out []string
-	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' }) {
-		out = append(out, f)
-	}
-	return out
+	return append(out, strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' })...)
 }
 
 func mustJSON(v any) json.RawMessage {

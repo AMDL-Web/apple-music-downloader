@@ -58,10 +58,10 @@ terminal demos, a frame of the terminal interface and the Open Graph card, which
 
 - `make desktop-web` builds the desktop app's web build, given to `--desktop`, and
   `make tui-web` the terminal interface's, given to `--tui-web`.
-- The TUI's snapshot test, `apps/amdl/internal/tui` `TestEveryLineFitsTheTerminal`
-  with `AMDL_TUI_SNAPSHOTS=<dir>`, writes a frame per terminal width; `--tui` takes the
-  100-column one, `ansi.mjs` turns it into HTML, and the build refuses a frame that shows
-  a private address.
+- `--tui` takes `apps/amdl/internal/tui/testdata/frame-100.ansi`, the 100-column frame
+  the TUI's golden test keeps current (`go test ./apps/amdl/internal/tui -run TestFrames
+  -update` rewrites it); `ansi.mjs` turns it into HTML, and the build refuses a frame that
+  shows a private address.
 - `og.mjs` draws `og.png` into the built site; `CHROME` names the browser binary when it
   is not in the usual places.
 
