@@ -4,7 +4,8 @@ description: >-
   ffmpeg is not on PATH, and the runner image does not ship it. The install
   takes 20 to 45 seconds, so `start` runs it in the background while the job
   checks out and compiles, and `wait` (before the tests) blocks until it is
-  done, for at most two minutes, and fails when the install failed.
+  done, for at most ten minutes, and fails when all three install attempts
+  failed (a slow apt mirror used to fail a run now and then).
 
 inputs:
   phase:
@@ -20,22 +21,28 @@ runs:
       run: |
         rm -f "$RUNNER_TEMP/ffmpeg.rc"
         nohup setsid bash -c '
-          if sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends ffmpeg; then
-            echo 0 >"$RUNNER_TEMP/ffmpeg.rc"
-          else
-            echo 1 >"$RUNNER_TEMP/ffmpeg.rc"
-          fi' >"$RUNNER_TEMP/ffmpeg.log" 2>&1 &
+          rc=1
+          for attempt in 1 2 3; do
+            if timeout 150 sudo apt-get -o Acquire::Retries=3 update -qq &&
+              timeout 150 sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends ffmpeg; then
+              rc=0
+              break
+            fi
+            echo "ffmpeg install attempt $attempt failed" >&2
+            sleep 5
+          done
+          echo $rc >"$RUNNER_TEMP/ffmpeg.rc"' >"$RUNNER_TEMP/ffmpeg.log" 2>&1 &
 
     - name: Wait for ffmpeg
       if: inputs.phase == 'wait'
       shell: bash
       run: |
-        for _ in $(seq 120); do
+        for _ in $(seq 600); do
           [ -f "$RUNNER_TEMP/ffmpeg.rc" ] && break
           sleep 1
         done
         if [ "$(cat "$RUNNER_TEMP/ffmpeg.rc" 2>/dev/null)" != 0 ]; then
-          echo "::error::ffmpeg did not install within two minutes, or failed"
+          echo "::error::ffmpeg did not install within ten minutes (three attempts), or failed"
           tail -20 "$RUNNER_TEMP/ffmpeg.log" || true
           exit 1
         fi
