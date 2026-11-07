@@ -31,11 +31,11 @@ func TestJSONEndpointsRejectTrailingValues(t *testing.T) {
 			{name: "trailing garbage", value: " trailing"},
 		} {
 			t.Run(tc.name+"/"+suffix.name, func(t *testing.T) {
-				server := &Server{
-					cfg:     config.NewStore(config.Default()),
-					wrapper: &fakeWrapperService{},
-					quality: &fakeQualityService{},
-				}
+				server := newServer(t, Deps{
+					Config:  config.NewStore(config.Default()),
+					Wrapper: &fakeWrapperService{},
+					Quality: &fakeQualityService{},
+				})
 				recorder := requestJSON(t, server.Routes(), tc.method, tc.path, tc.body+suffix.value)
 				if recorder.Code != http.StatusBadRequest {
 					t.Fatalf("status = %d, want %d (body %s)", recorder.Code, http.StatusBadRequest, recorder.Body.String())
@@ -62,11 +62,11 @@ func TestJSONEndpointsRejectOversizedBodies(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			server := &Server{
-				cfg:     config.NewStore(config.Default()),
-				wrapper: &fakeWrapperService{},
-				quality: &fakeQualityService{},
-			}
+			server := newServer(t, Deps{
+				Config:  config.NewStore(config.Default()),
+				Wrapper: &fakeWrapperService{},
+				Quality: &fakeQualityService{},
+			})
 			recorder := requestJSON(t, server.Routes(), tc.method, tc.path, tc.body)
 			if recorder.Code != http.StatusRequestEntityTooLarge {
 				t.Fatalf("status = %d, want %d (body %s)", recorder.Code, http.StatusRequestEntityTooLarge, recorder.Body.String())
@@ -76,7 +76,7 @@ func TestJSONEndpointsRejectOversizedBodies(t *testing.T) {
 }
 
 func TestJSONBodyKnownOversizeWinsOverEarlySyntaxError(t *testing.T) {
-	server := &Server{quality: &fakeQualityService{}}
+	server := newServer(t, Deps{Quality: &fakeQualityService{}})
 	body := "!" + strings.Repeat("x", int(maxJSONBodyBytes))
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", body)
 	if recorder.Code != http.StatusRequestEntityTooLarge {

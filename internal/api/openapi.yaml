@@ -5210,8 +5210,8 @@ components:
       required: [tracks_wanted, tracks_done, tracks_failed, tracks_given_up, tracks_missing, state]
       description: Stored with the record and recomputed with every slot write.
       properties:
-        tracks_wanted: {type: integer, description: Wanted tracks the account storefront lists, less those whose main slot no codec offers (unavailable).}
-        tracks_done: {type: integer, description: Of those, tracks whose main slot is done.}
+        tracks_wanted: {type: integer, description: 'Wanted tracks the account storefront lists, less those whose main slot no codec offers (unavailable).'}
+        tracks_done: {type: integer, description: 'Of those, tracks whose main slot is done.'}
         tracks_failed: {type: integer, description: Tracks with a failed slot.}
         tracks_given_up: {type: integer, description: Tracks with a given-up slot.}
         tracks_missing: {type: integer, description: Tracks with a missing slot.}
@@ -5451,7 +5451,7 @@ components:
           format: date-time
           description: Absent while the check runs.
         checked: {type: integer, description: Files stated so far.}
-        missing: {type: integer, description: Of those, files not found.}
+        missing: {type: integer, description: 'Of those, files not found.'}
         aborted_reason:
           type: string
           enum: [too_many_missing, interrupted, failed]

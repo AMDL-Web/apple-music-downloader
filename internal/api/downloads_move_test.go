@@ -4,17 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
@@ -24,14 +20,10 @@ import (
 // q1..q3, submitted in that order, and a running job.
 func moveServer(t *testing.T) (*Server, map[string]string) {
 	t.Helper()
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 	ctx := context.Background()
 	if err := store.CreateJob(ctx, domain.Job{ID: "running", Input: "song|us|0", Type: "song", CanonicalKey: "song:us:0", Status: domain.JobRunning}); err != nil {
 		t.Fatal(err)
@@ -163,7 +155,7 @@ func TestMoveDownloadPushesTheNewOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	getCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

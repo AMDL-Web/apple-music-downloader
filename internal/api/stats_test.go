@@ -75,7 +75,7 @@ func seedCompletedTrack(t *testing.T, store *db.Store, jobID, itemID string, siz
 }
 
 func TestStatsEndpoint(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	now := time.Date(2026, 10, 28, 15, 0, 0, 0, time.UTC)
 	server.now = func() time.Time { return now }
 	ctx := context.Background()
@@ -133,7 +133,7 @@ func TestStatsEndpoint(t *testing.T) {
 }
 
 func TestStatsEndpointRejectsDays(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	for _, query := range []string{"?days=0", "?days=91", "?days=-1", "?days=abc", "?days=1.5", "?days=1e1"} {
 		rec := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/stats"+query, "")
 		assertErrorCode(t, rec, http.StatusBadRequest, CodeInvalidRequest)
@@ -146,7 +146,7 @@ func TestStatsEndpointRejectsDays(t *testing.T) {
 }
 
 func TestStatsEndpointCachesPerDays(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	now := time.Date(2026, 10, 28, 15, 0, 0, 0, time.UTC)
 	server.now = func() time.Time { return now }
 	ctx := context.Background()
@@ -175,7 +175,7 @@ func TestStatsEndpointCachesPerDays(t *testing.T) {
 }
 
 func TestStatsEndpointStoreError(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	if err := server.store.Close(); err != nil {
 		t.Fatal(err)
 	}

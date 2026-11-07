@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -14,60 +13,6 @@ import (
 	"amdl/internal/config"
 	"amdl/internal/usertoken"
 )
-
-// fakeAppleLibrary answers membership from a fixed map; the other methods are
-// not used by the routes that take it.
-type fakeAppleLibrary struct {
-	applelibrary.Set
-	in map[string]map[string]bool
-}
-
-func (f *fakeAppleLibrary) Membership(_ context.Context, _, kind string, ids []string) map[string]bool {
-	if f.in[kind] == nil {
-		return nil
-	}
-	out := map[string]bool{}
-	for _, id := range ids {
-		out[id] = f.in[kind][id]
-	}
-	return out
-}
-
-// pagedApple serves a fixed Apple library the way amp-api pages it.
-type pagedApple struct {
-	items    map[applemusic.LibraryKind][]applemusic.LibraryItem
-	tracks   map[string][]applemusic.LibraryItem
-	requests int
-	err      error
-}
-
-func (a *pagedApple) page(all []applemusic.LibraryItem, offset, limit int) applemusic.LibraryPage {
-	end := min(offset+limit, len(all))
-	return applemusic.LibraryPage{Items: all[min(offset, end):end], Total: len(all), HasMore: end < len(all)}
-}
-
-func (a *pagedApple) LibraryItems(_ context.Context, _ string, kind applemusic.LibraryKind, _ bool, offset, limit int) (applemusic.LibraryPage, error) {
-	a.requests++
-	if a.err != nil {
-		return applemusic.LibraryPage{}, a.err
-	}
-	return a.page(a.items[kind], offset, limit), nil
-}
-
-func (a *pagedApple) LibraryPlaylistTracks(_ context.Context, _ string, id string, offset, limit int) (applemusic.LibraryPage, error) {
-	a.requests++
-	return a.page(a.tracks[id], offset, limit), nil
-}
-
-func (a *pagedApple) AccountStorefront(context.Context, string) (string, error) {
-	a.requests++
-	return "cn", a.err
-}
-
-type refusedToken struct{}
-
-func (refusedToken) Error() string           { return "403 Forbidden" }
-func (refusedToken) UserTokenRejected() bool { return true }
 
 // defaultLibrary drives the default account's engine of a Set.
 type defaultLibrary struct{ set *applelibrary.Set }
@@ -124,9 +69,10 @@ func newAppleLibraryServer(t *testing.T, token string) (*Server, defaultLibrary,
 		},
 		tracks: map[string][]applemusic.LibraryItem{"p.1": songs[:3]},
 	}
-	server := newServer(t, Deps{Config: store, Tokens: tokens})
-	set := applelibrary.NewSet(store, tokens, apple, server.store, server.accounts, slog.Default())
-	server.appleLibrary = set
+	deps := fillDeps(t, Deps{Config: store, Tokens: tokens})
+	set := applelibrary.NewSet(store, tokens, apple, deps.Store, deps.Accounts, quietLogger)
+	deps.AppleLibrary = set
+	server := newServer(t, deps)
 	return server, defaultLibrary{set}, apple
 }
 
@@ -253,11 +199,10 @@ func TestSearchMarksHitsInTheAppleLibrary(t *testing.T) {
 	catalog := &fakeCatalog{t: t, search: search}
 	cfg := config.Default()
 	cfg.Catalog.DefaultStorefront = "us"
-	server := newServer(t, Deps{Config: config.NewStore(cfg), Catalog: catalog, Tokens: tokenOf(mutToken)})
-	server.appleLibrary = &fakeAppleLibrary{in: map[string]map[string]bool{
+	server := newServer(t, Deps{Config: config.NewStore(cfg), Catalog: catalog, Tokens: tokenOf(mutToken), AppleLibrary: &fakeAppleLibrary{in: map[string]map[string]bool{
 		"playlists": {"pl.2553030a768547e9ab3e91230de8439f": true},
 		"artists":   {},
-	}}
+	}}})
 	got := decodeBody(t, requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/search?term=taylor", "").Body.Bytes())
 	mark := func(group string) any {
 		return got[group].(map[string]any)["items"].([]any)[0].(map[string]any)["in_apple_library"]

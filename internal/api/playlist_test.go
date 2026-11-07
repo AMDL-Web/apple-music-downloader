@@ -30,7 +30,7 @@ func samplePlaylist() *applemusic.Collection {
 // order (not by their albums' disc and track), numbered from 1 on disc 1.
 func TestPlaylistReturnsItsSongsInItsOwnOrder(t *testing.T) {
 	catalog := &fakeCatalog{t: t, playlist: samplePlaylist()}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/playlists/pl.f4d106fed2bd41149aaacabb233eb5eb?storefront=CN", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/playlists/pl.f4d106fed2bd41149aaacabb233eb5eb?storefront=CN", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -68,7 +68,7 @@ func TestPlaylistRefusesBadParameters(t *testing.T) {
 		"/api/v1/playlists/pl.abc?storefront=x",
 	} {
 		catalog := &fakeCatalog{t: t}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
 		if len(catalog.calls) != 0 {
 			t.Fatalf("%s read the catalog: %v", path, catalog.calls)
 		}
@@ -86,6 +86,6 @@ func TestPlaylistCatalogFailures(t *testing.T) {
 		{fmt.Errorf("get playlist: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, CodeUpstreamTimeout},
 	} {
 		catalog := &fakeCatalog{t: t, err: tt.err}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/playlists/pl.abc", ""), tt.status, tt.code)
+		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/playlists/pl.abc", ""), tt.status, tt.code)
 	}
 }

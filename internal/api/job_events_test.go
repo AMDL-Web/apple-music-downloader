@@ -25,14 +25,10 @@ import (
 // a stream opened while a job was running used to retain that running Job
 // value forever, so even after delivering job_finished it never closed.
 func TestEventsClosesWhenLiveJobBecomesTerminal(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
 	ctx := context.Background()
 	job := domain.Job{ID: "live-sse", Input: "song|us|1", Type: "song", Status: domain.JobRunning}
@@ -43,7 +39,7 @@ func TestEventsClosesWhenLiveJobBecomesTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	streamCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -93,14 +89,10 @@ func TestEventsClosesWhenLiveJobBecomesTerminal(t *testing.T) {
 }
 
 func TestEventsRejectsTerminalJob(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
 	ctx := context.Background()
 	job := domain.Job{ID: "done1", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
@@ -125,14 +117,10 @@ func TestEventsRejectsTerminalJob(t *testing.T) {
 // non-atomic statements). A client that is not yet caught up must still get
 // the backlog; only a client with nothing left to receive gets rejected.
 func TestEventsReplaysBacklogForTerminalJobInsteadOfRejecting(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
 	ctx := context.Background()
 	job := domain.Job{ID: "done2", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
@@ -148,8 +136,7 @@ func TestEventsReplaysBacklogForTerminalJobInsteadOfRejecting(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/done2/events", nil)
-	recorder := httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, req)
+	recorder := serve(t, server.Routes(), req)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("SSE with pending backlog on terminal job: status = %d, want %d; body: %s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
@@ -161,8 +148,7 @@ func TestEventsReplaysBacklogForTerminalJobInsteadOfRejecting(t *testing.T) {
 	// gets 204 No Content, which tells EventSource to stop reconnecting.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/downloads/done2/events", nil)
 	req.Header.Set("Last-Event-ID", strconv.FormatInt(stored.ID, 10))
-	recorder = httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, req)
+	recorder = serve(t, server.Routes(), req)
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("SSE fully caught up on terminal job: status = %d, want %d", recorder.Code, http.StatusNoContent)
 	}
@@ -175,8 +161,8 @@ func TestEventsReplaysTerminalBacklogAcrossDatabasePages(t *testing.T) {
 	}
 	defer store.Close()
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 	job := domain.Job{ID: "paged-terminal", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
 	if err := store.CreateJob(context.Background(), job); err != nil {
 		t.Fatal(err)
@@ -188,8 +174,7 @@ func TestEventsReplaysTerminalBacklogAcrossDatabasePages(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/downloads/"+job.ID+"/events", nil)
-	recorder := httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, req)
+	recorder := serve(t, server.Routes(), req)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", recorder.Code, recorder.Body.String())
 	}
@@ -209,13 +194,9 @@ func TestEventsReplaysTerminalBacklogAcrossDatabasePages(t *testing.T) {
 // eventsExhausted picks up the hook's completion rather than staying stuck
 // on the stale "pending" state forever.
 func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
 
 	release := make(chan struct{})
 	hookServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +210,7 @@ func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 	manager.SetHooks(dispatcher)
 	defer dispatcher.Shutdown(context.Background())
 
-	server := &Server{store: store, hub: hub, manager: manager}
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 
 	ctx := context.Background()
 	job := domain.Job{ID: "done3", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
@@ -250,7 +231,7 @@ func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 		}
 	}
 
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	getCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -331,10 +312,10 @@ func TestEventsExhaustedAfterJobDeletion(t *testing.T) {
 	}
 	defer store.Close()
 
-	server := &Server{
-		store:   store,
-		manager: jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default()),
-	}
+	server := newServer(t, Deps{
+		Store:   store,
+		Manager: jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, quietLogger),
+	})
 	if !server.eventsExhausted(context.Background(), "already-deleted") {
 		t.Fatal("eventsExhausted = false for a deleted job; an existing stream would never close")
 	}
@@ -351,8 +332,8 @@ func TestEventsKeepStreamingThroughAFailedRead(t *testing.T) {
 	}
 	defer store.Close()
 	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Store: store, Hub: hub, Manager: manager})
 	ctx := context.Background()
 	job := domain.Job{ID: "flaky", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
 	if err := store.CreateJob(ctx, job); err != nil {

@@ -8,13 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"amdl/internal/config"
 	"amdl/internal/logging"
-	"gopkg.in/yaml.v3"
 )
 
 func TestGetConfigReturnsEditableFields(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
+	server := newServer(t, Deps{Config: config.NewStore(config.Default())})
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/config", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
@@ -70,7 +71,7 @@ func TestGetConfigReturnsEditableFields(t *testing.T) {
 
 func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	store := config.NewStore(config.Default())
-	server := &Server{cfg: store}
+	server := newServer(t, Deps{Config: store})
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
 		`{"download":{"embed_lyrics":false,"cover_format":"png"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"album_track_url_mode":"album"}}`)
@@ -101,7 +102,7 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 func TestUpdateConfigRejectsRemovedPathFormats(t *testing.T) {
 	for _, key := range []string{"song_path_format", "album_path_format", "artist_path_format"} {
 		store := config.NewStore(config.Default())
-		server := &Server{cfg: store}
+		server := newServer(t, Deps{Config: store})
 		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
 			`{"download":{"`+key+`":"x/{SongName}"}}`)
 		if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), key) {
@@ -119,7 +120,7 @@ func TestUpdateConfigRejectsRetiredKeys(t *testing.T) {
 		`{"catalog":{"media_user_token_priority":"request"}}`,
 	} {
 		store := config.NewStore(config.Default())
-		server := &Server{cfg: store}
+		server := newServer(t, Deps{Config: store})
 		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", body)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("%s: status = %d, body = %s; want 400", body, recorder.Code, recorder.Body.String())
@@ -132,7 +133,7 @@ func TestConfigResponsesHideTheWrapperToken(t *testing.T) {
 	cfg := config.Default()
 	cfg.Wrapper.Token = token
 	store := config.NewStore(cfg)
-	routes := (&Server{cfg: store}).Routes()
+	routes := newServer(t, Deps{Config: store}).Routes()
 	tokenIn := func(body string) string {
 		t.Helper()
 		var resp struct {
@@ -215,7 +216,7 @@ func TestReloadConfigAppliesManualFileEdits(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	base := config.Default()
 	writeConfigFile(t, path, base)
-	server := &Server{cfg: config.NewFileStore(base, path)}
+	server := newServer(t, Deps{Config: config.NewFileStore(base, path)})
 
 	// Edit the file behind the running store, as a user would with an editor.
 	edited := base
@@ -274,7 +275,7 @@ func TestReloadConfigAppliesManualFileEdits(t *testing.T) {
 func TestUpdateConfigWithInvalidFileIsInvalidConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	writeConfigFile(t, path, config.Default())
-	server := &Server{cfg: config.NewFileStore(config.Default(), path)}
+	server := newServer(t, Deps{Config: config.NewFileStore(config.Default(), path)})
 	broken := []byte("download: [")
 	if err := os.WriteFile(path, broken, 0o600); err != nil {
 		t.Fatal(err)
@@ -292,7 +293,7 @@ func TestUpdateConfigWithInvalidFileIsInvalidConfig(t *testing.T) {
 
 func TestUpdateConfigPersistsToBackingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	server := &Server{cfg: config.NewFileStore(config.Default(), path)}
+	server := newServer(t, Deps{Config: config.NewFileStore(config.Default(), path)})
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"download":{"cover_format":"png"}}`)
 	if recorder.Code != http.StatusOK {
@@ -343,7 +344,7 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := config.NewStore(config.Default())
-			server := &Server{cfg: store}
+			server := newServer(t, Deps{Config: store})
 			recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", tc.body)
 			assertErrorCode(t, recorder, tc.status, tc.code)
 			if tc.want != "" && !strings.Contains(recorder.Body.String(), tc.want) {

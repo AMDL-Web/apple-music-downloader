@@ -34,7 +34,7 @@ func sampleAlbum() *applemusic.Collection {
 
 func TestAlbumReturnsMetadataAndTracksInDiscOrder(t *testing.T) {
 	catalog := &fakeCatalog{t: t, album: sampleAlbum()}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -82,7 +82,7 @@ func TestAlbumReturnsMetadataAndTracksInDiscOrder(t *testing.T) {
 
 func TestAlbumWithoutSongsAnswersAnEmptyList(t *testing.T) {
 	catalog := &fakeCatalog{t: t, album: &applemusic.Collection{ID: "5", Name: "Videos Only"}}
-	recorder := requestJSON(t, newLookupServer(catalog, func(c *config.Config) { c.Catalog.DefaultStorefront = "jp" }), http.MethodGet, "/api/v1/albums/5", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, func(c *config.Config) { c.Catalog.DefaultStorefront = "jp" }), http.MethodGet, "/api/v1/albums/5", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -102,7 +102,7 @@ func TestAlbumRefusesBadParameters(t *testing.T) {
 		"/api/v1/albums/1?storefront=x",
 	} {
 		catalog := &fakeCatalog{t: t}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
 		if len(catalog.calls) != 0 {
 			t.Fatalf("%s read the catalog: %v", path, catalog.calls)
 		}
@@ -120,21 +120,8 @@ func TestAlbumCatalogFailures(t *testing.T) {
 		{fmt.Errorf("get album: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, CodeUpstreamTimeout},
 	} {
 		catalog := &fakeCatalog{t: t, err: tt.err}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1", ""), tt.status, tt.code)
+		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/albums/1", ""), tt.status, tt.code)
 	}
-}
-
-// motionCatalog is fakeCatalog with the optional animated-cover read.
-type motionCatalog struct {
-	*fakeCatalog
-	art   applemusic.MotionArtwork
-	err   error
-	asked int
-}
-
-func (m *motionCatalog) MotionArtworkViaWebToken(_ context.Context, storefront, id string) (applemusic.MotionArtwork, error) {
-	m.asked++
-	return m.art, m.err
 }
 
 // An album carries its animated cover and the cover's own palette, read
@@ -144,7 +131,7 @@ func TestAlbumCarriesItsAnimatedCoverWhenItCanBeRead(t *testing.T) {
 	art := applemusic.MotionArtwork{Square: "https://mvod.itunes.apple.com/a/square.m3u8", Tall: "https://mvod.itunes.apple.com/a/tall.m3u8",
 		SquareColors: applemusic.ArtworkColors{BgColor: "5c6786", TextColor1: "ffffff", TextColor2: "eeeeee", TextColor3: "dddddd", TextColor4: "cccccc"}}
 	catalog := &motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, art: art}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -166,7 +153,7 @@ func TestAlbumCarriesItsAnimatedCoverWhenItCanBeRead(t *testing.T) {
 		"read fails": {&motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, err: errors.New("no editorialVideo")}, nil, 1},
 		"turned off": {&motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, art: art}, func(c *config.Config) { c.Catalog.MotionArtworkEnabled = false }, 0},
 	} {
-		recorder := requestJSON(t, newLookupServer(c.catalog, c.mutate), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+		recorder := requestJSON(t, newLookupServer(t, c.catalog, c.mutate), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("%s: status = %d, body %s", name, recorder.Code, recorder.Body.String())
 		}

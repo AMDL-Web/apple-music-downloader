@@ -11,7 +11,7 @@ import (
 )
 
 func TestListDownloadsQueryFilters(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	base := time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC)
 	jobs := []domain.Job{

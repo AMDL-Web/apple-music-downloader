@@ -6,17 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"amdl/internal/config"
-	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
@@ -27,11 +24,7 @@ import (
 // and a log buffer.
 func newStreamServer(t *testing.T) (*Server, *logging.System) {
 	t.Helper()
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	cfg := config.Default()
 	cfg.Logging.Console = false
 	system, err := logging.New(cfg.Logging)
@@ -41,7 +34,7 @@ func newStreamServer(t *testing.T) (*Server, *logging.System) {
 	hub := events.NewHub()
 	return newServer(t, Deps{
 		Config: config.NewStore(cfg), Store: store, Hub: hub,
-		Manager: jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default()),
+		Manager: jobs.NewManager(store, hub, stubProcessor{}, 1, quietLogger),
 		Logger:  system.Logger, Logging: system,
 	}), system
 }
@@ -105,8 +98,7 @@ func TestJobStreamCursorPrecedence(t *testing.T) {
 			if tt.header != "" {
 				req.Header.Set("Last-Event-ID", tt.header)
 			}
-			recorder := httptest.NewRecorder()
-			server.Routes().ServeHTTP(recorder, req)
+			recorder := serve(t, server.Routes(), req)
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 			}
@@ -134,14 +126,12 @@ func TestStreamsRejectMalformedCursor(t *testing.T) {
 	for _, path := range []string{"/api/v1/downloads/events", "/api/v1/downloads/job1/events", "/api/v1/logs/stream"} {
 		for _, bad := range []string{"abc", "-1", "1.5", "99999999999999999999"} {
 			req := httptest.NewRequest(http.MethodGet, path+"?cursor="+bad, nil)
-			recorder := httptest.NewRecorder()
-			routes.ServeHTTP(recorder, req)
+			recorder := serve(t, routes, req)
 			assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
 
 			req = httptest.NewRequest(http.MethodGet, path, nil)
 			req.Header.Set("Last-Event-ID", bad)
-			recorder = httptest.NewRecorder()
-			routes.ServeHTTP(recorder, req)
+			recorder = serve(t, routes, req)
 			assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
 		}
 	}
@@ -152,7 +142,7 @@ func TestStreamsRejectMalformedCursor(t *testing.T) {
 func TestStreamHeaders(t *testing.T) {
 	server, _ := newStreamServer(t)
 	addEvents(t, server, "job1", "job_finished")
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	for _, path := range []string{"/api/v1/downloads/events", "/api/v1/downloads/job1/events", "/api/v1/logs/stream"} {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -175,8 +165,7 @@ func TestStreamHeaders(t *testing.T) {
 	}
 
 	// Connection is hop-by-hop: a handler must not set it (HTTP/2 forbids it).
-	recorder := httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/downloads/job1/events", nil))
+	recorder := serve(t, server.Routes(), httptest.NewRequest(http.MethodGet, "/api/v1/downloads/job1/events", nil))
 	if recorder.Code != http.StatusOK || recorder.Header().Get("Connection") != "" {
 		t.Fatalf("status %d, Connection header %q, want 200 without Connection", recorder.Code, recorder.Header().Get("Connection"))
 	}
@@ -225,7 +214,7 @@ func TestFeedCursorPrecedence(t *testing.T) {
 	a := addEvents(t, server, "jobA", "job_finished")[0]
 	b := addEvents(t, server, "jobB", "job_finished")[0]
 	addEvents(t, server, "jobC", "job_finished")
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 
 	firstJob := func(header, query string) string {
@@ -295,7 +284,7 @@ func TestLogStreamCursorPrecedenceAndPaging(t *testing.T) {
 		t.Fatalf("GET /logs?cursor = %d %s, want two then three", recorder.Code, recorder.Body.String())
 	}
 
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	defer ts.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

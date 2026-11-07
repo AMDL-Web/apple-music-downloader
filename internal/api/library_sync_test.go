@@ -10,27 +10,6 @@ import (
 	"amdl/internal/librarysync"
 )
 
-type fakeLibrarySync struct {
-	status     librarysync.Status
-	cleared    int64
-	resetCalls []string
-	forgotten  []string
-}
-
-func (f *fakeLibrarySync) Status(context.Context) (librarysync.Status, error) { return f.status, nil }
-
-func (f *fakeLibrarySync) ResetAnchor(_ context.Context, account string) (int64, error) {
-	f.resetCalls = append(f.resetCalls, account)
-	for i := range f.status.Accounts {
-		if f.status.Accounts[i].AccountID == account {
-			f.status.Accounts[i].AnchorSize = 0
-		}
-	}
-	return f.cleared, nil
-}
-
-func (f *fakeLibrarySync) Forget(account string) { f.forgotten = append(f.forgotten, account) }
-
 func TestLibrarySyncStatusReportsWatcherState(t *testing.T) {
 	watcher := &fakeLibrarySync{status: librarysync.Status{
 		Enabled: true, IntervalMinutes: 15,

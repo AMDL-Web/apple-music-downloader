@@ -14,7 +14,7 @@ import (
 )
 
 func TestCreateDownloadSplitsBatchAndDedupes(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	body := `{"urls":["song|us|1, song|us|2","song|us|1"]}`
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", body)
 	if recorder.Code != http.StatusAccepted {
@@ -36,7 +36,7 @@ func TestCreateDownloadSplitsBatchAndDedupes(t *testing.T) {
 }
 
 func TestGetDownloadDerivesProgressFromItems(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", Status: domain.JobRunning, TotalItems: 4}
 	if err := server.store.CreateJob(ctx, job); err != nil {
@@ -84,7 +84,7 @@ func assertJobCounters(t *testing.T, job map[string]any) {
 // are access modes of one state, so a client that never subscribes must still
 // see hook outcomes.
 func TestGetDownloadReportsHookStates(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
 	if err := server.store.CreateJob(ctx, job); err != nil {
@@ -139,7 +139,7 @@ func TestGetDownloadReportsHookStates(t *testing.T) {
 }
 
 func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", Status: domain.JobRunning, TotalItems: 4}
 	if err := server.store.CreateJob(ctx, job); err != nil {
@@ -184,7 +184,7 @@ func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
 }
 
 func TestDownloadResponsesIncludeArtworkURLTemplate(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	jobArt := "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg"
 	itemArt := "https://is1-ssl.mzstatic.com/image/thumb/Music/track/{w}x{h}bb.jpg"
@@ -236,7 +236,7 @@ func TestDownloadResponsesIncludeArtworkURLTemplate(t *testing.T) {
 }
 
 func TestDownloadResponsesIncludeDisplayMetadata(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	job := domain.Job{
 		ID: "job1", Input: "album|us|1", Type: "album",
@@ -312,7 +312,7 @@ func TestDownloadResponsesIncludeDisplayMetadata(t *testing.T) {
 }
 
 func TestDeleteDownload(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	terminal := domain.Job{ID: "job_done", Input: "song|us|1", Type: "song", CanonicalKey: "song:1", Status: domain.JobCompleted}
 	running := domain.Job{ID: "job_run", Input: "song|us|2", Type: "song", CanonicalKey: "song:2", Status: domain.JobRunning}
@@ -352,13 +352,13 @@ func TestDeleteDownload(t *testing.T) {
 }
 
 func TestCreateDownloadRejectsEmptyURLs(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":[" , ,"]}`)
 	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
 }
 
 func TestCreateDownloadRejectsTooManyURLs(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	urls := make([]string, maxBatchSubmitURLs+1)
 	for i := range urls {
 		urls[i] = "song|us|" + strings.Repeat("1", 1) + string(rune('a'+i%26))
@@ -374,7 +374,7 @@ func TestCreateDownloadRejectsTooManyURLs(t *testing.T) {
 // When no URL is accepted the batch body moves into error.details, so a
 // client that only understands the envelope still sees each URL's verdict.
 func TestCreateDownloadAllRejectedIsNoURLsAccepted(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":["bad-url"]}`)
 	details := assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "no_urls_accepted")
 	var batch domain.BatchSubmitResponse
@@ -393,7 +393,7 @@ func TestCreateDownloadAllRejectedIsNoURLsAccepted(t *testing.T) {
 // A store failure is retryable, so it must not look like a verdict on the
 // input: 500 store_error, with the per-URL results still in details.
 func TestCreateDownloadStoreFailureIsStoreError(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	if err := server.store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +412,7 @@ func TestCreateDownloadStoreFailureIsStoreError(t *testing.T) {
 // A transient store error on a job lookup is a 500, never a 404: a 404 tells
 // a client to drop a job that may still exist.
 func TestJobLookupStoreFailureIsNotNotFound(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	if err := server.store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +425,7 @@ func TestJobLookupStoreFailureIsNotNotFound(t *testing.T) {
 // The pipeline fills output_path before a file exists, so only items whose file
 // is on disk (completed, skipped_existing) report it, as an absolute path.
 func TestGetDownloadReportsOutputPathOfFinishedItemsOnly(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	job := domain.Job{ID: "job1", Input: "album|us|1", Type: "album", Status: domain.JobCompleted, TotalItems: 4}
 	if err := server.store.CreateJob(ctx, job); err != nil {
@@ -470,7 +470,7 @@ func TestGetDownloadReportsOutputPathOfFinishedItemsOnly(t *testing.T) {
 }
 
 func TestCancelOnlyStopsAJobThatHasNotEnded(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	for _, tt := range []struct {
 		status domain.JobStatus
@@ -498,7 +498,7 @@ func TestCancelOnlyStopsAJobThatHasNotEnded(t *testing.T) {
 }
 
 func TestRetryDownloadRejectsCompletedAndMissingJobs(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	completed := domain.Job{ID: "job-done", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobCompleted}
 	if err := server.store.CreateJob(ctx, completed); err != nil {
@@ -515,7 +515,7 @@ func TestRetryDownloadRejectsCompletedAndMissingJobs(t *testing.T) {
 // missing job means "drop the row from the list", unlike a 500, which means
 // "back off and retry".
 func TestCancelMissingJobIsNotFound(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 
 	for _, tc := range []struct {
 		name   string
@@ -529,15 +529,14 @@ func TestCancelMissingJobIsNotFound(t *testing.T) {
 		{"events", http.MethodGet, "/api/v1/downloads/job_missing/events"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			server.Routes().ServeHTTP(recorder, httptest.NewRequest(tc.method, tc.path, nil))
+			recorder := serve(t, server.Routes(), httptest.NewRequest(tc.method, tc.path, nil))
 			assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
 		})
 	}
 }
 
 func TestListAndDetailCarryTheJobsProgress(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	job := domain.Job{ID: "job-progress", Input: "album|us|9", Type: "album", CanonicalKey: "album:us:9", Status: domain.JobRunning}
 	if err := server.store.CreateJob(ctx, job); err != nil {
@@ -577,7 +576,7 @@ func TestListAndDetailCarryTheJobsProgress(t *testing.T) {
 // that run.
 func TestRetryDownloadQueuesANewRun(t *testing.T) {
 	for _, status := range []domain.JobStatus{domain.JobFailed, domain.JobCancelled} {
-		server := newTestServerWithManager(t)
+		server := newServer(t, Deps{})
 		ctx := context.Background()
 		job := domain.Job{ID: "job-" + string(status), Input: "station|us|ra.1", Type: "station", Storefront: "us", CanonicalKey: "station:us:ra.1", Status: status, Error: "boom"}
 		if err := server.store.CreateJob(ctx, job); err != nil {

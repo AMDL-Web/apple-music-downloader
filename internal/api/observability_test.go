@@ -32,8 +32,7 @@ func TestHTTPObservationAndLogQuery(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 	// A client's own id is not adopted: the server always generates one.
 	req.Header.Set("X-Request-ID", "client-request-1")
-	rec := httptest.NewRecorder()
-	server.Routes().ServeHTTP(rec, req)
+	rec := serve(t, server.Routes(), req)
 	requestID := rec.Header().Get("X-Request-ID")
 	if rec.Code != http.StatusOK || requestID == "" || requestID == "client-request-1" {
 		t.Fatalf("health response = %d, request id %q, want a generated id", rec.Code, requestID)
@@ -49,8 +48,7 @@ func TestHTTPObservationAndLogQuery(t *testing.T) {
 	}
 
 	query := httptest.NewRequest(http.MethodGet, "/api/v1/logs?request_id="+requestID+"&level=info&limit=10", nil)
-	queryRec := httptest.NewRecorder()
-	server.Routes().ServeHTTP(queryRec, query)
+	queryRec := serve(t, server.Routes(), query)
 	if queryRec.Code != http.StatusOK {
 		t.Fatalf("query status = %d: %s", queryRec.Code, queryRec.Body.String())
 	}
@@ -71,8 +69,7 @@ func TestHTTPObservationRecoversPanic(t *testing.T) {
 	handler := server.observeHTTP(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	}))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/panic", nil))
+	rec := serve(t, handler, httptest.NewRequest(http.MethodGet, "/panic", nil))
 	assertErrorCode(t, rec, http.StatusInternalServerError, "internal_error")
 	page := system.Store.List(logging.Filter{Levels: []string{"error"}, Limit: 10})
 	if len(page.Entries) != 2 || page.Entries[0].Message != "http request panic" || page.Entries[1].Message != "http request" {
@@ -83,7 +80,7 @@ func TestHTTPObservationRecoversPanic(t *testing.T) {
 func TestLogStreamReplaysAndPublishes(t *testing.T) {
 	server, system := newObservedServer(t)
 	system.Logger.Info("backlog", "component", "test")
-	httpServer := httptest.NewServer(server.Routes())
+	httpServer := newHTTPServer(t, server.Routes())
 	defer httpServer.Close()
 
 	client := &http.Client{Timeout: 3 * time.Second}

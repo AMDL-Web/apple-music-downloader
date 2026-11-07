@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -373,7 +372,7 @@ func newRig(t *testing.T, albums, playlists map[string][]string) *rig {
 	manager := jobs.NewManager(store, hub, proc, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	manager.SetConfig(cfgStore.Get)
 	server := newServer(t, Deps{Config: cfgStore, Store: store, Hub: hub, Manager: manager, Catalog: catalog})
-	ts := httptest.NewServer(server.Routes())
+	ts := newHTTPServer(t, server.Routes())
 	manager.Start(context.Background())
 	t.Cleanup(func() {
 		server.EndStreams()

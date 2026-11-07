@@ -126,7 +126,7 @@ func TestLibraryRoutesServeRecords(t *testing.T) {
 // Removing a record removes its runs, each with a job_deleted tombstone the
 // feeds pass on, and leaves other records' runs alone.
 func TestDeletingARecordDeletesItsRuns(t *testing.T) {
-	server := newTestServerWithManager(t)
+	server := newServer(t, Deps{})
 	ctx := context.Background()
 	now := time.Now().UTC()
 	for _, id := range []string{"7", "8"} {

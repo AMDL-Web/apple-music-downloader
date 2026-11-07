@@ -2,27 +2,20 @@ package api
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"amdl/internal/config"
-	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
 )
 
 func TestCreateDownloadWithOverrides(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
-	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
+	store := openStore(t)
+	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, quietLogger)
+	server := newServer(t, Deps{Config: config.NewStore(config.Default()), Store: store, Manager: manager})
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
 		`{"urls":["station|us|1"],"overrides":{"codec_alternative":false,"quality_priority":["aac"],"alac_max_bit_depth":16}}`)
@@ -58,7 +51,7 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 }
 
 func TestCreateDownloadRejectsLegacyTopLevelMediaUserToken(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
+	server := newServer(t, Deps{Config: config.NewStore(config.Default())})
 	for _, token := range []string{`"secret-legacy"`, `""`} {
 		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
 			`{"urls":["station|us|ra.1"],"media_user_token":`+token+`}`)
@@ -76,7 +69,7 @@ func TestCreateDownloadRejectsLegacyTopLevelMediaUserToken(t *testing.T) {
 // removed token, hook selection, directories, path templates, lyrics, covers
 // and retry settings, and the process-wide pool sizes.
 func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
+	server := newServer(t, Deps{Config: config.NewStore(config.Default())})
 	for _, field := range []string{
 		"embedd_lyrics", "media_user_token", "hooks", "downloads_dir", "temp_dir", "library_path_format",
 		"embed_lyrics", "lyrics_extras", "cover_size", "save_album_cover", "max_attempts", "check_integrity", "integrity_mode",
@@ -94,7 +87,7 @@ func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
 }
 
 func TestCreateDownloadRejectsInvalidOverrides(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
+	server := newServer(t, Deps{Config: config.NewStore(config.Default())})
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
 		`{"urls":["station|us|1"],"overrides":{"quality_priority":["flac"]}}`)
 	assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "invalid_overrides")

@@ -1,135 +1,99 @@
 package api
 
 import (
-	"amdl/internal/accounts"
 	"bytes"
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"amdl/internal/accounts"
+	"amdl/internal/api/openapitest"
 	"amdl/internal/applelibrary"
 	"amdl/internal/config"
 	"amdl/internal/db"
-	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
-	"amdl/internal/media"
-	"amdl/internal/wrapper"
 )
-
-type fakeWrapperService struct {
-	statusCalls  int
-	statusResult wrapper.Status
-	statusErr    error
-	startResult  wrapper.LoginResult
-	startErr     error
-	verifyResult wrapper.LoginResult
-	verifyErr    error
-	logoutErr    error
-	username     string
-	password     string
-	loginID      string
-	twoStepCode  string
-	loggedOutIDs []string
-}
-
-func (f *fakeWrapperService) LogoutAccount(_ context.Context, id string) error {
-	f.loggedOutIDs = append(f.loggedOutIDs, id)
-	return f.logoutErr
-}
-
-func (f *fakeWrapperService) Status(context.Context) (wrapper.Status, error) {
-	f.statusCalls++
-	return f.statusResult, f.statusErr
-}
-
-func (f *fakeWrapperService) StartLogin(_ context.Context, username, password string) (wrapper.LoginResult, error) {
-	f.username, f.password = username, password
-	return f.startResult, f.startErr
-}
-
-func (f *fakeWrapperService) SubmitTwoStepCode(_ context.Context, loginID, code string) (wrapper.LoginResult, error) {
-	f.loginID, f.twoStepCode = loginID, code
-	return f.verifyResult, f.verifyErr
-}
-
-func (f *fakeWrapperService) Logout(_ context.Context, username string) error {
-	f.username = username
-	return f.logoutErr
-}
-
-type fakeQualityService struct {
-	result media.QualityResult
-	err    error
-	req    media.QualityRequest
-}
-
-func (f *fakeQualityService) QueryQuality(_ context.Context, req media.QualityRequest) (media.QualityResult, error) {
-	f.req = req
-	return f.result, f.err
-}
 
 func requestJSON(t *testing.T, handler http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	return serve(t, handler, req)
+}
+
+// contract is openapi.yaml, which every response a test records is checked
+// against: the operation, the status and the body's schema.
+var contract = openapitest.MustLoad(OpenAPI)
+
+// serve runs req through handler and checks the response against the spec.
+func serve(t *testing.T, handler http.Handler, req *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
+	contract.Check(t, req, recorder)
 	return recorder
 }
 
-// stubProcessor parses "type|storefront|id" test URLs into a ValidationResult
-// so createDownload can be exercised against a real jobs.Manager without
-// hitting Apple Music.
-type stubProcessor struct{}
-
-func (stubProcessor) ValidateRequest(_ context.Context, url string) (jobs.ValidationResult, error) {
-	parts := strings.SplitN(url, "|", 3)
-	if len(parts) != 3 {
-		return jobs.ValidationResult{}, &jobs.RequestError{Code: "invalid_url", Message: "malformed test url"}
-	}
-	return jobs.ValidationResult{Type: parts[0], Storefront: parts[1], ID: parts[2]}, nil
+// newHTTPServer serves handler on a real local listener, checking every
+// response against the spec.
+func newHTTPServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(contract.Middleware(t, handler))
+	t.Cleanup(ts.Close)
+	return ts
 }
 
-func (stubProcessor) ProcessJob(context.Context, domain.Job, jobs.Reporter) error { return nil }
-
-func newTestServerWithManager(t *testing.T) *Server {
+// openStore opens a job store in a temporary directory, closed when the test
+// ends.
+func openStore(t *testing.T) *db.Store {
 	t.Helper()
 	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
-	return &Server{store: store, manager: manager}
+	return store
 }
 
-// newServer builds a Server through New, filling each required dependency
-// deps leaves nil: the default config, a store in a temp dir, a hub, a
-// manager over stubProcessor, and fakes for the services.
+// quietLogger drops every record; tests that check logs pass their own.
+var quietLogger = slog.New(slog.DiscardHandler)
+
+// newServer builds a Server through New, filling each dependency deps leaves
+// nil (see fillDeps).
 func newServer(t *testing.T, deps Deps) *Server {
+	t.Helper()
+	server, err := New(fillDeps(t, deps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server
+}
+
+// fillDeps fills each required dependency deps leaves nil: the default
+// config, a store in a temp dir, a hub, a manager over stubProcessor, and the
+// fakes of fakes_test.go. Logs are dropped unless deps.Logger is set. A test
+// that must reach a dependency the server builds (the manager, say) fills
+// deps first and keeps its own reference.
+func fillDeps(t *testing.T, deps Deps) Deps {
 	t.Helper()
 	if deps.Config == nil {
 		deps.Config = config.NewStore(config.Default())
 	}
 	if deps.Store == nil {
-		store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { store.Close() })
-		deps.Store = store
+		deps.Store = openStore(t)
 	}
 	if deps.Hub == nil {
 		deps.Hub = events.NewHub()
 	}
+	if deps.Logger == nil {
+		deps.Logger = quietLogger
+	}
 	if deps.Manager == nil {
-		deps.Manager = jobs.NewManager(deps.Store, deps.Hub, stubProcessor{}, 1, slog.Default())
+		deps.Manager = jobs.NewManager(deps.Store, deps.Hub, stubProcessor{}, 1, quietLogger)
 	}
 	if deps.Wrapper == nil {
 		deps.Wrapper = &fakeWrapperService{}
@@ -144,16 +108,12 @@ func newServer(t *testing.T, deps Deps) *Server {
 		deps.Catalog = &fakeCatalog{t: t}
 	}
 	if deps.Accounts == nil {
-		deps.Accounts = accounts.New(deps.Store, deps.Wrapper, deps.Tokens, deps.Config.Get, slog.Default())
+		deps.Accounts = accounts.New(deps.Store, deps.Wrapper, deps.Tokens, deps.Config.Get, quietLogger)
 	}
 	if deps.AppleLibrary == nil {
-		deps.AppleLibrary = applelibrary.NewSet(deps.Config, deps.Tokens, nil, deps.Store, deps.Accounts, slog.Default())
+		deps.AppleLibrary = applelibrary.NewSet(deps.Config, deps.Tokens, nil, deps.Store, deps.Accounts, quietLogger)
 	}
-	server, err := New(deps)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return server
+	return deps
 }
 
 // assertErrorCode checks a response against the error envelope

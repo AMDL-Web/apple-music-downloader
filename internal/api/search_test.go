@@ -52,7 +52,7 @@ func decodeBody(t *testing.T, body []byte) map[string]any {
 
 func TestSearchReturnsOneGroupPerType(t *testing.T) {
 	catalog := &fakeCatalog{t: t, search: sampleSearch()}
-	server := newLookupServer(catalog, func(c *config.Config) { c.Catalog.DefaultStorefront = "us" })
+	server := newLookupServer(t, catalog, func(c *config.Config) { c.Catalog.DefaultStorefront = "us" })
 	recorder := requestJSON(t, server, http.MethodGet, "/api/v1/search?term=%20Taylor%20%20Swift%20", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
@@ -103,7 +103,7 @@ func TestSearchReturnsOneGroupPerType(t *testing.T) {
 
 func TestSearchReadsOnlyTheRequestedTypes(t *testing.T) {
 	catalog := &fakeCatalog{t: t, search: sampleSearch()}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/search?term=a&types=albums,songs&types=albums&storefront=JP&limit=50&offset=20", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/search?term=a&types=albums,songs&types=albums&storefront=JP&limit=50&offset=20", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -121,7 +121,7 @@ func TestSearchReadsOnlyTheRequestedTypes(t *testing.T) {
 
 func TestSearchReadsPlaylistsBetweenAlbumsAndArtists(t *testing.T) {
 	catalog := &fakeCatalog{t: t, search: sampleSearch()}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/search?term=a&types=artists,playlists", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/search?term=a&types=artists,playlists", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -147,7 +147,7 @@ func TestSearchRefusesBadParameters(t *testing.T) {
 		"term=a&offset=-1",
 	} {
 		catalog := &fakeCatalog{t: t}
-		recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/search?"+query, "")
+		recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/search?"+query, "")
 		assertErrorCode(t, recorder, http.StatusBadRequest, CodeInvalidRequest)
 		if len(catalog.calls) != 0 {
 			t.Fatalf("%q read the catalog: %v", query, catalog.calls)
@@ -164,7 +164,7 @@ func TestSearchCatalogFailures(t *testing.T) {
 		{errors.New("Apple Music catalog search request in storefront us failed: 400 Bad Request"), http.StatusBadGateway, CodeUpstreamError},
 		{context.DeadlineExceeded, http.StatusGatewayTimeout, CodeUpstreamTimeout},
 	} {
-		recorder := requestJSON(t, newLookupServer(&fakeCatalog{t: t, err: c.err}, nil), http.MethodGet, "/api/v1/search?term=a", "")
+		recorder := requestJSON(t, newLookupServer(t, &fakeCatalog{t: t, err: c.err}, nil), http.MethodGet, "/api/v1/search?term=a", "")
 		assertErrorCode(t, recorder, c.status, c.code)
 	}
 }
@@ -202,7 +202,7 @@ func TestArtistAlbumsReturnsTheArtistAndOnePage(t *testing.T) {
 		artist: &applemusic.Artist{ID: "159260351", Name: "Taylor Swift", URL: "https://music.apple.com/us/artist/taylor-swift/159260351", GenreNames: []string{"Pop"}},
 		albums: &applemusic.AlbumPage{Albums: sampleSearch().Albums, NextOffset: 3},
 	}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/artists/159260351/albums?storefront=us&limit=2&offset=1", "")
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/artists/159260351/albums?storefront=us&limit=2&offset=1", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -230,7 +230,7 @@ func TestArtistAlbumsRefusesBadParameters(t *testing.T) {
 		"/api/v1/artists/1/albums?storefront=x",
 	} {
 		catalog := &fakeCatalog{t: t}
-		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
 		if len(catalog.calls) != 0 {
 			t.Fatalf("%s read the catalog: %v", path, catalog.calls)
 		}
@@ -239,5 +239,5 @@ func TestArtistAlbumsRefusesBadParameters(t *testing.T) {
 
 func TestArtistAlbumsUnknownArtist(t *testing.T) {
 	catalog := &fakeCatalog{t: t, err: notFoundError{}}
-	assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/artists/1/albums", ""), http.StatusNotFound, CodeCatalogNotFound)
+	assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/artists/1/albums", ""), http.StatusNotFound, CodeCatalogNotFound)
 }

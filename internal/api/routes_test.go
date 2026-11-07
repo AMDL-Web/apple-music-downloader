@@ -48,7 +48,7 @@ func specOperations(t *testing.T) []string {
 // directions. Routes outside /api/v1/ (the console) are not API operations.
 func TestRoutesMatchSpec(t *testing.T) {
 	var table []string
-	for _, rt := range (&Server{}).routes() {
+	for _, rt := range newServer(t, Deps{}).routes() {
 		if strings.HasPrefix(rt.pattern, "/api/v1/") {
 			table = append(table, rt.method+" "+pathParam.ReplaceAllString(rt.pattern, "{}"))
 		}
@@ -227,7 +227,7 @@ func TestRuntimeConfigSchemaMatchesRuntimeKeys(t *testing.T) {
 }
 
 func TestUnknownAPIPathIsRouteNotFound(t *testing.T) {
-	routes := (&Server{}).Routes()
+	routes := newServer(t, Deps{}).Routes()
 	// The last two were served for other clients and are gone on purpose.
 	for _, path := range []string{"/api/v1/nope", "/api/nope", "/api/v1/health/extra", "/api/v1/downloads/job1/nope", "/api/openapi.yaml", "/api/v1/developer-token"} {
 		recorder := requestJSON(t, routes, http.MethodGet, path, "")
@@ -242,7 +242,7 @@ func TestUnknownAPIPathIsRouteNotFound(t *testing.T) {
 // lists them (GET implies HEAD), in the error envelope rather than
 // http.ServeMux's plain text.
 func TestWrongMethodIsMethodNotAllowed(t *testing.T) {
-	routes := (&Server{}).Routes()
+	routes := newServer(t, Deps{}).Routes()
 	tests := []struct {
 		method, path, allow string
 	}{
@@ -266,12 +266,11 @@ func TestWrongMethodIsMethodNotAllowed(t *testing.T) {
 // The only client is the same-origin console: a cross-origin preflight gets
 // the ordinary 405 and no response carries CORS headers.
 func TestNoCrossOriginAccess(t *testing.T) {
-	routes := (&Server{}).Routes()
+	routes := newServer(t, Deps{}).Routes()
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/downloads", nil)
 	req.Header.Set("Origin", "https://web.example")
 	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
-	recorder := httptest.NewRecorder()
-	routes.ServeHTTP(recorder, req)
+	recorder := serve(t, routes, req)
 	assertErrorCode(t, recorder, http.StatusMethodNotAllowed, "method_not_allowed")
 	for name := range recorder.Header() {
 		if strings.HasPrefix(strings.ToLower(name), "access-control-") {
@@ -285,7 +284,7 @@ func TestNoCrossOriginAccess(t *testing.T) {
 func TestConsoleMount(t *testing.T) {
 	var gotPath string
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { gotPath = r.URL.Path })
-	routes := (&Server{console: stub}).Routes()
+	routes := newServer(t, Deps{Console: stub}).Routes()
 
 	recorder := requestJSON(t, routes, http.MethodGet, "/console/js/app.js", "")
 	if recorder.Code != http.StatusOK || gotPath != "/js/app.js" {
@@ -308,7 +307,7 @@ func TestConsoleMount(t *testing.T) {
 
 // Without a console the server is the API alone: / and /console/ are unknown.
 func TestNoConsole(t *testing.T) {
-	routes := (&Server{}).Routes()
+	routes := newServer(t, Deps{}).Routes()
 	for _, p := range []string{"/", "/console/"} {
 		if recorder := requestJSON(t, routes, http.MethodGet, p, ""); recorder.Code != http.StatusNotFound {
 			t.Errorf("GET %s without a console = %d, want 404", p, recorder.Code)

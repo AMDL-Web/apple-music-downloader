@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
 	"amdl/internal/applemusic"
@@ -18,101 +17,13 @@ import (
 	"amdl/internal/usertoken"
 )
 
-// fakeCatalog records the reads POST /lookup makes and answers from its
-// fields; a read whose result is unset fails the test.
-type fakeCatalog struct {
-	t        *testing.T
-	song     *applemusic.Song
-	album    *applemusic.Collection
-	playlist *applemusic.Collection
-	station  *applemusic.StationInfo
-	artist   *applemusic.Artist
-	search   *applemusic.SearchResults
-	albums   *applemusic.AlbumPage
-	err      error
-	// mu guards calls: GET /artists/{id}/albums reads the artist and the
-	// albums page at once.
-	mu    sync.Mutex
-	calls []string
-	token string
-	// searchToken is the media-user-token the last search carried.
-	searchToken string
-}
-
-func (f *fakeCatalog) record(method, storefront, id string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.calls = append(f.calls, fmt.Sprintf("%s %s/%s", method, storefront, id))
-	return f.err
-}
-
-func (f *fakeCatalog) SongMetadata(_ context.Context, storefront, id string) (applemusic.Song, error) {
-	if err := f.record("song", storefront, id); err != nil || f.song == nil {
-		return applemusic.Song{}, f.missing(err, "song")
-	}
-	return *f.song, nil
-}
-
-func (f *fakeCatalog) Album(_ context.Context, storefront, id string) (applemusic.Collection, error) {
-	if err := f.record("album", storefront, id); err != nil || f.album == nil {
-		return applemusic.Collection{}, f.missing(err, "album")
-	}
-	return *f.album, nil
-}
-
-func (f *fakeCatalog) Playlist(_ context.Context, storefront, id, mediaUserToken string) (applemusic.Collection, error) {
-	f.token = mediaUserToken
-	if err := f.record("playlist", storefront, id); err != nil || f.playlist == nil {
-		return applemusic.Collection{}, f.missing(err, "playlist")
-	}
-	return *f.playlist, nil
-}
-
-func (f *fakeCatalog) Station(_ context.Context, storefront, id string) (applemusic.StationInfo, error) {
-	if err := f.record("station", storefront, id); err != nil || f.station == nil {
-		return applemusic.StationInfo{}, f.missing(err, "station")
-	}
-	return *f.station, nil
-}
-
-func (f *fakeCatalog) Artist(_ context.Context, storefront, id string) (applemusic.Artist, error) {
-	if err := f.record("artist", storefront, id); err != nil || f.artist == nil {
-		return applemusic.Artist{}, f.missing(err, "artist")
-	}
-	return *f.artist, nil
-}
-
-func (f *fakeCatalog) Search(_ context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int, mediaUserToken string) (applemusic.SearchResults, error) {
-	f.mu.Lock()
-	f.searchToken = mediaUserToken
-	f.mu.Unlock()
-	if err := f.record("search", storefront, fmt.Sprintf("%s %v %d+%d", term, types, limit, offset)); err != nil || f.search == nil {
-		return applemusic.SearchResults{}, f.missing(err, "search")
-	}
-	return *f.search, nil
-}
-
-func (f *fakeCatalog) ArtistAlbumsPage(_ context.Context, storefront, id string, limit, offset int) (applemusic.AlbumPage, error) {
-	if err := f.record("artist albums", storefront, fmt.Sprintf("%s %d+%d", id, limit, offset)); err != nil || f.albums == nil {
-		return applemusic.AlbumPage{}, f.missing(err, "artist albums")
-	}
-	return *f.albums, nil
-}
-
-func (f *fakeCatalog) missing(err error, what string) error {
-	if err != nil {
-		return err
-	}
-	f.t.Errorf("unexpected %s read", what)
-	return errors.New("unexpected read")
-}
-
-func newLookupServer(catalog CatalogService, mutate func(*config.Config)) http.Handler {
+func newLookupServer(t *testing.T, catalog CatalogService, mutate func(*config.Config)) http.Handler {
+	t.Helper()
 	cfg := config.Default()
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	return (&Server{cfg: config.NewStore(cfg), catalog: catalog, appleLibrary: &fakeAppleLibrary{}}).Routes()
+	return newServer(t, Deps{Config: config.NewStore(cfg), Catalog: catalog, AppleLibrary: &fakeAppleLibrary{}}).Routes()
 }
 
 func decodeLookup(t *testing.T, body []byte) map[string]any {
@@ -134,7 +45,7 @@ func TestLookupAlbumReturnsLinkAndJobRowMetadata(t *testing.T) {
 		ContentRating: "explicit", AppleDigitalMaster: true, AudioTraits: []string{"lossless", "lossy-stereo"},
 		Tracks: make([]applemusic.Song, 12),
 	}}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodPost, "/api/v1/lookup",
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodPost, "/api/v1/lookup",
 		`{"url":"  https://music.apple.com/us/album/igor/1463409338  "}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
@@ -165,7 +76,7 @@ func TestLookupAlbumTrackLinkFollowsTrackMode(t *testing.T) {
 		GenreNames: []string{"Hip-Hop/Rap"}, DurationInMillis: 190067, ContentRating: "explicit",
 	}
 	catalog := &fakeCatalog{t: t, song: song}
-	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodPost, "/api/v1/lookup", `{"url":"`+link+`"}`)
+	recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodPost, "/api/v1/lookup", `{"url":"`+link+`"}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
@@ -183,7 +94,7 @@ func TestLookupAlbumTrackLinkFollowsTrackMode(t *testing.T) {
 	}
 
 	albumCatalog := &fakeCatalog{t: t, album: &applemusic.Collection{Name: "IGOR", Tracks: make([]applemusic.Song, 12)}}
-	albumMode := newLookupServer(albumCatalog, func(cfg *config.Config) { cfg.Catalog.AlbumTrackURLMode = "album" })
+	albumMode := newLookupServer(t, albumCatalog, func(cfg *config.Config) { cfg.Catalog.AlbumTrackURLMode = "album" })
 	recorder = requestJSON(t, albumMode, http.MethodPost, "/api/v1/lookup", `{"url":"`+link+`"}`)
 	got = decodeLookup(t, recorder.Body.Bytes())
 	if got["type"] != "album" || got["id"] != "1463409338" || got["track_id"] != "1463409349" {
@@ -197,8 +108,8 @@ func TestLookupPlaylistUsesTheWrapperTokenButNeverEchoesIt(t *testing.T) {
 	secret := strings.Repeat("S", 200)
 	playlist := &applemusic.Collection{Name: "Mix", Artist: "Apple Music Hip-Hop", ArtworkURL: "pl-art", Tracks: make([]applemusic.Song, 50)}
 	catalog := &fakeCatalog{t: t, playlist: playlist}
-	handler := (&Server{cfg: config.NewStore(config.Default()), catalog: catalog, appleLibrary: &fakeAppleLibrary{},
-		tokens: usertoken.NewReading(func(string) (string, error) { return " " + secret + " ", nil })}).Routes()
+	handler := newServer(t, Deps{Config: config.NewStore(config.Default()), Catalog: catalog, AppleLibrary: &fakeAppleLibrary{},
+		Tokens: usertoken.NewReading(func(string) (string, error) { return " " + secret + " ", nil })}).Routes()
 	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc"}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
@@ -229,8 +140,8 @@ func TestLookupReadsInTheAccountStorefront(t *testing.T) {
 	catalog := &fakeCatalog{t: t, album: &applemusic.Collection{ID: "1463409338", Name: "IGOR", Tracks: make([]applemusic.Song, 9)},
 		station: &applemusic.StationInfo{Name: "Chill Station", Format: "tracks"}}
 	cfg := config.Default()
-	handler := (&Server{cfg: config.NewStore(cfg), catalog: catalog, appleLibrary: &fakeAppleLibrary{},
-		accountStorefront: func(context.Context) (string, error) { return "cn", nil }}).Routes()
+	handler := newServer(t, Deps{Config: config.NewStore(cfg), Catalog: catalog, AppleLibrary: &fakeAppleLibrary{},
+		AccountStorefront: func(context.Context) (string, error) { return "cn", nil }}).Routes()
 
 	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/album/igor/1463409338"}`)
 	got := decodeLookup(t, recorder.Body.Bytes())
@@ -245,7 +156,7 @@ func TestLookupReadsInTheAccountStorefront(t *testing.T) {
 
 func TestLookupStationAndArtist(t *testing.T) {
 	station := &fakeCatalog{t: t, station: &applemusic.StationInfo{Name: "Chill Station", ArtworkURL: "st-art", Format: "tracks"}}
-	recorder := requestJSON(t, newLookupServer(station, nil), http.MethodPost, "/api/v1/lookup",
+	recorder := requestJSON(t, newLookupServer(t, station, nil), http.MethodPost, "/api/v1/lookup",
 		`{"url":"https://music.apple.com/us/station/chill/ra.123"}`)
 	got := decodeLookup(t, recorder.Body.Bytes())
 	if recorder.Code != http.StatusOK || got["curator_name"] != applemusic.StationCuratorName || got["needs_media_user_token"] != true || got["track_count"] != nil {
@@ -253,12 +164,12 @@ func TestLookupStationAndArtist(t *testing.T) {
 	}
 
 	live := &fakeCatalog{t: t, station: &applemusic.StationInfo{Name: "Apple Music 1", Format: "stream", IsLive: true}}
-	recorder = requestJSON(t, newLookupServer(live, nil), http.MethodPost, "/api/v1/lookup",
+	recorder = requestJSON(t, newLookupServer(t, live, nil), http.MethodPost, "/api/v1/lookup",
 		`{"url":"https://music.apple.com/us/station/apple-music-1/ra.978194965"}`)
 	assertLookupErrorLink(t, recorder, http.StatusBadRequest, CodeInvalidRequest, "station")
 
 	artist := &fakeCatalog{t: t, artist: &applemusic.Artist{Name: "Taylor Swift", URL: "https://music.apple.com/us/artist/159260351", GenreNames: []string{"Music", "Pop"}, ArtworkURL: "ar-art"}}
-	recorder = requestJSON(t, newLookupServer(artist, nil), http.MethodPost, "/api/v1/lookup",
+	recorder = requestJSON(t, newLookupServer(t, artist, nil), http.MethodPost, "/api/v1/lookup",
 		`{"url":"https://music.apple.com/us/artist/taylor-swift/159260351"}`)
 	got = decodeLookup(t, recorder.Body.Bytes())
 	if recorder.Code != http.StatusOK || got["title"] != "Taylor Swift" || got["artist_name"] != "Taylor Swift" ||
@@ -269,7 +180,7 @@ func TestLookupStationAndArtist(t *testing.T) {
 
 func TestLookupRejectsLinksItCannotDownload(t *testing.T) {
 	catalog := &fakeCatalog{t: t}
-	handler := newLookupServer(catalog, nil)
+	handler := newLookupServer(t, catalog, nil)
 	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup",
 		`{"url":"https://music.apple.com/us/music-video/never-gonna-give-you-up/1558533900"}`)
 	assertLookupErrorLink(t, recorder, http.StatusBadRequest, CodeInvalidRequest, "music-video")
@@ -295,23 +206,13 @@ func TestLookupRejectsLinksItCannotDownload(t *testing.T) {
 func TestLookupCatalogFailures(t *testing.T) {
 	const link = `{"url":"https://music.apple.com/us/album/igor/1463409338"}`
 	upstream := &fakeCatalog{t: t, err: errors.New("catalog request failed: 500 Internal Server Error")}
-	recorder := requestJSON(t, newLookupServer(upstream, nil), http.MethodPost, "/api/v1/lookup", link)
+	recorder := requestJSON(t, newLookupServer(t, upstream, nil), http.MethodPost, "/api/v1/lookup", link)
 	assertLookupErrorLink(t, recorder, http.StatusBadGateway, CodeUpstreamError, "album")
 
 	slow := &fakeCatalog{t: t, err: fmt.Errorf("get album: %w", context.DeadlineExceeded)}
-	recorder = requestJSON(t, newLookupServer(slow, nil), http.MethodPost, "/api/v1/lookup", link)
+	recorder = requestJSON(t, newLookupServer(t, slow, nil), http.MethodPost, "/api/v1/lookup", link)
 	assertLookupErrorLink(t, recorder, http.StatusGatewayTimeout, CodeUpstreamTimeout, "album")
 }
-
-// notFoundError stands in for Apple's 404, which internal/applemusic reports
-// through a NotFound marker.
-type notFoundError struct{}
-
-func (notFoundError) Error() string {
-	return "Apple Music has no album 1463409338 in storefront us (404)"
-}
-
-func (notFoundError) NotFound() bool { return true }
 
 func TestLookupMissingIDIsNotFoundAndNoWarning(t *testing.T) {
 	const link = `{"url":"https://music.apple.com/us/album/igor/1463409338"}`
@@ -325,10 +226,10 @@ func TestLookupMissingIDIsNotFoundAndNoWarning(t *testing.T) {
 		{errors.New("Apple Music request for album 1463409338 in storefront us failed: 503 Service Unavailable"), http.StatusBadGateway, CodeUpstreamError, "level=WARN"},
 	} {
 		var logs strings.Builder
-		server := &Server{
-			cfg: config.NewStore(config.Default()), catalog: &fakeCatalog{t: t, err: tt.err},
-			logger: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		}
+		server := newServer(t, Deps{
+			Config: config.NewStore(config.Default()), Catalog: &fakeCatalog{t: t, err: tt.err},
+			Logger: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		})
 		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/lookup", link)
 		assertLookupErrorLink(t, recorder, tt.status, tt.code, "album")
 		if line := logs.String(); !strings.Contains(line, "lookup failed") || !strings.Contains(line, tt.logLevel) {

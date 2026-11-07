@@ -2,17 +2,16 @@ package api
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"amdl/internal/hookpreset"
 	"amdl/internal/hooks"
-	"amdl/internal/jobs"
 )
 
 const hooksFile = `enabled: false
@@ -35,10 +34,64 @@ func hooksServer(t *testing.T) (http.Handler, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := hooks.NewDispatcher(cfg, nil, slog.Default())
-	manager := jobs.NewManager(nil, nil, nil, 1, slog.Default())
-	manager.SetHooks(d)
-	return (&Server{manager: manager, hooks: hooks.NewEditor(path, d)}).Routes(), path
+	d := hooks.NewDispatcher(cfg, nil, quietLogger)
+	deps := fillDeps(t, Deps{Hooks: hooks.NewEditor(path, d)})
+	deps.Manager.SetHooks(d)
+	return newServer(t, deps).Routes(), path
+}
+
+// GET /hooks lists the dispatcher's entries without their secrets: no
+// address, header values, command or working directory.
+func TestHooksListingHidesSecrets(t *testing.T) {
+	t.Run("configured entries", func(t *testing.T) {
+		disabled := false
+		deps := fillDeps(t, Deps{})
+		deps.Manager.SetHooks(hooks.NewDispatcher(hooks.Config{Enabled: true, Entries: []hooks.Entry{
+			{
+				Name: "notify", Type: "webhook", Events: []string{"job_finished"},
+				URL: "https://secret.example/token", Headers: map[string]string{"Authorization": "Bearer secret"},
+			},
+			{
+				Name: "cleanup", Enabled: &disabled, Type: "exec", Events: []string{"job_failed"}, JobTypes: []string{"album"},
+				Command: "secret-command --token abc", Workdir: "/secret/workdir",
+			},
+		}}, nil, quietLogger))
+
+		recorder := requestJSON(t, newServer(t, deps).Routes(), http.MethodGet, "/api/v1/hooks", "")
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+		}
+		var got hooks.Listing
+		if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		want := hooks.Listing{Enabled: true, Entries: []hooks.ListedEntry{
+			{Name: "notify", Enabled: true, Type: "webhook", Events: []string{"job_finished"}, JobTypes: []string{},
+				Method: "POST", Origin: "https://secret.example", HeaderNames: []string{"Authorization"}, MaxAttempts: 1},
+			{Name: "cleanup", Enabled: false, Type: "exec", Events: []string{"job_failed"}, JobTypes: []string{"album"}},
+		}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("response = %+v, want %+v", got, want)
+		}
+		body := recorder.Body.String()
+		for _, forbidden := range []string{
+			"https://secret.example/token", "Bearer secret", "secret-command --token abc", "/secret/workdir",
+		} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("response exposes forbidden hook configuration %q: %s", forbidden, body)
+			}
+		}
+	})
+
+	t.Run("missing configuration", func(t *testing.T) {
+		recorder := requestJSON(t, newServer(t, Deps{}).Routes(), http.MethodGet, "/api/v1/hooks", "")
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+		}
+		if got := strings.TrimSpace(recorder.Body.String()); got != `{"enabled":false,"entries":[]}` {
+			t.Fatalf("body = %s, want disabled hooks with an empty array", got)
+		}
+	})
 }
 
 func TestHookWritesChangeOnlyWebhooks(t *testing.T) {
@@ -113,7 +166,7 @@ func TestHookWritesRefuseCommandsAndBadEntries(t *testing.T) {
 	}
 
 	// A process without a hooks.yaml path cannot write one.
-	assertErrorCode(t, requestJSON(t, (&Server{}).Routes(), http.MethodPut, "/api/v1/hooks", `{"enabled":true}`),
+	assertErrorCode(t, requestJSON(t, newServer(t, Deps{}).Routes(), http.MethodPut, "/api/v1/hooks", `{"enabled":true}`),
 		http.StatusServiceUnavailable, CodeFeatureUnavailable)
 }
 
