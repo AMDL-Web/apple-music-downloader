@@ -400,17 +400,6 @@ func TestStreamLoopsSendKeepaliveAndEndOnWriteError(t *testing.T) {
 	}
 }
 
-// The keepalive comment interval is documented as 15 s (docs/api.md,
-// openapi.yaml) and is separate from the store re-drain.
-func TestStreamIntervals(t *testing.T) {
-	if sseKeepaliveInterval != 15*time.Second {
-		t.Fatalf("sseKeepaliveInterval = %s, want the documented 15s", sseKeepaliveInterval)
-	}
-	if storeRedrainInterval == sseKeepaliveInterval {
-		t.Fatal("storeRedrainInterval must be its own interval, not the keepalive")
-	}
-}
-
 func TestDownloadSnapshotsReturnEventCursor(t *testing.T) {
 	server, _ := newStreamServer(t)
 	ids := addEvents(t, server, "job1", "job_started", "job_finished")

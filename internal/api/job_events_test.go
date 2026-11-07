@@ -220,15 +220,11 @@ func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 	if err := manager.Event(ctx, domain.Event{JobID: job.ID, Type: "job_finished", Message: "completed"}); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the hook that finalizeJob would have fired for this terminal job.
+	// Simulate the hook that finalizeJob would have fired for this terminal
+	// job. Dispatch counts it pending before it returns.
 	dispatcher.Dispatch("job_finished", job, nil)
-	deadline := time.After(2 * time.Second)
-	for !dispatcher.Pending(job.ID) {
-		select {
-		case <-deadline:
-			t.Fatal("hook never became pending")
-		case <-time.After(time.Millisecond):
-		}
+	if !dispatcher.Pending(job.ID) {
+		t.Fatal("the dispatched hook is not pending")
 	}
 
 	ts := newHTTPServer(t, server.Routes())
@@ -272,15 +268,14 @@ func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 	if got := readEventType(); got != "hook_succeeded" {
 		t.Fatalf("third event = %q, want hook_succeeded", got)
 	}
+	// Once the hook is no longer pending the stream has nothing left to wait
+	// for and ends; reading to EOF waits for exactly that.
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		t.Fatalf("the stream did not end after the hook finished: %v", err)
+	}
 	resp.Body.Close()
-
-	deadline = time.After(2 * time.Second)
-	for dispatcher.Pending(job.ID) {
-		select {
-		case <-deadline:
-			t.Fatal("hook never stopped being pending after completing")
-		case <-time.After(time.Millisecond):
-		}
+	if dispatcher.Pending(job.ID) {
+		t.Fatal("the stream ended while the hook was still pending")
 	}
 
 	// The hook is done and the job was already terminal: a fresh, fully
