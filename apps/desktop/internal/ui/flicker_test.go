@@ -184,6 +184,8 @@ func liveApp(t *testing.T, s mode.Settings) (*App, func(until func() bool)) {
 	srv := httptest.NewServer(http.HandlerFunc(fakeAmdl))
 	t.Cleanup(srv.Close)
 	a, _ := newTestApp(s)
+	// A flash of the light counts as one of anything else.
+	a.FlatBackdrop = false
 	queue := make(chan func(), 256)
 	a.Store = store.New(func(fn func()) { queue <- fn }, nil)
 	c, err := client.New(srv.URL)

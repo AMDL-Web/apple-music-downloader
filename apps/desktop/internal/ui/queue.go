@@ -48,6 +48,7 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 			b, b.From, b.Mix = from, &from, 0
 		}
 	}
+	b.Flat = a.FlatBackdrop
 	b.Show(c)
 }
 

@@ -112,6 +112,11 @@ type App struct {
 	// the CPU many times slower than the rest of a frame: tests that look
 	// at the edges set it.
 	EdgeFades bool
+	// FlatBackdrop leaves the backdrop's lit discs out (widgets.Backdrop's
+	// Flat), whose shader a headless Tester runs on the CPU for every pixel
+	// of every frame, a frame's most part: tests that do not look at the
+	// light set it.
+	FlatBackdrop bool
 
 	Screen Screen
 	// trail holds the screens Back returns to, the last one on top: the

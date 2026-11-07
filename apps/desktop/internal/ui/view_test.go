@@ -66,7 +66,8 @@ func newTestApp(s mode.Settings) (*App, *fakeActions) {
 	post := func(fn func()) { fn() }
 	act := &fakeActions{}
 	su, _ := fakeSetup(post)
-	return &App{Store: store.New(post, nil), Art: artwork.New(post), Settings: s, Act: act, Theme: "dark", Setup: su}, act
+	// The backdrop's light is drawn only by the tests that look at it.
+	return &App{Store: store.New(post, nil), Art: artwork.New(post), Settings: s, Act: act, Theme: "dark", Setup: su, FlatBackdrop: true}, act
 }
 
 func TestQueueWaitsForTheFirstList(t *testing.T) {

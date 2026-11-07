@@ -65,7 +65,7 @@ func TestAShortWindowKeepsThreeRowsOfTheQueue(t *testing.T) {
 // few levels.
 func TestTheQueueBarLetsTheLightFadeIn(t *testing.T) {
 	a, run := demoApp(t)
-	a.Theme = "light"
+	a.Theme, a.FlatBackdrop = "light", false
 	run(func() bool { return a.Store.Loaded && a.Store.Now() != nil })
 	a.Go(ScreenQueue)
 	tt := ui.NewTester(a.View, 1280, 800)
