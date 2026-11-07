@@ -241,25 +241,14 @@ func (r *rig) albumIDs() []string {
 	return out
 }
 
-// knownDefects names, per check of one step, the checklist item whose
-// defect fails it; the item's fix removes the entry.
-type knownDefects map[string]string
-
 // check reads every surface and asserts that they agree, each kind of
-// agreement in its own subtest so one known defect hides no other.
-func (r *rig) check(step string, known ...knownDefects) surfaces {
+// agreement in its own subtest so one failure hides no other.
+func (r *rig) check(step string) surfaces {
 	r.t.Helper()
 	r.settled()
 	s := r.read()
 	run := func(name string, f func(t *testing.T)) {
-		r.t.Run(step+"/"+name, func(t *testing.T) {
-			for _, k := range known {
-				if item, ok := k[name]; ok {
-					t.Skipf("known defect, checklist %s", item)
-				}
-			}
-			f(t)
-		})
+		r.t.Run(step+"/"+name, f)
 	}
 	run("queue", func(t *testing.T) {
 		hist := domain.JobStatusCounts{Total: len(s.runs)}
