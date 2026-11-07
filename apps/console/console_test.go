@@ -492,6 +492,44 @@ func TestAPIPathsExistInSpec(t *testing.T) {
 	}
 }
 
+// requestCall is a call of the console's request(method, path, ...) helper.
+var requestCall = regexp.MustCompile("request\\(\\s*'([A-Z]+)',\\s*['`](/api/v1/(?:[A-Za-z0-9_\\-./]|\\$\\{[^}]*\\})*)['`]")
+
+// Every request(method, path) the console makes is an operation of
+// internal/api/openapi.yaml with that method, so a route that moved to another
+// method fails here, not with a 405 in a browser.
+func TestAPICallsAreSpecOperations(t *testing.T) {
+	raw, err := os.ReadFile("../../internal/api/openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec struct {
+		Paths map[string]map[string]any `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(raw, &spec); err != nil {
+		t.Fatal(err)
+	}
+	ops := map[string]bool{}
+	for p, item := range spec.Paths {
+		for method := range item {
+			ops[strings.ToUpper(method)+" "+specParam.ReplaceAllString(p, "{param}")] = true
+		}
+	}
+	calls := 0
+	for name, src := range jsFiles(t) {
+		for _, m := range requestCall.FindAllStringSubmatch(src, -1) {
+			calls++
+			op := m[1] + " " + strings.TrimRight(templateArg.ReplaceAllString(m[2], "{param}"), "/.")
+			if !ops[op] {
+				t.Errorf("%s calls %s, which is not an operation of internal/api/openapi.yaml", name, op)
+			}
+		}
+	}
+	if calls < 30 {
+		t.Fatalf("found only %d request() calls in static/js; the pattern is broken and the guard would pass vacuously", calls)
+	}
+}
+
 var (
 	componentTag  = regexp.MustCompile(`"component",\s*"([a-z_]+)"`)
 	logComponents = regexp.MustCompile(`export const LOG_COMPONENTS = \[([^\]]*)\]`)
