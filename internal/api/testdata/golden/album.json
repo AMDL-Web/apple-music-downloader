@@ -1,0 +1,59 @@
+{
+  "apple_digital_master": true,
+  "artist_name": "Some Artist",
+  "artist_url": "https://music.apple.com/cn/artist/some-artist/42",
+  "artwork_bg_color": "101010",
+  "artwork_text_color1": "f1f1f1",
+  "artwork_text_color2": "e2e2e2",
+  "artwork_text_color3": "d3d3d3",
+  "artwork_text_color4": "c4c4c4",
+  "artwork_url": "https://is1.mzstatic.com/a/{w}x{h}bb.jpg",
+  "audio_traits": [
+    "lossless",
+    "lossy-stereo"
+  ],
+  "content_rating": "explicit",
+  "disc_count": 2,
+  "genre": "Pop",
+  "id": "1783644603",
+  "release_date": "2026-01-02",
+  "storefront": "cn",
+  "title": "Two Discs",
+  "track_count": 3,
+  "tracks": [
+    {
+      "artist_name": "Some Artist",
+      "disc_number": 1,
+      "duration_ms": 190000,
+      "id": "10",
+      "name": "Opener",
+      "track_number": 1,
+      "url": "https://music.apple.com/cn/song/10"
+    },
+    {
+      "apple_digital_master": true,
+      "artist_name": "Some Artist feat. Guest",
+      "audio_traits": [
+        "lossless"
+      ],
+      "content_rating": "explicit",
+      "disc_number": 1,
+      "duration_ms": 200500,
+      "has_lyrics": true,
+      "id": "11",
+      "name": "Closer",
+      "track_number": 2,
+      "url": "https://music.apple.com/cn/song/two-discs/11"
+    },
+    {
+      "artist_name": "Some Artist",
+      "disc_number": 2,
+      "duration_ms": 181000,
+      "id": "12",
+      "name": "Second Disc Opener",
+      "track_number": 1,
+      "url": "https://music.apple.com/cn/song/two-discs/12"
+    }
+  ],
+  "url": "https://music.apple.com/cn/album/1783644603"
+}

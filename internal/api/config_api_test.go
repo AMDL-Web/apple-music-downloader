@@ -14,59 +14,17 @@ import (
 	"amdl/internal/logging"
 )
 
+// GET /config answers every runtime key of the default config (restart keys
+// included) and none of the file-only sections (server, database, tools),
+// with persisted false: an in-memory store writes nothing back. The golden
+// body pins every key and default; a changed default shows up in its diff.
 func TestGetConfigReturnsEditableFields(t *testing.T) {
 	server := newServer(t, Deps{Config: config.NewStore(config.Default())})
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/config", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	var resp struct {
-		Config    map[string]json.RawMessage `json:"config"`
-		Persisted bool                       `json:"persisted"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Persisted {
-		t.Fatal("persisted = true, runtime config is never written back to disk")
-	}
-	for _, section := range []string{"catalog", "download", "logging", "simulate", "wrapper"} {
-		if _, ok := resp.Config[section]; !ok {
-			t.Fatalf("config missing mutable section %q: %s", section, recorder.Body.String())
-		}
-	}
-	for _, section := range []string{"server", "database", "tools"} {
-		if _, ok := resp.Config[section]; ok {
-			t.Fatalf("config exposes file-only section %q: %s", section, recorder.Body.String())
-		}
-	}
-	var download map[string]any
-	if err := json.Unmarshal(resp.Config["download"], &download); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"max_running_jobs", "max_parallel_downloads"} {
-		if _, ok := download[key]; !ok {
-			t.Fatalf("download section lacks the restart key %s", key)
-		}
-	}
-	if download["cover_format"] != "jpg" {
-		t.Fatalf("download.cover_format = %v, want jpg", download["cover_format"])
-	}
-	var catalog map[string]any
-	if err := json.Unmarshal(resp.Config["catalog"], &catalog); err != nil {
-		t.Fatal(err)
-	}
-	if len(catalog) != 6 || catalog["album_track_url_mode"] != "song" ||
-		catalog["motion_artwork_enabled"] != true || catalog["language"] != "zh-Hans_CN" {
-		t.Fatalf("catalog section = %v, want every catalog key", catalog)
-	}
-	var logging map[string]any
-	if err := json.Unmarshal(resp.Config["logging"], &logging); err != nil {
-		t.Fatal(err)
-	}
-	if len(logging) != 4 || logging["level"] != "info" || logging["access_log"] != false || logging["console"] != true {
-		t.Fatalf("logging section = %v, want every logging key", logging)
-	}
+	assertGolden(t, "config_default", recorder.Body.Bytes())
 }
 
 func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {

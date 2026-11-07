@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 	"testing"
@@ -40,43 +39,10 @@ func TestAlbumReturnsMetadataAndTracksInDiscOrder(t *testing.T) {
 	if want := []string{"album cn/1783644603"}; !reflect.DeepEqual(catalog.calls, want) {
 		t.Fatalf("catalog calls = %v, want %v", catalog.calls, want)
 	}
-	got := decodeBody(t, recorder.Body.Bytes())
-	tracks, _ := got["tracks"].([]any)
-	delete(got, "tracks")
-	want := map[string]any{
-		"storefront": "cn", "id": "1783644603", "url": "https://music.apple.com/cn/album/1783644603",
-		"title": "Two Discs", "artist_name": "Some Artist", "artist_url": "https://music.apple.com/cn/artist/some-artist/42",
-		"artwork_url": "https://is1.mzstatic.com/a/{w}x{h}bb.jpg", "artwork_bg_color": "101010",
-		"artwork_text_color1": "f1f1f1", "artwork_text_color2": "e2e2e2", "artwork_text_color3": "d3d3d3", "artwork_text_color4": "c4c4c4",
-		"release_date": "2026-01-02", "genre": "Pop", "track_count": float64(3), "disc_count": float64(2),
-		"content_rating": "explicit", "apple_digital_master": true, "audio_traits": []any{"lossless", "lossy-stereo"},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("album = %v\nwant %v", got, want)
-	}
-	var order []string
-	for _, tr := range tracks {
-		m := tr.(map[string]any)
-		order = append(order, fmt.Sprintf("%v.%v=%v", m["disc_number"], m["track_number"], m["id"]))
-	}
-	if want := []string{"1.1=10", "1.2=11", "2.1=12"}; !reflect.DeepEqual(order, want) {
-		t.Fatalf("track order = %v, want %v", order, want)
-	}
-	second := tracks[1].(map[string]any)
-	wantTrack := map[string]any{
-		"id": "11", "url": "https://music.apple.com/cn/song/two-discs/11", "disc_number": float64(1), "track_number": float64(2),
-		"name": "Closer", "artist_name": "Some Artist feat. Guest", "duration_ms": float64(200500), "content_rating": "explicit",
-		"apple_digital_master": true, "audio_traits": []any{"lossless"}, "has_lyrics": true,
-	}
-	if !reflect.DeepEqual(second, wantTrack) {
-		t.Fatalf("track = %v\nwant %v", second, wantTrack)
-	}
-	// A track whose catalog entry has no page falls back to a built link and
-	// leaves the optional fields out.
-	first := tracks[0].(map[string]any)
-	if want := map[string]any{"id": "10", "url": "https://music.apple.com/cn/song/10", "disc_number": float64(1), "track_number": float64(1), "name": "Opener", "artist_name": "Some Artist", "duration_ms": float64(190000)}; !reflect.DeepEqual(first, want) {
-		t.Fatalf("track = %v\nwant %v", first, want)
-	}
+	// The golden body pins the metadata, the palette, the tracks sorted by
+	// disc then track number, and the built link (without the optional
+	// fields) of a track whose catalog entry has no page.
+	assertGolden(t, "album", recorder.Body.Bytes())
 }
 
 func TestAlbumWithoutSongsAnswersAnEmptyList(t *testing.T) {
