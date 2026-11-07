@@ -108,17 +108,21 @@ func TestWidevineDecryptStreamsRealCENCToFlatFile(t *testing.T) {
 		t.Fatalf("streamed AAC-LC output failed integrity check: %v", err)
 	}
 
-	decode := func(path string) []byte {
-		t.Helper()
-		cmd := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:a:0", "-f", "s16le", "pipe:1")
-		pcm, err := cmd.Output()
-		if err != nil {
-			t.Fatalf("decode %s: %v", filepath.Base(path), err)
-		}
-		return pcm
+	// Decryption must be lossless: every AAC access unit and its duration
+	// survives the decrypt+flatten unchanged. Compare the coded samples, not
+	// decoded PCM: the flat file carries an edit list that newer ffmpeg (9.x)
+	// honours by trimming the padding of the last frame, while the fragmented
+	// source has none, so decoded PCM lengths differ by ffmpeg version even
+	// though the audio is identical.
+	got, want := readAudioSamples(t, flatPath), readAudioSamples(t, plainPath)
+	if len(want) == 0 || len(got) != len(want) {
+		t.Fatalf("streamed AAC-LC output has %d samples, want %d", len(got), len(want))
 	}
-	if got, want := decode(flatPath), decode(plainPath); !bytes.Equal(got, want) {
-		t.Fatalf("streamed AAC-LC audio differs: got %d PCM bytes, want %d", len(got), len(want))
+	for i := range want {
+		if got[i].dur != want[i].dur || !bytes.Equal(got[i].data, want[i].data) {
+			t.Fatalf("sample %d differs: got %d bytes/dur %d, want %d bytes/dur %d",
+				i, len(got[i].data), got[i].dur, len(want[i].data), want[i].dur)
+		}
 	}
 	if fixDirs, err := filepath.Glob(filepath.Join(tmp, "fix-*")); err != nil {
 		t.Fatal(err)
