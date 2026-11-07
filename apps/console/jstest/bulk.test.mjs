@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runLimited } from '../static/js/lib/bulk.js';
 
-const tick = (ms) => new Promise((r) => setTimeout(r, ms));
+// Yields n microtask turns: calls that wait longer settle later, in a fixed
+// order and without a timer.
+const tick = async (n) => {
+  for (let i = 0; i < n; i++) await null;
+};
 
 test('runLimited never has more than n calls in flight', async () => {
   let live = 0;
