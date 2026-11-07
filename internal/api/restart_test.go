@@ -143,7 +143,7 @@ func TestRuntimeConfigMarksRestartKeys(t *testing.T) {
 			Schemas map[string]property `yaml:"schemas"`
 		} `yaml:"components"`
 	}
-	if err := yaml.Unmarshal(openAPISpec, &spec); err != nil {
+	if err := yaml.Unmarshal(OpenAPI, &spec); err != nil {
 		t.Fatal(err)
 	}
 	marked := 0

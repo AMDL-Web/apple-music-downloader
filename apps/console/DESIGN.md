@@ -106,9 +106,7 @@ Siblings are spaced by the parent's `gap` (`--page-gap` between sections,
 `--grid-gap` inside grids, `--card-gap` inside cards), never by child margins.
 No horizontal page scroll at 390 px in either theme.
 
-The music skin's rhythm, the same on every page; the ui-audit tool's
-`rhythm` check (`apps/console/tools/ui-audit/console/audit.config.mjs`) measures it and
-flags a page that differs:
+The music skin's rhythm, the same on every page:
 
 | Relationship (px) | ≥1024 | 640-1023 | <640 | Set by |
 | --- | --- | --- | --- | --- |

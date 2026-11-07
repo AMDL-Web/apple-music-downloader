@@ -39,7 +39,6 @@ fit a Go open-source backend with English docs.
 | One named gate shared by CI and local runs | `Makefile` | adapted | `make check` instead of a shell runner; CI calls each target as its own step. |
 | Docker build before a release can tag | `.github/workflows/ci.yml` | adopted | Single-arch build without push. |
 | Contract drift test derived from the real router | internal/api route/OpenAPI parity test | adopted | Lands separately in internal/api. |
-| Revert proof script | `tools/revertproof` | adapted | A Go tool reading `go test -json`; it also repeats the green run and runs it on one CPU to catch flaky tests. |
 | Verify Action with receipts, verifier and judge models | none | not adopting | Heavy for a repo where most work lands on `dev` directly. |
 | Merge-message generator and merge-method hook | none | not adopting | The release flow and DCO already define merges. |
 | Path-based PR tiers and labels | none | not adopting | Same reason. |

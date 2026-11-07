@@ -75,7 +75,5 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | dev, main | Work lands on `dev`; `main` changes only through the release PR | [CONTRIBUTING.md](CONTRIBUTING.md#branches) |
 | DCO sign-off | The `Signed-off-by` trailer every commit needs (`git commit -s`) | [CONTRIBUTING.md](CONTRIBUTING.md#sign-off-dco) |
-| Move-only split | Moving declarations between files of one package with no code change, proven by `tools/splitdecls` verify | `tools/splitdecls` |
-| Revert proof | `tools/revertproof`: a regression test must fail an assertion with the fix reverted, then pass every repeat at HEAD | `tools/revertproof` |
 | Repo checks | Go tests that keep docs pointers honest | `tools/repocheck` |
 | Dev server | `make dev`: simulate mode on 127.0.0.1:18080 with data under `data/dev/` | `Makefile#dev` |

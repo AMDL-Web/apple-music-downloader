@@ -3,7 +3,7 @@
 # upgrade does: a server install (serve, simulate mode), the embedded backend
 # the desktop app and --server embedded run, and a desktop install whose local
 # wrapper is still the retired bare-lite guest (installed.json without a kind,
-# plus an account disk; legacy-guest.sh). The amdl-release skill runs it before
+# plus an account disk; legacy-guest.sh). The release process runs it before
 # the release PR; ci.yml runs it on every push and pull request.
 #
 # Usage: tools/upgradecheck/run.sh <previous-version> <candidate-amdl>

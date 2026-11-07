@@ -29,7 +29,7 @@ import (
 const wantCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; " +
 	"media-src 'self' https: blob:; connect-src 'self' https://mvod.itunes.apple.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
-// vendorFile and vendorSHA256 pin the vendored Preact+htm bundle; see AGENTS.md.
+// vendorFile and vendorSHA256 pin the vendored Preact+htm bundle.
 const (
 	vendorFile   = "vendor/htm-preact-standalone-3.1.1.mjs"
 	vendorSHA256 = "72284e8e9079c87817145df1110f74e8a2aa040b2fc384922e18dfcb46fc1fd7"
@@ -213,7 +213,7 @@ func TestHeadAndMethods(t *testing.T) {
 func TestVendorChecksum(t *testing.T) {
 	sum := sha256.Sum256([]byte(readStatic(t, vendorFile)))
 	if got := hex.EncodeToString(sum[:]); got != vendorSHA256 {
-		t.Fatalf("%s sha256 = %s, want %s; the vendored file must stay byte-identical to upstream (see AGENTS.md)", vendorFile, got, vendorSHA256)
+		t.Fatalf("%s sha256 = %s, want %s; the vendored file must stay byte-identical to upstream", vendorFile, got, vendorSHA256)
 	}
 }
 

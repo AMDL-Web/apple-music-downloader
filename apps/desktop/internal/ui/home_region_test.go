@@ -1,10 +1,8 @@
 package ui
 
 import (
-	"fmt"
 	"image/png"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -116,36 +114,6 @@ func TestThreeRegionsAreAMenu(t *testing.T) {
 	tt.Frame()
 	if a.Store.Search.Region != "gb" {
 		t.Errorf("chosen %q after picking United Kingdom", a.Store.Search.Region)
-	}
-}
-
-// TestRenderSearchRegionShots writes the search page with the switch into
-// $RENDER_DIR, to look at without running the app.
-func TestRenderSearchRegionShots(t *testing.T) {
-	dir := os.Getenv("RENDER_DIR")
-	if dir == "" {
-		t.Skip("RENDER_DIR names where the shots go")
-	}
-	if err := RegisterFonts(); err != nil {
-		t.Fatal(err)
-	}
-	for _, theme := range []string{"dark", "light"} {
-		for _, size := range [][2]int{{1280, 800}, {820, 560}} {
-			for _, v := range []struct {
-				name    string
-				regions []string
-				none    bool
-			}{{"pair", []string{"cn", "jp"}, false}, {"menu", []string{"us", "jp", "gb"}, false}, {"none", []string{"cn", "jp"}, true}} {
-				a, tt := searchWithRegions(theme, size[0], size[1], v.regions...)
-				a.Store.Search.Region = "jp"
-				if v.none {
-					a.Store.Search.Result = &client.SearchResult{}
-				}
-				tt.SetScale(2)
-				tt.Frame()
-				shot(t, tt, filepath.Join(dir, fmt.Sprintf("search-region-%s-%s-%d.png", v.name, theme, size[0])))
-			}
-		}
 	}
 }
 

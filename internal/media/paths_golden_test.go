@@ -15,8 +15,8 @@ import (
 
 // The goldens in this file pin on-disk names. The "already downloaded" check
 // compares paths, so a change to any expected string here re-downloads whole
-// libraries: change one only together with an upgrade note (internal/media
-// AGENTS.md, "Output paths are load-bearing").
+// libraries: change one only together with an upgrade note in
+// docs/upgrading-to-2.0.md.
 
 func TestSafeNameGolden(t *testing.T) {
 	tests := []struct {

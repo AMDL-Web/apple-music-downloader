@@ -5,7 +5,7 @@
 // (internal/hooks/config.go validate; command entries are read-only). A
 // write with {preset, values} is built into a request here, roughly as the
 // server does; only what GET /hooks shows of it has to match. The site's
-// demo (fake-api.js) and the console's ui-audit mock both answer from it.
+// demo (fake-api.js) answers from it.
 // Pure: no timers, no network; a test fails when the hook's host ends in
 // .invalid.
 

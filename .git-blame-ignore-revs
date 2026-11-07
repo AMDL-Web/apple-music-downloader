@@ -1,4 +1,4 @@
-# Move-only commits (tools/splitdecls). GitHub blame skips them; locally:
+# Move-only commits. GitHub blame skips them; locally:
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 # refactor(api): split server.go and observability.go by resource (move-only)
 db356c28efc0c5316bd2f251e4f8016d4bb2325e

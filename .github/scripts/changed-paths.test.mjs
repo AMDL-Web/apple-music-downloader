@@ -15,13 +15,13 @@ test('the guest boot skips a change that cannot reach it', () => {
   assert.equal(classify(['README.md', 'docs/cli.md', 'apps/console/web/app.js', 'internal/jobs/jobs.go', 'internal/configs/x.go']).guestboot, false);
 });
 
-test('the console audit runs for the console, the API spec and its own files', () => {
-  for (const f of ['apps/console/static/css/queue.css', 'apps/console/tools/ui-audit/core/run.mjs', 'apps/console/tools/ui-audit/console/audit.config.mjs',
+test('the console browser tests run for the console, the API spec and the CI files', () => {
+  for (const f of ['apps/console/static/css/queue.css', 'apps/console/e2e/queue.spec.mjs',
     'internal/api/openapi.yaml', '.github/workflows/ci.yml', '.github/scripts/changed-paths.mjs']) {
-    assert.equal(classify([f]).uiaudit, true, f);
+    assert.equal(classify([f]).console, true, f);
   }
-  assert.equal(classify(['README.md', 'docs/api.md', 'apps/site/build.mjs', 'internal/jobs/jobs.go', 'internal/api/events.go']).uiaudit, false);
-  assert.equal(classify(['internal/jobs/jobs.go', 'apps/console/static/js/api.js']).uiaudit, true);
+  assert.equal(classify(['README.md', 'docs/api.md', 'apps/site/build.mjs', 'internal/jobs/jobs.go', 'internal/api/events.go']).console, false);
+  assert.equal(classify(['internal/jobs/jobs.go', 'apps/console/static/js/api.js']).console, true);
 });
 
 test('one matching path among many is enough', () => {
@@ -29,13 +29,12 @@ test('one matching path among many is enough', () => {
 });
 
 test('an unknown change list runs every job', () => {
-  assert.deepEqual(classify([]), { go: true, guestboot: true, uiaudit: true });
-  assert.deepEqual(classify(['', '\n']), { go: true, guestboot: true, uiaudit: true });
+  assert.deepEqual(classify([]), { go: true, guestboot: true, console: true });
+  assert.deepEqual(classify(['', '\n']), { go: true, guestboot: true, console: true });
 });
 
-test('documentation, rules, the website and the console skip the Go jobs', () => {
-  for (const f of ['docs/api.md', 'README.md', 'README.zh-CN.md', 'AGENTS.md', 'internal/jobs/AGENTS.md', 'apps/console/AGENTS.md',
-    '.claude/skills/amdl-release/SKILL.md', '.claude/hooks/guard-commands.mjs', 'apps/site/build.mjs', 'apps/console/static/app.js',
+test('documentation, the website and the console skip the Go jobs', () => {
+  for (const f of ['docs/api.md', 'README.md', 'README.zh-CN.md', 'GLOSSARY.md', 'apps/site/build.mjs', 'apps/console/static/app.js',
     '.github/release-notes/v2.0.0.md', 'LICENSE']) {
     assert.equal(classify([f]).go, false, f);
   }

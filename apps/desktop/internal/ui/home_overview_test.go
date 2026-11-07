@@ -152,7 +152,7 @@ func TestATabLeftIsGoneBeforeTheNextShows(t *testing.T) {
 	}
 	var seen [][3]uint8
 	for range 12 {
-		tt.Advance(filmFrame)
+		tt.Advance(refresh)
 		seen = append(seen, at())
 	}
 	tt.Advance(2 * time.Second)

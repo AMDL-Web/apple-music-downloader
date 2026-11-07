@@ -200,7 +200,7 @@ function getCommits(latest = null) {
 // Turns a git identity into a changelog credit. "@" is added only when the
 // identity maps reliably to a GitHub account: prefixing a display name such as
 // "Yangjunwei Liang" would make GitHub mention the unrelated account
-// @Yangjunwei. The agent mappings follow AGENTS.md "Commits and releases".
+// @Yangjunwei.
 function formatAuthor(author, email) {
   const mail = (email || '').toLowerCase();
   if (author.toLowerCase() === 'codex' && mail === 'noreply@openai.com') {

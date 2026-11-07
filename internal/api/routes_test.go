@@ -28,7 +28,7 @@ func specOperations(t *testing.T) []string {
 	var spec struct {
 		Paths map[string]map[string]any `yaml:"paths"`
 	}
-	if err := yaml.Unmarshal(openAPISpec, &spec); err != nil {
+	if err := yaml.Unmarshal(OpenAPI, &spec); err != nil {
 		t.Fatal(err)
 	}
 	var ops []string
@@ -77,7 +77,7 @@ func specEnum(t *testing.T, name string) []string {
 			} `yaml:"schemas"`
 		} `yaml:"components"`
 	}
-	if err := yaml.Unmarshal(openAPISpec, &spec); err != nil {
+	if err := yaml.Unmarshal(OpenAPI, &spec); err != nil {
 		t.Fatal(err)
 	}
 	enum := slices.Clone(spec.Components.Schemas[name].Enum)
@@ -186,7 +186,7 @@ func TestRuntimeConfigSchemaMatchesRuntimeKeys(t *testing.T) {
 			Schemas map[string]schema `yaml:"schemas"`
 		} `yaml:"components"`
 	}
-	if err := yaml.Unmarshal(openAPISpec, &spec); err != nil {
+	if err := yaml.Unmarshal(OpenAPI, &spec); err != nil {
 		t.Fatal(err)
 	}
 	var documented []string

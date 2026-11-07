@@ -1,7 +1,7 @@
 // Package console serves the embedded web console: a no-build Preact+htm
 // single-page app that reads only the public /api/v1 API. The files under
-// static/ are exactly what the browser runs; see AGENTS.md and DESIGN.md in
-// this directory.
+// static/ are exactly what the browser runs; see DESIGN.md in this
+// directory.
 package console
 
 import (
