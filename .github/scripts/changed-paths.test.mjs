@@ -36,8 +36,9 @@ test('an unknown change list runs every job', () => {
   assert.deepEqual(classify(['', '\n']), { go: true, guestboot: true, console: true });
 });
 
-test('documentation, the website and the console skip the Go jobs', () => {
-  for (const f of ['docs/api.md', 'README.md', 'README.zh-CN.md', 'GLOSSARY.md', 'apps/site/build.mjs', 'apps/console/static/app.js',
+test('documentation, agent rules, the website and the console skip the Go jobs', () => {
+  for (const f of ['docs/api.md', 'README.md', 'README.zh-CN.md', 'GLOSSARY.md', 'AGENTS.md', 'CLAUDE.md',
+    'internal/db/AGENTS.md', '.claude/hooks/guard-commands.mjs', 'apps/site/build.mjs', 'apps/console/static/app.js',
     '.github/release-notes/v2.0.0.md', 'LICENSE']) {
     assert.equal(classify([f]).go, false, f);
   }

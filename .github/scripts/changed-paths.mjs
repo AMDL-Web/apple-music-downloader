@@ -10,16 +10,18 @@ import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // What a change to only these needs no Go build, vet, test, race, release build,
-// image or upgrade check: documentation (the repository checks in
+// image or upgrade check: documentation and agent rules (the repository checks in
 // tools/repocheck still run), the website (its Node tests run) and the web
 // console (its Go and Node tests run). Markdown is code only where it is
 // embedded (apps/amdl/skill), so the list names the documents, not *.md.
 export const light = [
   /^docs\//,
   /^\.github\/release-notes\//,
+  /^\.claude\//,
   /^apps\/(site|console)\//,
   /^(README|README\.zh-CN|CONTRIBUTING|GLOSSARY)\.md$/,
   /^LICENSE$/,
+  /(^|\/)(AGENTS|CLAUDE)\.md$/,
 ];
 
 // The jobs. `any` runs a job when a changed path matches one of its patterns;

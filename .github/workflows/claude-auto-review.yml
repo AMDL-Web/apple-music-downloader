@@ -11,7 +11,8 @@ name: Claude Auto Review
 # Their safety net is ci.yml (build, test, race, govulncheck) and CodeQL, which
 # still run. PRs opened by people are unaffected.
 #
-# What to report, what to skip and the output language are set in REVIEW.md.
+# What to report and the output language are set in the prompt below; the
+# project rules are in AGENTS.md.
 
 on:
   pull_request:
@@ -48,10 +49,12 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            Review this pull request following REVIEW.md at the repository
-            root: it defines what counts as a defect, what not to report, how to
-            report, and the language to write in. The project rules it refers
-            to are in AGENTS.md and the nested AGENTS.md files.
+            Review this pull request for defects: changes that break when
+            used as intended. The project rules are in AGENTS.md. Don't report
+            what CI already gates (formatting, build, vet, lint, tests, race
+            detector, govulncheck). Back each finding with a file and line.
+            Write the summary and comments in Simplified Chinese; keep
+            identifiers, paths and quoted code verbatim.
 
             The verdict appears in the tracking comment that track_progress
             creates; don't post a separate top-level comment with
