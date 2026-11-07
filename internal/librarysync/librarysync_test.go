@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
@@ -459,70 +460,78 @@ func (b *blockingLibrary) LibrarySongsNewestFirst(ctx context.Context, _ string,
 // Run returns once its context ends and the pass in flight has stopped, so
 // shutdown can wait for it before closing the store the pass writes to.
 func TestRunReturnsAfterCancelAndInFlightPass(t *testing.T) {
-	lib := &blockingLibrary{entered: make(chan struct{}), exited: make(chan struct{})}
-	cfg := config.Default()
-	cfg.LibrarySync.Enabled = true
-	tokens := usertoken.NewReading(func(string) (string, error) { return strings.Repeat("t", 32), nil })
-	w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	synctest.Test(t, func(t *testing.T) {
+		lib := &blockingLibrary{entered: make(chan struct{}), exited: make(chan struct{})}
+		cfg := config.Default()
+		cfg.LibrarySync.Enabled = true
+		tokens := usertoken.NewReading(func(string) (string, error) { return strings.Repeat("t", 32), nil })
+		w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		w.run(ctx, time.Millisecond)
-		close(done)
-	}()
-	select {
-	case <-lib.entered:
-	case <-time.After(3 * time.Second):
-		t.Fatal("no pass started")
-	}
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("Run did not return after its context ended")
-	}
-	select {
-	case <-lib.exited:
-	default:
-		t.Fatal("Run returned while a pass was still in flight")
-	}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			w.Run(ctx)
+			close(done)
+		}()
+		// The first pass starts on the first tick.
+		time.Sleep(pollTick)
+		synctest.Wait()
+		if !isClosed(lib.entered) {
+			t.Fatal("no pass started on the first tick")
+		}
+		cancel()
+		<-done
+		if !isClosed(lib.exited) {
+			t.Fatal("Run returned while a pass was still in flight")
+		}
+	})
 }
 
 // A tick without a token does not start the interval: once a wrapper login
 // supplies one, the first pass runs on the next tick, not 15 minutes later.
 func TestRunPassesOnceATokenAppears(t *testing.T) {
-	lib := &blockingLibrary{entered: make(chan struct{}), exited: make(chan struct{})}
-	cfg := config.Default()
-	cfg.LibrarySync.Enabled = true
-	var loggedIn atomic.Bool
-	tokens := usertoken.NewReading(func(string) (string, error) {
-		if loggedIn.Load() {
-			return strings.Repeat("W", 200), nil
-		}
-		return "", nil
-	})
-	w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	synctest.Test(t, func(t *testing.T) {
+		lib := &blockingLibrary{entered: make(chan struct{}), exited: make(chan struct{})}
+		cfg := config.Default()
+		cfg.LibrarySync.Enabled = true
+		var loggedIn atomic.Bool
+		tokens := usertoken.NewReading(func(string) (string, error) {
+			if loggedIn.Load() {
+				return strings.Repeat("W", 200), nil
+			}
+			return "", nil
+		})
+		w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		w.run(ctx, time.Millisecond)
-		close(done)
-	}()
-	time.Sleep(20 * time.Millisecond)
-	if status := w.statusOf(t); status.LastError != IdleNoToken {
-		t.Fatalf("last_error = %q before the login, want %q", status.LastError, IdleNoToken)
-	}
-	loggedIn.Store(true)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			w.Run(ctx)
+			close(done)
+		}()
+		time.Sleep(pollTick)
+		synctest.Wait()
+		if status := w.statusOf(t); status.LastError != IdleNoToken {
+			t.Fatalf("last_error = %q before the login, want %q", status.LastError, IdleNoToken)
+		}
+		loggedIn.Store(true)
+		time.Sleep(pollTick)
+		synctest.Wait()
+		if !isClosed(lib.entered) {
+			t.Fatal("no pass on the first tick after the token appeared")
+		}
+		cancel()
+		<-done
+	})
+}
+
+func isClosed(c <-chan struct{}) bool {
 	select {
-	case <-lib.entered:
-	case <-time.After(3 * time.Second):
-		t.Fatal("no pass within 3 s of the token appearing")
+	case <-c:
+		return true
+	default:
+		return false
 	}
-	cancel()
-	<-done
 }
 
 // testAccount is the account a watcher without Accounts watches: the token
