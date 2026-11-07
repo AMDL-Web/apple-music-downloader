@@ -1,0 +1,31 @@
+-- job_items as it stood before the per-stage progress breakdown replaced the
+-- single `progress` aggregate.
+CREATE TABLE job_items (
+	id TEXT PRIMARY KEY,
+	job_id TEXT NOT NULL,
+	adam_id TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	idx INTEGER NOT NULL,
+	title TEXT NOT NULL DEFAULT '',
+	artist TEXT NOT NULL DEFAULT '',
+	album TEXT NOT NULL DEFAULT '',
+	duration_ms INTEGER NOT NULL DEFAULT 0,
+	artwork_url TEXT NOT NULL DEFAULT '',
+	has_lyrics INTEGER NOT NULL DEFAULT 0,
+	lyrics_status TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL,
+	progress REAL NOT NULL DEFAULT 0,
+	codec TEXT NOT NULL DEFAULT '',
+	bit_depth INTEGER NOT NULL DEFAULT 0,
+	sample_rate INTEGER NOT NULL DEFAULT 0,
+	bitrate INTEGER NOT NULL DEFAULT 0,
+	file_size INTEGER NOT NULL DEFAULT 0,
+	retry_kind TEXT NOT NULL DEFAULT '',
+	attempt INTEGER NOT NULL DEFAULT 0,
+	max_attempts INTEGER NOT NULL DEFAULT 0,
+	status_message TEXT NOT NULL DEFAULT '',
+	output_path TEXT NOT NULL DEFAULT '',
+	error TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);

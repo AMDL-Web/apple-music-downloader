@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,11 +17,7 @@ import (
 // each at the end of the run order, plus a running and a completed job.
 func queueStore(t *testing.T, n int) *Store {
 	t.Helper()
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	now := time.Now().UTC()
 	add := func(id string, status domain.JobStatus) {
 		job := domain.Job{ID: id, Input: id, Type: "song", Storefront: "us", CanonicalKey: "song:us:" + id, Status: status, CreatedAt: now, UpdatedAt: now}

@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,25 +10,8 @@ import (
 	"amdl/internal/domain"
 )
 
-func openRecordStore(t *testing.T) *Store {
-	t.Helper()
-	store, err := OpenWith(filepath.Join(t.TempDir(), "amdl.db"), Options{DownloadsDir: "/music"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	return store
-}
-
 func mainSlot(kind domain.ResourceKind, owner, song string) domain.FileKey {
 	return domain.FileKey{OwnerKind: kind, OwnerID: owner, SongID: song, Slot: domain.SlotMain}
-}
-
-func must(t *testing.T, err error) {
-	t.Helper()
-	if err != nil {
-		t.Fatal(err)
-	}
 }
 
 func albumRead(id string, now time.Time, songs ...string) AlbumRead {
@@ -41,7 +23,7 @@ func albumRead(id string, now time.Time, songs ...string) AlbumRead {
 }
 
 func TestAlbumRecordLifecycleKeepsRollupInStep(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-01T10:00:00Z")
 	step := func(name string, err error) {
@@ -251,7 +233,7 @@ func TestAlbumRecordLifecycleKeepsRollupInStep(t *testing.T) {
 }
 
 func TestPlaylistRecordTracksRemovalAndPathClaims(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-01T10:00:00Z")
 	_, err := store.AddPlaylist(ctx, PlaylistAdd{ID: "pl.1", Source: domain.SourceManual, Now: now})
@@ -324,7 +306,7 @@ func TestPlaylistRecordTracksRemovalAndPathClaims(t *testing.T) {
 }
 
 func TestPendingAddsDedupByKindAndID(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-01T10:00:00Z")
 	first, err := store.AddPending(ctx, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: "5", Source: domain.SourceImport1x,
@@ -379,7 +361,7 @@ func TestStoredPath(t *testing.T) {
 // which carries none; cover states and a lyrics refresh touch only their own
 // columns.
 func TestRecordDisplayAndSubtaskWrites(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-01T10:00:00Z")
 	_, err := store.AddAlbum(ctx, AlbumAdd{ID: "1", WantedAll: true, Source: domain.SourceManual, Now: now})
@@ -422,7 +404,7 @@ func TestRecordDisplayAndSubtaskWrites(t *testing.T) {
 // not add a second slot, which would download a byte-identical copy under a
 // quality-suffixed name next to it.
 func TestRequestSlotTreatsUnknownCodecAsPresent(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-04T10:00:00Z")
 	_, err := store.AddAlbum(ctx, AlbumAdd{ID: "1", SongIDs: []string{"12"}, Source: domain.SourceManual, Now: now})
@@ -437,5 +419,36 @@ func TestRequestSlotTreatsUnknownCodecAsPresent(t *testing.T) {
 	}
 	if _, err := store.GetFile(ctx, alac); !errors.Is(err, ErrFileNotFound) {
 		t.Fatalf("the asked-for slot was added: err = %v", err)
+	}
+}
+
+// A record keeps the pin it was added with; a later add does not move it.
+func TestRecordPinIsSetOnceAtAdd(t *testing.T) {
+	store := openStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
+	if _, err := store.AddAlbum(ctx, AlbumAdd{ID: "9", WantedAll: true, Source: domain.SourceLibrarySync, Storefront: "JP", Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AddAlbum(ctx, AlbumAdd{ID: "9", WantedAll: true, Source: domain.SourceManual, Storefront: "us", Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	album, err := store.GetAlbum(ctx, "9")
+	if err != nil || album.PinnedStorefront != "jp" {
+		t.Fatalf("pin = %q (%v), want jp", album.PinnedStorefront, err)
+	}
+	if _, err := store.AddPlaylist(ctx, PlaylistAdd{ID: "pl.1", Source: domain.SourceManual, Storefront: "kr", Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	if pl, err := store.GetPlaylist(ctx, "pl.1"); err != nil || pl.PinnedStorefront != "kr" {
+		t.Fatalf("playlist pin = %q (%v)", pl.PinnedStorefront, err)
+	}
+	p, err := store.AddPending(ctx, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: "5", Source: domain.SourceManual, Storefront: "jp", AddedAt: now})
+	if err != nil || p.Storefront != "jp" {
+		t.Fatalf("pending = %+v, %v", p, err)
+	}
+	p, err = store.AddPending(ctx, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: "5", Source: domain.SourceManual, Storefront: "us", AddedAt: now})
+	if err != nil || p.Storefront != "jp" {
+		t.Fatalf("re-added pending = %+v, %v, want the first storefront kept", p, err)
 	}
 }

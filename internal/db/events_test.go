@@ -3,18 +3,13 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"amdl/internal/domain"
 )
 
 func TestListEventsAfterLimitPagesWithoutSkipping(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	job := domain.Job{ID: "job-page", Input: "song|us|1", Type: "song", Status: domain.JobQueued}
 	if err := store.CreateJob(ctx, job); err != nil {
@@ -36,11 +31,7 @@ func TestListEventsAfterLimitPagesWithoutSkipping(t *testing.T) {
 }
 
 func TestListMilestoneEventsAfterFiltersAndOrders(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	for _, job := range []domain.Job{
 		{ID: "job1", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobRunning},
@@ -96,11 +87,7 @@ func TestListMilestoneEventsAfterFiltersAndOrders(t *testing.T) {
 }
 
 func TestEventPayloadRoundTripsAsJSONObject(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	if _, err := store.AddEvent(ctx, domain.Event{JobID: "job1", Type: "item_completed", Payload: json.RawMessage(`{"status":"completed","attempts":2}`)}); err != nil {
 		t.Fatal(err)
@@ -143,11 +130,7 @@ func TestEventPayloadRoundTripsAsJSONObject(t *testing.T) {
 }
 
 func TestListHookEventsFiltersHookTypes(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	for _, ev := range []domain.Event{
 		{JobID: "job1", Type: "job_finished"},

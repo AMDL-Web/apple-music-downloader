@@ -38,8 +38,8 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	}
 	defer store.Close()
 	ctx := context.Background()
-	if got := userVersion(t, store.db); got != 9 {
-		t.Fatalf("user_version = %d, want 9", got)
+	if got := userVersion(t, store.db); got != latestSchemaVersion() {
+		t.Fatalf("user_version = %d, want %d", got, latestSchemaVersion())
 	}
 	after := dumpAll(t, store.db)
 
@@ -403,13 +403,9 @@ func TestMigration1LeavesCurrent1xDatabaseUnchanged(t *testing.T) {
 }
 
 func TestOpenCreatesLatestSchemaInFreshDatabase(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if got := userVersion(t, store.db); got != 9 || got != latestSchemaVersion() {
-		t.Fatalf("fresh user_version = %d, want 9 (latest %d)", got, latestSchemaVersion())
+	store := openStore(t)
+	if got := userVersion(t, store.db); got != latestSchemaVersion() {
+		t.Fatalf("fresh user_version = %d, want %d", got, latestSchemaVersion())
 	}
 	for _, table := range []string{"runs", "run_items", "run_events", "albums", "tracks", "playlists", "playlist_tracks", "files",
 		"pending_adds", "resource_sources", "deleted_resources", "check_runs", "library_sync_anchor",

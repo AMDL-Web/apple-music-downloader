@@ -3,70 +3,29 @@ package db
 import (
 	"context"
 	"database/sql"
-	"path/filepath"
+	"embed"
 	"testing"
 	"time"
 
 	"amdl/internal/domain"
 )
 
-func TestOpenMigratesExistingSchemaWithoutArtworkColumns(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "amdl.db")
-	raw, err := sql.Open("sqlite", path)
+//go:embed testdata/legacy_*.sql
+var legacySchemas embed.FS
+
+// legacySQL is a testdata script that builds a database an older 1.x build
+// left behind.
+func legacySQL(t *testing.T, name string) string {
+	t.Helper()
+	b, err := legacySchemas.ReadFile("testdata/" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Pre-artwork_url schema as created by older builds.
-	stmts := []string{
-		`CREATE TABLE jobs (
-			id TEXT PRIMARY KEY,
-			input TEXT NOT NULL,
-			type TEXT NOT NULL,
-			storefront TEXT,
-			canonical_key TEXT NOT NULL,
-			force INTEGER NOT NULL DEFAULT 0,
-			status TEXT NOT NULL,
-			total_items INTEGER NOT NULL DEFAULT 0,
-			done_items INTEGER NOT NULL DEFAULT 0,
-			failed_items INTEGER NOT NULL DEFAULT 0,
-			error TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);`,
-		`CREATE TABLE job_items (
-			id TEXT PRIMARY KEY,
-			job_id TEXT NOT NULL,
-			adam_id TEXT NOT NULL,
-			kind TEXT NOT NULL,
-			idx INTEGER NOT NULL,
-			title TEXT NOT NULL DEFAULT '',
-			artist TEXT NOT NULL DEFAULT '',
-			album TEXT NOT NULL DEFAULT '',
-			status TEXT NOT NULL,
-			progress REAL NOT NULL DEFAULT 0,
-			codec TEXT NOT NULL DEFAULT '',
-			retry_kind TEXT NOT NULL DEFAULT '',
-			attempt INTEGER NOT NULL DEFAULT 0,
-			max_attempts INTEGER NOT NULL DEFAULT 0,
-			status_message TEXT NOT NULL DEFAULT '',
-			output_path TEXT NOT NULL DEFAULT '',
-			error TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);`,
-		`INSERT INTO jobs(id,input,type,storefront,canonical_key,force,status,created_at,updated_at)
-			VALUES('job-old','https://music.apple.com/cn/song/old/1','song','cn','song:cn:1',0,'completed','2024-01-01T00:00:00Z','2024-01-01T00:00:00Z');`,
-		`INSERT INTO job_items(id,job_id,adam_id,kind,idx,status,created_at,updated_at)
-			VALUES('item-old','job-old','1','song',1,'completed','2024-01-01T00:00:00Z','2024-01-01T00:00:00Z');`,
-	}
-	for _, stmt := range stmts {
-		if _, err := raw.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatal(err)
-	}
+	return string(b)
+}
+
+func TestOpenMigratesExistingSchemaWithoutArtworkColumns(t *testing.T) {
+	path := createRawDatabase(t, legacySQL(t, "legacy_no_artwork.sql"))
 
 	// Open must add the artwork_url columns without touching existing rows,
 	// and reopening must be idempotent.
@@ -172,51 +131,7 @@ func TestOpenMigratesExistingSchemaWithoutArtworkColumns(t *testing.T) {
 }
 
 func TestNormalizeTimestampColumnsOnOpen(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "amdl.db")
-	raw, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stmts := []string{
-		`CREATE TABLE jobs (
-			id TEXT PRIMARY KEY, input TEXT NOT NULL, type TEXT NOT NULL, storefront TEXT,
-			title TEXT NOT NULL DEFAULT '', artwork_url TEXT NOT NULL DEFAULT '',
-			canonical_key TEXT NOT NULL, force INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL,
-			total_items INTEGER NOT NULL DEFAULT 0, done_items INTEGER NOT NULL DEFAULT 0,
-			failed_items INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-		);`,
-		`CREATE TABLE job_items (
-			id TEXT PRIMARY KEY, job_id TEXT NOT NULL, adam_id TEXT NOT NULL, kind TEXT NOT NULL,
-			idx INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '', artist TEXT NOT NULL DEFAULT '',
-			album TEXT NOT NULL DEFAULT '', artwork_url TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
-			progress REAL NOT NULL DEFAULT 0, codec TEXT NOT NULL DEFAULT '',
-			bit_depth INTEGER NOT NULL DEFAULT 0, sample_rate INTEGER NOT NULL DEFAULT 0,
-			bitrate INTEGER NOT NULL DEFAULT 0, retry_kind TEXT NOT NULL DEFAULT '',
-			attempt INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 0,
-			status_message TEXT NOT NULL DEFAULT '', output_path TEXT NOT NULL DEFAULT '',
-			error TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-		);`,
-		`CREATE TABLE job_events (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL, item_id TEXT NOT NULL DEFAULT '',
-			type TEXT NOT NULL, phase TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '',
-			payload TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
-		);`,
-		// Legacy variable-width RFC3339Nano (whole second + trimmed millis).
-		`INSERT INTO jobs(id,input,type,storefront,canonical_key,force,status,created_at,updated_at)
-			VALUES('j1','u','song','us','k',0,'completed','2024-07-10T12:00:00Z','2024-07-10T12:00:00.123Z');`,
-		`INSERT INTO job_items(id,job_id,adam_id,kind,idx,status,created_at,updated_at)
-			VALUES('i1','j1','1','song',1,'completed','2024-07-10T12:00:00.5Z','2024-07-10T12:00:00.5Z');`,
-		`INSERT INTO job_events(job_id,type,created_at) VALUES('j1','job_finished','2024-07-10T12:00:01Z');`,
-	}
-	for _, stmt := range stmts {
-		if _, err := raw.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatal(err)
-	}
+	path := createRawDatabase(t, legacySQL(t, "legacy_variable_timestamps.sql"))
 
 	store, err := Open(path)
 	if err != nil {
@@ -259,61 +174,10 @@ func TestNormalizeTimestampColumnsOnOpen(t *testing.T) {
 	}
 }
 
-func TestFormatTimeFixedWidth(t *testing.T) {
-	exact := time.Date(2024, 7, 10, 12, 0, 0, 0, time.UTC)
-	frac := time.Date(2024, 7, 10, 12, 0, 0, 123000000, time.UTC)
-	if got, want := formatTime(exact), "2024-07-10T12:00:00.000000000Z"; got != want {
-		t.Fatalf("formatTime(exact) = %q, want %q", got, want)
-	}
-	if got, want := formatTime(frac), "2024-07-10T12:00:00.123000000Z"; got != want {
-		t.Fatalf("formatTime(frac) = %q, want %q", got, want)
-	}
-	// Lexicographic order must match chronological order across the boundary.
-	if !(formatTime(exact) < formatTime(frac) && formatTime(frac) < formatTime(exact.Add(time.Second))) {
-		t.Fatalf("fixed-width strings are not chronologically ordered: %q %q %q",
-			formatTime(exact), formatTime(frac), formatTime(exact.Add(time.Second)))
-	}
-}
-
-// legacyJobItemsDDL is the job_items schema as it stood before the per-stage
-// progress breakdown replaced the single `progress` aggregate.
-const legacyJobItemsDDL = `CREATE TABLE job_items (
-	id TEXT PRIMARY KEY,
-	job_id TEXT NOT NULL,
-	adam_id TEXT NOT NULL,
-	kind TEXT NOT NULL,
-	idx INTEGER NOT NULL,
-	title TEXT NOT NULL DEFAULT '',
-	artist TEXT NOT NULL DEFAULT '',
-	album TEXT NOT NULL DEFAULT '',
-	duration_ms INTEGER NOT NULL DEFAULT 0,
-	artwork_url TEXT NOT NULL DEFAULT '',
-	has_lyrics INTEGER NOT NULL DEFAULT 0,
-	lyrics_status TEXT NOT NULL DEFAULT '',
-	status TEXT NOT NULL,
-	progress REAL NOT NULL DEFAULT 0,
-	codec TEXT NOT NULL DEFAULT '',
-	bit_depth INTEGER NOT NULL DEFAULT 0,
-	sample_rate INTEGER NOT NULL DEFAULT 0,
-	bitrate INTEGER NOT NULL DEFAULT 0,
-	file_size INTEGER NOT NULL DEFAULT 0,
-	retry_kind TEXT NOT NULL DEFAULT '',
-	attempt INTEGER NOT NULL DEFAULT 0,
-	max_attempts INTEGER NOT NULL DEFAULT 0,
-	status_message TEXT NOT NULL DEFAULT '',
-	output_path TEXT NOT NULL DEFAULT '',
-	error TEXT NOT NULL DEFAULT '',
-	created_at TEXT NOT NULL,
-	updated_at TEXT NOT NULL
-)`
-
 func TestOpenMigratesLegacyItemProgress(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "amdl.db")
+	path := createRawDatabase(t, legacySQL(t, "legacy_item_progress.sql"))
 	legacy, err := sql.Open("sqlite", path)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := legacy.Exec(legacyJobItemsDDL); err != nil {
 		t.Fatal(err)
 	}
 	stamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")

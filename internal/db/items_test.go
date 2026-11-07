@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,11 +9,7 @@ import (
 )
 
 func TestJobItemRetryStateRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	now := time.Now().UTC()
 	want := domain.JobItem{
 		ID: "item-1", JobID: "job-1", AdamID: "123", Kind: "song", Index: 1, DurationMS: 245000,
@@ -64,11 +59,7 @@ func TestJobItemRetryStateRoundTrip(t *testing.T) {
 }
 
 func TestJobItemHasLyricsRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	want := domain.JobItem{
@@ -123,11 +114,7 @@ func TestJobItemHasLyricsRoundTrip(t *testing.T) {
 }
 
 func TestJobItemProgressRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	// A half-decrypted item: both meters carry a fraction and only the earlier

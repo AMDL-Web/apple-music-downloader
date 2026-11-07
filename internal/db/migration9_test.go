@@ -76,8 +76,8 @@ func TestMigration9RecountsRecordsWithUnofferedTracks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open schema 8: %v", err)
 	}
-	if got := userVersion(t, store.db); got != 9 {
-		t.Fatalf("user_version = %d, want 9", got)
+	if got := userVersion(t, store.db); got != latestSchemaVersion() {
+		t.Fatalf("user_version = %d, want %d", got, latestSchemaVersion())
 	}
 	after := dumpAll(t, store.db)
 	rollup := map[string]bool{"tracks_wanted": true, "tracks_done": true, "tracks_failed": true, "tracks_given_up": true,

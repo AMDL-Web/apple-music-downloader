@@ -2,27 +2,16 @@ package db
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"amdl/internal/domain"
 )
 
-func libraryAnchorStore(t *testing.T) *Store {
-	t.Helper()
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	return store
-}
-
 // Order is the whole point of the anchor — position 0 must come back as
 // position 0, because "newer than the oldest remembered entry" is what makes a
 // song count as new.
 func TestLibrarySyncAnchorRoundTripPreservesOrder(t *testing.T) {
-	store := libraryAnchorStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 
 	if got, err := store.LoadLibrarySyncAnchor(ctx, "a1"); err != nil || len(got) != 0 {
@@ -54,7 +43,7 @@ func TestLibrarySyncAnchorRoundTripPreservesOrder(t *testing.T) {
 // Replacement is total: a shorter anchor must not leave the old tail behind,
 // or the watcher would measure against a boundary that no longer exists.
 func TestLibrarySyncAnchorReplaceDropsOldEntries(t *testing.T) {
-	store := libraryAnchorStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 
 	long := make([]domain.LibraryAnchorEntry, 0, 10)
@@ -78,7 +67,7 @@ func TestLibrarySyncAnchorReplaceDropsOldEntries(t *testing.T) {
 }
 
 func TestLibrarySyncAnchorClearReportsCount(t *testing.T) {
-	store := libraryAnchorStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 
 	entries := []domain.LibraryAnchorEntry{{SongID: "a"}, {SongID: "b"}}
@@ -108,7 +97,7 @@ func TestLibrarySyncAnchorClearReportsCount(t *testing.T) {
 // Each account has its own anchor: replacing or clearing one leaves the
 // other's alone.
 func TestLibrarySyncAnchorIsPerAccount(t *testing.T) {
-	store := libraryAnchorStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	if err := store.ReplaceLibrarySyncAnchor(ctx, "a1", []domain.LibraryAnchorEntry{{SongID: "us"}}); err != nil {
 		t.Fatal(err)
