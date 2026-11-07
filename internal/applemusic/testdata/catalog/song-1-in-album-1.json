@@ -1,0 +1,30 @@
+{
+  "data": [
+    {
+      "id": "song-1",
+      "type": "songs",
+      "attributes": {
+        "name": "Song",
+        "artistName": "Artist",
+        "albumName": "Album",
+        "trackNumber": 1,
+        "discNumber": 1
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "album-1",
+              "type": "albums",
+              "attributes": {
+                "name": "Album",
+                "artistName": "Album Artist",
+                "trackCount": 2
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

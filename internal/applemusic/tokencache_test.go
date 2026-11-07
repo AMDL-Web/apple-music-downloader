@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -19,40 +20,37 @@ func countingFetch(calls *atomic.Int32, ttl time.Duration) func(context.Context)
 	}
 }
 
+// A fetched token is trusted for half the TTL fetch reports (cacheUntil): the
+// cache answers from memory until then and fetches again at that instant.
 func TestTokenCacheGetFetchesOnceAndCachesForHalfTheTTL(t *testing.T) {
-	var calls atomic.Int32
-	cache := &tokenCache{fetch: countingFetch(&calls, 2*time.Hour)}
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int32
+		cache := &tokenCache{fetch: countingFetch(&calls, 2*time.Hour)}
+		get := func() string {
+			t.Helper()
+			token, err := cache.get(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			return token
+		}
 
-	before := time.Now()
-	first, err := cache.get(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	after := time.Now()
-	second, err := cache.get(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first != "tok-1" || second != "tok-1" || calls.Load() != 1 {
-		t.Fatalf("tokens = %q, %q after %d fetches; want tok-1 twice from one fetch", first, second, calls.Load())
-	}
-	if cache.until.Before(before.Add(time.Hour)) || cache.until.After(after.Add(time.Hour)) {
-		t.Fatalf("until = %v, want one hour (half of the 2h TTL) after the fetch", cache.until)
-	}
-}
-
-func TestTokenCacheGetRefetchesAnExpiredToken(t *testing.T) {
-	var calls atomic.Int32
-	cache := &tokenCache{fetch: countingFetch(&calls, time.Hour)}
-	cache.value, cache.until = "old", time.Now().Add(-time.Second)
-
-	got, err := cache.get(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "tok-1" || calls.Load() != 1 {
-		t.Fatalf("get = %q after %d fetches, want a fresh tok-1", got, calls.Load())
-	}
+		start := time.Now()
+		if first, second := get(), get(); first != "tok-1" || second != "tok-1" || calls.Load() != 1 {
+			t.Fatalf("tokens = %q, %q after %d fetches; want tok-1 twice from one fetch", first, second, calls.Load())
+		}
+		if want := start.Add(time.Hour); !cache.until.Equal(want) {
+			t.Fatalf("until = +%v, want +1h (half of the 2h TTL)", cache.until.Sub(start))
+		}
+		time.Sleep(time.Hour - time.Nanosecond)
+		if got := get(); got != "tok-1" {
+			t.Fatalf("get just before half-life = %q, want the cached tok-1", got)
+		}
+		time.Sleep(time.Nanosecond)
+		if got := get(); got != "tok-2" || calls.Load() != 2 {
+			t.Fatalf("get at half-life = %q after %d fetches, want a fresh tok-2", got, calls.Load())
+		}
+	})
 }
 
 func TestTokenCacheConcurrentMissesShareOneFetch(t *testing.T) {
@@ -88,6 +86,20 @@ func TestTokenCacheConcurrentMissesShareOneFetch(t *testing.T) {
 	}
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("fetch calls = %d, want 1", got)
+	}
+}
+
+func TestTokenCacheGetRefetchesAnExpiredToken(t *testing.T) {
+	var calls atomic.Int32
+	cache := &tokenCache{fetch: countingFetch(&calls, time.Hour)}
+	cache.value, cache.until = "old", time.Now().Add(-time.Second)
+
+	got, err := cache.get(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "tok-1" || calls.Load() != 1 {
+		t.Fatalf("get = %q after %d fetches, want a fresh tok-1", got, calls.Load())
 	}
 }
 

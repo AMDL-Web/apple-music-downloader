@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "song-2",
+      "type": "songs",
+      "attributes": {
+        "name": "Two",
+        "artistName": "Artist",
+        "albumName": "Album",
+        "trackNumber": 2,
+        "discNumber": 1
+      }
+    },
+    {
+      "id": "video-2",
+      "type": "music-videos",
+      "attributes": {
+        "name": "Video Two"
+      }
+    },
+    {
+      "id": "song-3",
+      "type": "songs",
+      "attributes": {
+        "name": "Three",
+        "artistName": "Artist",
+        "albumName": "Album",
+        "trackNumber": 3,
+        "discNumber": 2
+      }
+    }
+  ]
+}

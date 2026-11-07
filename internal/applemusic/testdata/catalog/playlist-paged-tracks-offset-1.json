@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "id": "song-2",
+      "type": "songs",
+      "attributes": {
+        "name": "Two",
+        "artistName": "Artist"
+      }
+    },
+    {
+      "id": "video-1",
+      "type": "music-videos",
+      "attributes": {
+        "name": "Video"
+      }
+    },
+    {
+      "id": "song-3",
+      "type": "songs",
+      "attributes": {
+        "name": "Three",
+        "artistName": "Artist"
+      }
+    }
+  ]
+}

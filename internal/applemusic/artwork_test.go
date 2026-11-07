@@ -2,9 +2,8 @@ package applemusic
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,20 +11,14 @@ import (
 )
 
 func TestFormatArtworkURL(t *testing.T) {
-	raw := "https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"
-	got := formatArtworkURL(raw, "jpg", "1400x1400")
-	want := "https://is1-ssl.mzstatic.com/image/thumb/foo/1400x1400bb.jpg"
-	if got != want {
-		t.Fatalf("formatArtworkURL() = %q, want %q", got, want)
-	}
-}
-
-func TestFormatArtworkURLPNG(t *testing.T) {
-	raw := "https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"
-	got := formatArtworkURL(raw, "png", "600x600")
-	want := "https://is1-ssl.mzstatic.com/image/thumb/foo/600x600bb.png"
-	if got != want {
-		t.Fatalf("formatArtworkURL() = %q, want %q", got, want)
+	const raw = "https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"
+	for _, tt := range []struct{ format, size, want string }{
+		{"jpg", "1400x1400", "https://is1-ssl.mzstatic.com/image/thumb/foo/1400x1400bb.jpg"},
+		{"png", "600x600", "https://is1-ssl.mzstatic.com/image/thumb/foo/600x600bb.png"},
+	} {
+		if got := formatArtworkURL(raw, tt.format, tt.size); got != tt.want {
+			t.Errorf("formatArtworkURL(%q, %q) = %q, want %q", tt.format, tt.size, got, tt.want)
+		}
 	}
 }
 
@@ -37,23 +30,27 @@ func TestCoverSizeFallbacks(t *testing.T) {
 }
 
 func TestFetchCoverFallsBackToSmallerSize(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{}, slog.Default())
-	raw := "https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if strings.Contains(req.URL.String(), "5000x5000") {
-			return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	var asked []string
+	client := newTestClient(t, config.CatalogConfig{}, func(req *http.Request) *http.Response {
+		asked = append(asked, req.URL.Path)
+		switch {
+		case strings.Contains(req.URL.Path, "5000x5000"):
+			return jsonResponse(http.StatusForbidden, "")
+		case strings.Contains(req.URL.Path, "1400x1400"):
+			return jsonResponse(http.StatusOK, "cover-bytes")
 		}
-		if strings.Contains(req.URL.String(), "1400x1400") {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("cover-bytes")), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusNotFound, "")
+	})
 
-	data, err := client.FetchCover(context.Background(), []string{raw}, "jpg", "5000x5000")
+	data, err := client.FetchCover(context.Background(), []string{"https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"}, "jpg", "5000x5000")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(data) != "cover-bytes" {
 		t.Fatalf("FetchCover() = %q", data)
+	}
+	want := []string{"/image/thumb/foo/5000x5000bb.jpg", "/image/thumb/foo/3000x3000bb.jpg", "/image/thumb/foo/1400x1400bb.jpg"}
+	if !slices.Equal(asked, want) {
+		t.Fatalf("sizes asked = %v, want %v", asked, want)
 	}
 }

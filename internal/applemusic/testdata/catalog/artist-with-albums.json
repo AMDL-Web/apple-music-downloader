@@ -1,0 +1,54 @@
+{
+  "data": [
+    {
+      "id": "artist-1",
+      "type": "artists",
+      "attributes": {
+        "name": "Artist",
+        "artwork": {
+          "url": "artist-art"
+        }
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "album-1",
+              "type": "albums",
+              "attributes": {
+                "name": "First",
+                "artistName": "Artist",
+                "artwork": {
+                  "url": "first-art"
+                },
+                "releaseDate": "2024-01-01",
+                "trackCount": 2
+              }
+            },
+            {
+              "id": "video-1",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Video"
+              }
+            },
+            {
+              "id": "album-2",
+              "type": "albums",
+              "attributes": {
+                "name": "Second",
+                "artistName": "Artist",
+                "artwork": {
+                  "url": "second-art"
+                },
+                "releaseDate": "2024-02-01",
+                "trackCount": 1
+              }
+            }
+          ],
+          "next": "/v1/catalog/cn/artists/artist-1/albums?offset=2"
+        }
+      }
+    }
+  ]
+}

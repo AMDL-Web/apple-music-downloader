@@ -3,13 +3,10 @@ package applemusic
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"amdl/internal/config"
 )
@@ -21,38 +18,18 @@ const (
 	libraryOrigin = "https://music.apple.com"
 )
 
-func newLibraryClient() *CatalogClient {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US", TokenCacheTTLHours: 12}, slog.Default())
-	client.webToken.value, client.webToken.until = "cached-token", time.Now().Add(time.Hour)
-	return client
-}
-
-func jsonResponse(status int, body string) *http.Response {
-	return &http.Response{StatusCode: status, Status: http.StatusText(status), Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
-}
-
-// scrapeResponse serves the two music.apple.com requests a legacy-mode token
-// refresh makes, or reports false for any other request.
-func scrapeResponse(req *http.Request) (*http.Response, bool) {
-	if req.URL.Host != "music.apple.com" {
-		return nil, false
-	}
-	if req.URL.Path == "" || req.URL.Path == "/" {
-		return jsonResponse(http.StatusOK, `<script src="/assets/index~abc123.js"></script>`), true
-	}
-	return jsonResponse(http.StatusOK, `token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.refreshed-sig"`), true
-}
+// libraryConfig is the catalog configuration of the library and playback
+// tests.
+var libraryConfig = config.CatalogConfig{Language: "en-US", TokenCacheTTLHours: 12}
 
 func TestLibrarySongsNewestFirstReadsOnePage(t *testing.T) {
-	client := newLibraryClient()
 	var got *http.Request
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, libraryConfig, func(req *http.Request) *http.Response {
 		got = req
-		body := `{"next":"/v1/me/library/songs?offset=125","data":[
+		return jsonResponse(http.StatusOK, `{"next":"/v1/me/library/songs?offset=125","data":[
 			{"id":"i.1","attributes":{"name":"One"},"relationships":{"albums":{"data":[{"id":"l.a","attributes":{"name":"Album","artistName":"Artist"}}]}}},
-			{"id":"i.2","attributes":{"name":"Loose"},"relationships":{"albums":{"data":[]}}}]}`
-		return jsonResponse(http.StatusOK, body), nil
-	})}
+			{"id":"i.2","attributes":{"name":"Loose"},"relationships":{"albums":{"data":[]}}}]}`)
+	})
 
 	songs, hasMore, err := client.LibrarySongsNewestFirst(context.Background(), "user-token", 25, 500)
 	if err != nil {
@@ -85,10 +62,9 @@ func TestLibrarySongsNewestFirstReadsOnePage(t *testing.T) {
 }
 
 func TestLibrarySongsNewestFirstLastPageHasNoMore(t *testing.T) {
-	client := newLibraryClient()
-	client.http = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusOK, `{"data":[{"id":"i.9","attributes":{"name":"Last"}}]}`), nil
-	})}
+	client := newTestClient(t, libraryConfig, func(*http.Request) *http.Response {
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"i.9","attributes":{"name":"Last"}}]}`)
+	})
 
 	songs, hasMore, err := client.LibrarySongsNewestFirst(context.Background(), "user-token", 0, 10)
 	if err != nil {
@@ -115,12 +91,11 @@ func TestLibraryAlbumCatalogURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := newLibraryClient()
 			var got *http.Request
-			client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			client := newTestClient(t, libraryConfig, func(req *http.Request) *http.Response {
 				got = req
-				return jsonResponse(tt.status, tt.body), nil
-			})}
+				return jsonResponse(tt.status, tt.body)
+			})
 
 			catalogURL, ok, err := client.LibraryAlbumCatalogURL(context.Background(), "user-token", "l.abc")
 			if (err != nil) != tt.wantErr || catalogURL != tt.wantURL || ok != tt.wantOK {
@@ -172,21 +147,20 @@ func TestLibraryReadsRefreshTheTokenOn401(t *testing.T) {
 	}
 	for _, call := range calls {
 		t.Run(call.name, func(t *testing.T) {
-			client := newLibraryClient()
 			var auth []string
-			client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			client := newTestClient(t, libraryConfig, func(req *http.Request) *http.Response {
 				if resp, ok := scrapeResponse(req); ok {
-					return resp, nil
+					return resp
 				}
 				if req.URL.Path != call.path {
-					return jsonResponse(http.StatusTeapot, "unexpected "+req.URL.Path), nil
+					return jsonResponse(http.StatusTeapot, "unexpected "+req.URL.Path)
 				}
 				auth = append(auth, req.Header.Get("Authorization"))
 				if len(auth) == 1 {
-					return jsonResponse(http.StatusUnauthorized, `{"errors":[{"status":"401"}]}`), nil
+					return jsonResponse(http.StatusUnauthorized, `{"errors":[{"status":"401"}]}`)
 				}
-				return jsonResponse(http.StatusOK, call.ok), nil
-			})}
+				return jsonResponse(http.StatusOK, call.ok)
+			})
 
 			if err := call.call(client); err != nil {
 				t.Fatalf("expected success after one refresh, got %v", err)
@@ -199,11 +173,10 @@ func TestLibraryReadsRefreshTheTokenOn401(t *testing.T) {
 }
 
 func TestLibraryReadsRequireAMediaUserToken(t *testing.T) {
-	client := newLibraryClient()
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		t.Fatalf("unexpected request %s without a media-user-token", req.URL)
-		return nil, nil
-	})}
+	client := newTestClient(t, libraryConfig, func(req *http.Request) *http.Response {
+		t.Errorf("unexpected request %s without a media-user-token", req.URL)
+		return nil
+	})
 
 	if _, _, err := client.LibrarySongsNewestFirst(context.Background(), "", 0, 10); err == nil {
 		t.Fatal("LibrarySongsNewestFirst without a token: want an error")

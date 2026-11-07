@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "id": "album-2",
+      "type": "albums",
+      "attributes": {
+        "name": "Second Duplicate",
+        "artistName": "Artist"
+      }
+    },
+    {
+      "id": "album-3",
+      "type": "albums",
+      "attributes": {
+        "name": "Third",
+        "artistName": "Artist",
+        "artwork": {
+          "url": "third-art"
+        },
+        "releaseDate": "2024-03-01",
+        "trackCount": 3
+      }
+    }
+  ]
+}

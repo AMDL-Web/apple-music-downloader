@@ -1,0 +1,54 @@
+{
+  "data": [
+    {
+      "id": "album-1",
+      "type": "albums",
+      "attributes": {
+        "name": "Album",
+        "artistName": "Album Artist",
+        "trackCount": 2,
+        "artwork": {
+          "url": "album-art"
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "artist-1",
+              "attributes": {
+                "name": "Album Artist",
+                "url": "https://music.apple.com/cn/artist/album-artist/artist-1",
+                "artwork": {
+                  "url": "artist-art"
+                }
+              }
+            }
+          ]
+        },
+        "tracks": {
+          "data": [
+            {
+              "id": "song-1",
+              "type": "songs",
+              "attributes": {
+                "name": "Song",
+                "trackNumber": 1,
+                "discNumber": 1
+              }
+            },
+            {
+              "id": "song-2",
+              "type": "songs",
+              "attributes": {
+                "name": "Two",
+                "trackNumber": 2,
+                "discNumber": 1
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

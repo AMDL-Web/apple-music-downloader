@@ -2,38 +2,28 @@ package applemusic
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
 	"reflect"
-	"strings"
 	"testing"
-	"time"
-
-	"amdl/internal/config"
 )
 
+const stationTracksBody = `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","isLive":false,"artwork":{"url":"station-art"},"playParams":{"format":"tracks"}}}]}`
+
 func TestStationTracksResolvesTracksFormat(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	var gotMediaToken string
-	var nextTracksMethod string
-	var nextTracksLimit string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	var gotMediaToken, nextTracksMethod, nextTracksLimit string
+	nextTracks := fixture(t, "catalog/station-next-tracks.json")
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		switch req.URL.Path {
 		case "/v1/catalog/us/stations/ra.1":
-			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","isLive":false,"artwork":{"url":"station-art"},"playParams":{"format":"tracks"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			return jsonResponse(http.StatusOK, stationTracksBody)
 		case "/v1/me/stations/next-tracks/ra.1":
 			gotMediaToken = req.Header.Get("Media-User-Token")
 			nextTracksMethod = req.Method
 			nextTracksLimit = req.URL.Query().Get("limit")
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}},{"id":"song-2","type":"songs","attributes":{"name":"Two","artistName":"Artist"}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			return jsonResponse(http.StatusOK, nextTracks)
 		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusNotFound, "unexpected path: "+req.URL.RequestURI())
+	})
 
 	station, err := client.StationTracks(context.Background(), "us", "ra.1", "media-token-xyz")
 	if err != nil {
@@ -58,69 +48,49 @@ func TestStationTracksResolvesTracksFormat(t *testing.T) {
 	}
 }
 
-func TestStationTracksRejectsLiveStream(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/us/stations/ra.live" {
-			body := `{"data":[{"id":"ra.live","type":"stations","attributes":{"name":"Apple Music 1","isLive":true,"playParams":{"format":"stream"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		t.Fatalf("unexpected request to %s (live station must not hit next-tracks)", req.URL.RequestURI())
-		return nil, nil
-	})}
-
-	if _, err := client.StationTracks(context.Background(), "us", "ra.live", "media-token-xyz"); err == nil {
-		t.Fatal("expected live station to be rejected")
+// A live station and a missing media-user-token are both refused from the
+// station resource alone: neither may reach next-tracks.
+func TestStationTracksRefusesBeforeNextTracks(t *testing.T) {
+	tests := []struct {
+		name, id, station, mediaToken string
+	}{
+		{"live stream", "ra.live", `{"data":[{"id":"ra.live","type":"stations","attributes":{"name":"Apple Music 1","isLive":true,"playParams":{"format":"stream"}}}]}`, "media-token-xyz"},
+		{"missing media-user-token", "ra.1", `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","playParams":{"format":"tracks"}}}]}`, "  "},
 	}
-}
-
-func TestStationTracksRequiresMediaUserToken(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/us/stations/ra.1" {
-			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","playParams":{"format":"tracks"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		t.Fatalf("unexpected request to %s (missing token must not hit next-tracks)", req.URL.RequestURI())
-		return nil, nil
-	})}
-
-	if _, err := client.StationTracks(context.Background(), "us", "ra.1", "  "); err == nil {
-		t.Fatal("expected missing media_user_token to be rejected")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
+				if req.URL.Path == "/v1/catalog/us/stations/"+tt.id {
+					return jsonResponse(http.StatusOK, tt.station)
+				}
+				t.Errorf("unexpected request to %s", req.URL.RequestURI())
+				return jsonResponse(http.StatusTeapot, "unexpected")
+			})
+			if _, err := client.StationTracks(context.Background(), "us", tt.id, tt.mediaToken); err == nil {
+				t.Fatal("StationTracks succeeded, want a refusal")
+			}
+		})
 	}
 }
 
 func TestStationNextTracksRetriesOnce401ThenSucceeds(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "stale-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-
 	var nextTracksCalls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
+		if resp, ok := scrapeResponse(req); ok {
+			return resp
+		}
 		switch req.URL.Path {
 		case "/v1/catalog/us/stations/ra.1":
-			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","isLive":false,"artwork":{"url":"station-art"},"playParams":{"format":"tracks"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			return jsonResponse(http.StatusOK, stationTracksBody)
 		case "/v1/me/stations/next-tracks/ra.1":
 			nextTracksCalls++
 			if nextTracksCalls == 1 {
-				return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"401"}]}`)), Header: make(http.Header)}, nil
+				return jsonResponse(http.StatusUnauthorized, `{"errors":[{"status":"401"}]}`)
 			}
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			return jsonResponse(http.StatusOK, `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]}`)
 		}
-		if req.URL.String() == "https://music.apple.com" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-		}
-		if req.URL.String() == "https://music.apple.com/assets/index~abc123.js" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusNotFound, "unexpected: "+req.URL.RequestURI())
+	})
 
 	station, err := client.StationTracks(context.Background(), "us", "ra.1", "media-token-xyz")
 	if err != nil {
