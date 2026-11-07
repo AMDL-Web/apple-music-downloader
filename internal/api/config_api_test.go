@@ -55,37 +55,6 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	}
 }
 
-// The per-type path templates became download.library_path_format; a client
-// still sending one is told which key it named instead of having it dropped.
-func TestUpdateConfigRejectsRemovedPathFormats(t *testing.T) {
-	for _, key := range []string{"song_path_format", "album_path_format", "artist_path_format"} {
-		store := config.NewStore(config.Default())
-		server := newServer(t, Deps{Config: store})
-		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
-			`{"download":{"`+key+`":"x/{SongName}"}}`)
-		if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), key) {
-			t.Fatalf("%s: status = %d, body = %s; want 400 naming the removed key", key, recorder.Code, recorder.Body.String())
-		}
-	}
-}
-
-// The keys amdl no longer reads are refused like any unknown key, so a
-// client that still sends one learns it at once.
-func TestUpdateConfigRejectsRetiredKeys(t *testing.T) {
-	for _, body := range []string{
-		`{"catalog":{"media_user_token":"configured-token"}}`,
-		`{"wrapper":{"data_dir":"/wrapper"}}`,
-		`{"catalog":{"media_user_token_priority":"request"}}`,
-	} {
-		store := config.NewStore(config.Default())
-		server := newServer(t, Deps{Config: store})
-		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", body)
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("%s: status = %d, body = %s; want 400", body, recorder.Code, recorder.Body.String())
-		}
-	}
-}
-
 func TestConfigResponsesHideTheWrapperToken(t *testing.T) {
 	const token = "wrapper-static-token-9f3c"
 	cfg := config.Default()
@@ -298,6 +267,15 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 		{name: "no log output left", body: `{"logging":{"console":false,"buffer_size":0}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "logging"},
 		{name: "list given a string", body: `{"download":{"quality_priority":"bogus"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.quality_priority must be a list, got a string"},
 		{name: "number given a string", body: `{"download":{"max_attempts":"abc"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.max_attempts must be a whole number, got a string"},
+		// Removed path formats and retired keys are refused by name, so a
+		// client still sending one learns it at once instead of having it
+		// dropped.
+		{name: "removed song path format", body: `{"download":{"song_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "song_path_format"},
+		{name: "removed album path format", body: `{"download":{"album_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "album_path_format"},
+		{name: "removed artist path format", body: `{"download":{"artist_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "artist_path_format"},
+		{name: "retired media user token", body: `{"catalog":{"media_user_token":"configured-token"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "media_user_token"},
+		{name: "retired wrapper data dir", body: `{"wrapper":{"data_dir":"/wrapper"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "data_dir"},
+		{name: "retired token priority", body: `{"catalog":{"media_user_token_priority":"request"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "media_user_token_priority"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
