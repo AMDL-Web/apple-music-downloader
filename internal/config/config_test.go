@@ -44,23 +44,6 @@ func TestIntegrityModeDefaultLoadAndValidate(t *testing.T) {
 	if err != nil || cfg.Download.IntegrityMode != IntegrityModeFull {
 		t.Fatalf("Load() full integrity mode = %q, %v", cfg.Download.IntegrityMode, err)
 	}
-	if _, err := Load(writeConfig(t, "download:\n  integrity_mode: fast\n")); err == nil || !strings.Contains(err.Error(), "integrity_mode") {
-		t.Fatalf("Load() invalid integrity mode error = %v, want integrity_mode validation error", err)
-	}
-}
-
-func TestLoadValidatesLogging(t *testing.T) {
-	for name, body := range map[string]string{
-		"level":        "logging:\n  level: trace\n",
-		"buffer":       "logging:\n  buffer_size: -1\n",
-		"all disabled": "logging:\n  console: false\n  buffer_size: 0\n",
-	} {
-		t.Run(name, func(t *testing.T) {
-			if _, err := Load(writeConfig(t, body)); err == nil || !strings.Contains(err.Error(), "logging") {
-				t.Fatalf("Load() error = %v, want logging validation error", err)
-			}
-		})
-	}
 }
 
 func TestValidateBoundsResourceAmplifyingDownloadSettings(t *testing.T) {
@@ -143,32 +126,6 @@ func TestLoadRejectsUnknownKeysNamingThemAndTheUpgradeGuide(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsExplicitEmptyValues(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  album_track_url_mode: \"\"\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "album_track_url_mode") {
-		t.Fatalf("Load() error = %v, want album_track_url_mode validation error", err)
-	}
-}
-
-// 2.0 removed developer-token signing. A config that still sets one of its
-// keys fails startup instead of being silently ignored, so an install that
-// relied on the signed token notices the change.
-func TestLoadRejectsRemovedSigningKeys(t *testing.T) {
-	for _, key := range []string{"apple_music_private_key_path", "apple_music_key_id", "apple_music_team_id", "signed_mode_hls_source"} {
-		path := writeConfig(t, "catalog:\n  "+key+": \"x\"\n")
-		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), key) {
-			t.Errorf("Load() with catalog.%s: error = %v, want it to name the key", key, err)
-		}
-	}
-}
-
-func TestLoadRejectsUnknownCoverFormat(t *testing.T) {
-	path := writeConfig(t, "download:\n  cover_format: webp\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "cover_format") {
-		t.Fatalf("Load() error = %v, want cover_format validation error", err)
-	}
-}
-
 // Apple's artwork URLs take a "{width}x{height}" size; anything else is an
 // error there, after which the fetcher falls back to its standard sizes, so
 // the setting would silently never apply.
@@ -207,51 +164,43 @@ func TestValidateWrapperAddress(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsMalformedCoverSize(t *testing.T) {
-	path := writeConfig(t, "download:\n  cover_size: big\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "download.cover_size") {
-		t.Fatalf("Load() error = %v, want download.cover_size validation error", err)
+// Load fails on a value it cannot honour, and the error names the offending
+// key so an operator knows what to edit.
+func TestLoadRejects(t *testing.T) {
+	tests := []struct {
+		name, body, want string
+	}{
+		{"logging level", "logging:\n  level: trace\n", "logging"},
+		{"logging buffer", "logging:\n  buffer_size: -1\n", "logging"},
+		{"logging all disabled", "logging:\n  console: false\n  buffer_size: 0\n", "logging"},
+		{"explicit empty value", "catalog:\n  album_track_url_mode: \"\"\n", "album_track_url_mode"},
+		// 2.0 removed developer-token signing. A config that still sets one of
+		// its keys fails startup instead of being silently ignored, so an
+		// install that relied on the signed token notices the change.
+		{"removed signing private key", "catalog:\n  apple_music_private_key_path: \"x\"\n", "apple_music_private_key_path"},
+		{"removed signing key id", "catalog:\n  apple_music_key_id: \"x\"\n", "apple_music_key_id"},
+		{"removed signing team id", "catalog:\n  apple_music_team_id: \"x\"\n", "apple_music_team_id"},
+		{"removed signed HLS source", "catalog:\n  signed_mode_hls_source: \"x\"\n", "signed_mode_hls_source"},
+		{"unknown cover format", "download:\n  cover_format: webp\n", "cover_format"},
+		{"malformed cover size", "download:\n  cover_size: big\n", "download.cover_size"},
+		{"unknown lyrics file", "download:\n  lyrics_files: [json]\n", "lyrics_files"},
+		{"duplicate lyrics file", "download:\n  lyrics_files: [lrc, lrc]\n", "lyrics_files"},
+		{"unknown lyrics timing", "download:\n  lyrics_timing: syllable\n", "lyrics_timing"},
+		// 1.x lyrics keys are gone in 2.0; a config that still has one must
+		// fail loudly instead of silently dropping the setting.
+		{"removed save_lyrics_file", "download:\n  save_lyrics_file: true\n", "save_lyrics_file"},
+		{"removed lyrics_format", "download:\n  lyrics_format: lrc\n", "lyrics_format"},
+		{"removed lyrics_type", "download:\n  lyrics_type: lyrics\n", "lyrics_type"},
+		{"unknown lyrics extra", "download:\n  lyrics_extras: [translation, romanization]\n", "lyrics_extras"},
+		{"explicit AAC-LC in priority", "download:\n  quality_priority: [alac, aac-lc]\n", "aac-lc"},
+		{"unknown integrity mode", "download:\n  integrity_mode: fast\n", "integrity_mode"},
 	}
-}
-
-func TestLoadRejectsBadLyricsFiles(t *testing.T) {
-	for _, files := range []string{"[json]", "[lrc, lrc]"} {
-		path := writeConfig(t, "download:\n  lyrics_files: "+files+"\n")
-		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_files") {
-			t.Fatalf("lyrics_files %s: Load() error = %v, want lyrics_files validation error", files, err)
-		}
-	}
-}
-
-func TestLoadRejectsUnknownLyricsTiming(t *testing.T) {
-	path := writeConfig(t, "download:\n  lyrics_timing: syllable\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_timing") {
-		t.Fatalf("Load() error = %v, want lyrics_timing validation error", err)
-	}
-}
-
-// 1.x lyrics keys are gone in 2.0; a config that still has one must fail
-// loudly instead of silently dropping the setting.
-func TestLoadRejectsRemovedLyricsKeys(t *testing.T) {
-	for _, key := range []string{"save_lyrics_file: true", "lyrics_format: lrc", "lyrics_type: lyrics"} {
-		path := writeConfig(t, "download:\n  "+key+"\n")
-		if _, err := Load(path); err == nil {
-			t.Fatalf("%s: Load() succeeded, want the removed key rejected", key)
-		}
-	}
-}
-
-func TestLoadRejectsUnknownLyricsExtra(t *testing.T) {
-	path := writeConfig(t, "download:\n  lyrics_extras: [translation, romanization]\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_extras") {
-		t.Fatalf("Load() error = %v, want lyrics_extras validation error", err)
-	}
-}
-
-func TestLoadRejectsExplicitAACLCInPriority(t *testing.T) {
-	path := writeConfig(t, "download:\n  quality_priority: [alac, aac-lc]\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "aac-lc") {
-		t.Fatalf("Load() error = %v, want implicit AAC-LC validation error", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Load(writeConfig(t, tt.body)); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Load() error = %v, want an error naming %q", err, tt.want)
+			}
+		})
 	}
 }
 
