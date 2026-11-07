@@ -366,7 +366,8 @@ func TestDownloadToFileValidatesItsCheckpoint(t *testing.T) {
 				return []rangeReply{
 					{wantRange: from(partial), wantIfRange: `"track"`, status: http.StatusPartialContent, body: payload[partial:],
 						header: map[string]string{"ETag": `"track"`, "Content-Range": fmt.Sprintf("bytes %d-%d/%d", partial, partial+99, size), "Content-Length": strconv.Itoa(size - partial)}},
-					full(`"track"`),
+					// The restart's length is unknown: a chunked body.
+					{header: map[string]string{"ETag": `"track"`}, body: payload},
 				}
 			},
 		},
