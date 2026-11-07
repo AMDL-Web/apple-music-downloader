@@ -103,6 +103,10 @@ func TestStartFindStop(t *testing.T) {
 }
 
 func TestOneBackendPerDataDirectory(t *testing.T) {
+	// The backend runs on a real listener, so this cannot use a synctest
+	// bubble; a short lock poll keeps the wait for the lock brief instead.
+	defer func(prev time.Duration) { lockPoll = prev }(lockPoll)
+	lockPoll = 10 * time.Millisecond
 	d := tempDirs(t)
 	b := Backend{Dirs: d, Wrapper: "http://127.0.0.1:9"}
 	first, err := b.Start()
@@ -116,7 +120,7 @@ func TestOneBackendPerDataDirectory(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
 	go func() { served <- b.Serve(ctx, "127.0.0.1:0") }()
-	time.Sleep(2 * lockPoll)
+	time.Sleep(3 * lockPoll) // Serve finds the lock taken a few times
 	if u, _ := Find(context.Background(), d); u != first.Base {
 		t.Fatalf("while the first runs, Find = %q", u)
 	}
@@ -131,7 +135,7 @@ func TestOneBackendPerDataDirectory(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("Serve did not take over")
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	cancel()
 	if err := <-served; err != nil {
