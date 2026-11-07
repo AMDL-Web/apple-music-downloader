@@ -27,6 +27,11 @@ type Backdrop struct {
 	// which then shows without easing.
 	From *Backdrop
 	Mix  float32
+	// Flat leaves the discs out: the layer is built and eases as ever, but
+	// draws nothing over the ground. The discs' shader is the costliest
+	// thing a frame draws on the CPU, as a headless Tester does, for tests
+	// that do not look at the light.
+	Flat bool
 }
 
 // Show builds the backdrop as a layer under its parent's other children.
@@ -51,7 +56,7 @@ func (b Backdrop) Show(c *ui.Context) {
 		height = layer.AnimateTo("height", b.Height, ui.Smooth)
 	}
 	layer.Height(height)
-	if light.A == 0 && deep.A == 0 {
+	if light.A == 0 && deep.A == 0 || b.Flat {
 		return
 	}
 	ground := b.Ground

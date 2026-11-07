@@ -1,12 +1,12 @@
 package store
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"sync"
 	"testing"
 
+	"amdl/apps/desktop/internal/testkit"
 	"amdl/internal/client"
 	"amdl/internal/domain"
 )
@@ -24,11 +24,7 @@ type songBackend struct {
 func (f *songBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	reply := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v) // the test reads what arrives
-	}
+	reply := func(status int, v any) { testkit.Reply(w, status, v) }
 	switch r.Method + " " + r.URL.Path {
 	case "GET /api/v1/search":
 		f.searches++
@@ -98,11 +94,7 @@ type pagedSongs struct {
 func (f *pagedSongs) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	reply := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v) // the test reads what arrives
-	}
+	reply := func(status int, v any) { testkit.Reply(w, status, v) }
 	mark := &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "91", State: domain.RecordComplete, TracksDone: 1, TracksWanted: 1, SongState: domain.AudioDone}
 	switch r.Method + " " + r.URL.Path {
 	case "GET /api/v1/search":

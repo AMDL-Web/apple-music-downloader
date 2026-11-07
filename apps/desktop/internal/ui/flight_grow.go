@@ -131,6 +131,7 @@ func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) 
 				plain := paletteBackdrop(k, Palette{}, false)
 				b.From, b.Mix = &plain, t
 			}
+			b.Flat = a.FlatBackdrop
 			b.Show(c)
 			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
 				a.titleBar(c, k, sidebar, true)

@@ -1,5 +1,11 @@
 //go:build !race
 
+// These run on a synctest bubble's clock (memLink): the link's rate, the
+// stall and the cache's stallAfter are on it, and minutes of them take the
+// time the covers take to decode. Six decodes of 4000-pixel pictures take
+// the race detector some 20 s; the cache's concurrency is raced in
+// priority_test.go.
+
 package artwork
 
 import (
@@ -9,12 +15,12 @@ import (
 	"image/jpeg"
 	"math/rand/v2"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -111,13 +117,15 @@ func (l *link) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // on the whole picture and started again from nothing.
 func TestSixUploadedCoversOverASlowLinkAllLoad(t *testing.T) {
 	pic := uploaded()
+	synctest.Test(t, func(t *testing.T) { sixOverASlowLink(t, pic) })
+}
+
+func sixOverASlowLink(t *testing.T, pic []byte) {
 	l := &link{pic: pic, rate: 200 << 10}
-	srv := httptest.NewServer(l)
-	t.Cleanup(srv.Close)
-	win := newWindow(t, http.DefaultTransport)
+	win := newWindow(t, memLink{l})
 	var covers []string
 	for i := range 6 {
-		covers = append(covers, fmt.Sprintf("%s/sq-mq-us-0%02d-000002/ec/5e/d2/%d/image?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=%x", srv.URL, 33+i, i, i*104729))
+		covers = append(covers, fmt.Sprintf("%s/sq-mq-us-0%02d-000002/ec/5e/d2/%d/image?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=%x", cdnURL, 33+i, i, i*104729))
 	}
 	start := time.Now()
 	shown := 0
@@ -142,14 +150,16 @@ func TestSixUploadedCoversOverASlowLinkAllLoad(t *testing.T) {
 // the next try asks only for the rest.
 func TestAStalledDownloadIsGivenUpAndResumedWhereItStopped(t *testing.T) {
 	pic := uploaded()
+	synctest.Test(t, func(t *testing.T) { stalledAndResumed(t, pic) })
+}
+
+func stalledAndResumed(t *testing.T, pic []byte) {
 	l := &link{pic: pic, stallAt: 400 << 10, stalled: make(chan time.Time, 2)}
-	srv := httptest.NewServer(l)
-	t.Cleanup(srv.Close)
-	win := newWindow(t, http.DefaultTransport)
-	cover := []string{srv.URL + "/sq-mq-us-037-000002/99/76/61/997661f0/image?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=aaaa"}
+	win := newWindow(t, memLink{l})
+	cover := []string{cdnURL + "/sq-mq-us-037-000002/99/76/61/997661f0/image?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=aaaa"}
 	start := time.Now()
 	var stopped, givenUp time.Time
-	skipped := false
+	// After the stall the retry waits retryFirst, on the bubble's clock.
 	for time.Since(start) < 50*time.Second {
 		if win.frame(cover, 512) == 1 {
 			break
@@ -163,11 +173,6 @@ func TestAStalledDownloadIsGivenUpAndResumedWhereItStopped(t *testing.T) {
 			}
 		default:
 		}
-		if e := win.c.entries[coverKey{keyOf(cover[0]), 0}]; !skipped && e != nil && e.failures > 0 {
-			// The retry waits retryFirst, which the test need not.
-			skipped = true
-			win.clock = win.clock.Add(retryFirst)
-		}
 	}
 	if win.frame(cover, 512) != 1 {
 		t.Fatalf("after %v the cover that stalled once does not show", time.Since(start).Round(time.Second))
@@ -175,8 +180,8 @@ func TestAStalledDownloadIsGivenUpAndResumedWhereItStopped(t *testing.T) {
 	if givenUp.IsZero() {
 		t.Fatal("the stalled download was never given up")
 	}
-	// The 15 s of stallAfter, and some slack.
-	if wait := givenUp.Sub(stopped); wait > 18*time.Second {
+	// The 15 s of stallAfter, and the frame that notices.
+	if wait := givenUp.Sub(stopped); wait > stallAfter+time.Second {
 		t.Errorf("the stalled download was given up %v after its last byte", wait.Round(100*time.Millisecond))
 	}
 	l.mu.Lock()

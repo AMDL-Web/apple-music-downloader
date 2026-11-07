@@ -1,7 +1,3 @@
-//go:build !race
-
-// Layout only: the race detector would slow it with no concurrency to check.
-
 package ui
 
 import (

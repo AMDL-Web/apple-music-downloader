@@ -302,19 +302,9 @@ func (a *App) guestManageRow(c *ui.Context, k *Tokens) {
 		return
 	}
 	s.CheckGuestUpdate()
-	status := g.Installed.ID
-	switch {
-	case g.NeedsUpdate():
-		status += " · needs an update"
-	case g.UpdateAvailable():
-		status += " · " + g.Latest.Commit[:min(12, len(g.Latest.Commit))] + " available"
-	}
+	status, state := guestStatus(g)
 	w := a.Store.Server.Wrapper
 	running := w != nil && w.Managed != nil && w.Managed.Mode != "stopped"
-	state := setup.Ready
-	if g.NeedsUpdate() {
-		state = setup.Missing
-	}
 	setupRow(c, k, "guest", state, title, status, true, func() {
 		if g.UpdateAvailable() && button(c, k, buttonPlain, "Update", nil).Clicked() {
 			s.UpdateGuest()
@@ -363,4 +353,17 @@ func (a *App) uninstallDialog(c *ui.Context, k *Tokens) {
 			}
 		})
 	})
+}
+
+// guestStatus is what an installed guest's row says after its id, and its
+// state: one this build cannot run needs an update, one built from another
+// commit than the pin's has that commit available.
+func guestStatus(g setup.Guest) (string, setup.State) {
+	switch {
+	case g.NeedsUpdate():
+		return g.Installed.ID + " · needs an update", setup.Missing
+	case g.UpdateAvailable():
+		return g.Installed.ID + " · " + g.Latest.Commit[:min(12, len(g.Latest.Commit))] + " available", setup.Ready
+	}
+	return g.Installed.ID, setup.Ready
 }

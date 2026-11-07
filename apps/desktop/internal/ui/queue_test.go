@@ -7,61 +7,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/artwork"
 	"amdl/apps/desktop/internal/store"
-	"amdl/internal/client"
-	"amdl/internal/demo"
 )
-
-// demoApp is an App on the demo's in-memory backend, whose answers wait
-// until run applies them on the test's goroutine, as the UI thread would.
-func demoApp(t *testing.T) (*App, func(until func() bool)) {
-	t.Helper()
-	a, _ := newTestApp(remoteSettings())
-	queue := make(chan func(), 1024)
-	post := func(fn func()) { queue <- fn }
-	b := demo.New(time.Now)
-	a.Store = store.New(post, nil)
-	// Covers too come back on the test's goroutine, from the demo.
-	a.Art = artwork.NewWith(post, b.Transport())
-	c, err := client.NewWith(demo.Address, b.Transport())
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.Store.Connect(c)
-	t.Cleanup(a.Store.Close)
-	return a, func(until func() bool) {
-		t.Helper()
-		// The race detector on a busy runner slows everything several
-		// times over.
-		deadline := time.After(30 * time.Second)
-		// An until that builds a frame may be what sends the request it
-		// waits on, so it runs again even when nothing arrives.
-		tick := time.NewTicker(50 * time.Millisecond)
-		defer tick.Stop()
-		for !until() {
-			select {
-			case fn := <-queue:
-				fn()
-				// Everything that arrived meanwhile goes first: an until
-				// that builds a frame takes most of a second under the race
-				// detector, and the answer waited on queues behind every
-				// cover that loads.
-				for more := true; more; {
-					select {
-					case fn := <-queue:
-						fn()
-					default:
-						more = false
-					}
-				}
-			case <-tick.C:
-			case <-deadline:
-				t.Fatal("the demo backend's answer never arrived")
-			}
-		}
-	}
-}
 
 func TestTheRowMenuOpensOnAClickAndDeletesOnlyAFinishedJob(t *testing.T) {
 	a, run := demoApp(t)
@@ -144,4 +91,162 @@ func TestEveryFinishedRowShowsItsQuality(t *testing.T) {
 		}
 		return true
 	})
+}
+
+// The queue's hero and its row of recent covers carry no label saying what
+// is plain from them: the bar and the percent say a download is under way,
+// and the covers need no title.
+func TestTheQueueHeroCarriesNoObviousLabels(t *testing.T) {
+	a, run := demoApp(t)
+	s := a.Store
+	run(func() bool { return s.Loaded && s.Now() != nil && len(s.Finished()) > 1 })
+	a.Go(ScreenQueue)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(0.5)
+	tt.Advance(time.Second)
+	j := a.heroJob()
+	if j == nil {
+		t.Fatal("the queue has no hero")
+	}
+	if _, ok := tt.Find("Open " + j.Name()); !ok {
+		t.Fatalf("no hero for %s: %q", j.Name(), tt.Texts())
+	}
+	covers := 0
+	for _, f := range s.Finished() {
+		if f.ID == j.ID {
+			continue
+		}
+		if _, ok := tt.Find(f.Name()); ok {
+			covers++
+		}
+	}
+	if covers == 0 {
+		t.Fatalf("no recent covers: %q", tt.Texts())
+	}
+	// Labels show in capitals (label); the sidebar's card, which says
+	// "Downloading now" as its name, is not one.
+	for _, x := range []string{"DOWNLOADING NOW", "RECENTLY FINISHED"} {
+		if tt.HasText(x) {
+			t.Errorf("the queue shows the label %q", x)
+		}
+	}
+}
+
+// The queue hero's words line up with its cover at the top and the bottom:
+// the title's box starts where the cover does and the progress line's box
+// ends where it does, in a wide window and a narrow one. The sidebar, whose
+// card names the download too, is hidden.
+func TestTheQueueHerosWordsLineUpWithItsCover(t *testing.T) {
+	for _, size := range [][2]int{{1280, 800}, {820, 560}} {
+		a, run := demoApp(t)
+		s := a.Store
+		run(func() bool { return s.Loaded && s.Now() != nil })
+		a.Settings.HideSidebar = true
+		a.Go(ScreenQueue)
+		tt := ui.NewTester(a.View, size[0], size[1])
+		tt.SetScale(0.5)
+		tt.Advance(time.Second)
+		j := a.heroJob()
+		if j == nil {
+			t.Fatal("the queue has no hero")
+		}
+		cover, ok := tt.Find("Open " + j.Name())
+		title, ok2 := tt.Find(j.Name())
+		progress, ok3 := tt.Find(a.heroProgressText(j))
+		if !ok || !ok2 || !ok3 {
+			t.Fatalf("%v: no hero cover, title or progress line: %q", size, tt.Texts())
+		}
+		if d := title.Y - cover.Y; d < -4 || d > 4 {
+			t.Errorf("%v: the title's top is %.0f DIP from the cover's %v (title %v)", size, d, cover, title)
+		}
+		if d := progress.Y + progress.H - (cover.Y + cover.H); d < -4 || d > 4 {
+			t.Errorf("%v: the progress line's bottom is %.0f DIP from the cover's %v (progress %v)", size, d, cover, progress)
+		}
+	}
+}
+
+// A short window keeps three rows of the queue's list in view: the hero
+// takes its compact form, and the recent covers go, only as far as that
+// needs. The compact cover lines up with the words beside it at the top
+// and the bottom, and a page wide enough keeps the percent with Pause and
+// Details.
+func TestAShortWindowKeepsThreeRowsOfTheQueue(t *testing.T) {
+	a, run := demoApp(t)
+	run(func() bool { return a.Store.Loaded && a.Store.Now() != nil })
+	a.Go(ScreenQueue)
+	tt := ui.NewTester(a.View, 1280, 800)
+	find := func(s string) ui.Rect {
+		t.Helper()
+		r, ok := tt.Find(s)
+		if !ok {
+			t.Fatalf("no %q: %q", s, tt.Texts())
+		}
+		return r
+	}
+	for _, sz := range [][2]int{{1280, 800}, {1280, 690}, {820, 560}} {
+		tt.SetSize(sz[0], sz[1])
+		for range 10 {
+			run(func() bool { return true })
+			tt.Advance(50 * time.Millisecond)
+		}
+		// The third job of Up next.
+		if r := find("夏夜信号"); r.Y+r.H > float32(sz[1]) {
+			t.Errorf("%v: the third row ends at %.0f, past the window", sz, r.Y+r.H)
+		}
+		find("Pause")
+		find("Details")
+		cover := find("Open " + a.Store.Now().Name())
+		if cover.X > 300 {
+			t.Errorf("%v: the hero's cover is not at its left: %v", sz, cover)
+		}
+		if sz[1] >= 690 {
+			if cover.H != heroCover {
+				t.Errorf("%v: the hero's cover is %v, not the full %d", sz, cover, heroCover)
+			}
+			continue
+		}
+		// The hero has no label: its title is the top of its words, and
+		// the first element showing the job's name.
+		top, bottom := find(a.Store.Now().Name()), find(a.heroProgressText(a.Store.Now()))
+		if d := top.Y - cover.Y; d < -1 || d > 1 {
+			t.Errorf("%v: the compact cover's top is at %.0f, the words' at %.0f", sz, cover.Y, top.Y)
+		}
+		if d := bottom.Y + bottom.H - cover.Y - cover.H; d < -1 || d > 1 {
+			t.Errorf("%v: the compact cover's bottom is at %.0f, the words' at %.0f", sz, cover.Y+cover.H, bottom.Y+bottom.H)
+		}
+	}
+}
+
+// In the light theme the hero's light ends inside the queue's bar, by an
+// inward ramp, not at a hard line along its top edge: down a column clear
+// of the bar's words, no row differs from the one above by more than a
+// few levels.
+func TestTheQueueBarLetsTheLightFadeIn(t *testing.T) {
+	a, run := demoApp(t)
+	a.Theme, a.FlatBackdrop = "light", false
+	run(func() bool { return a.Store.Loaded && a.Store.Now() != nil })
+	a.Go(ScreenQueue)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	for range 20 {
+		run(func() bool { return true })
+		tt.Advance(100 * time.Millisecond)
+	}
+	all, ok := tt.Find("All")
+	if !ok {
+		t.Fatalf("no filters: %q", tt.Texts())
+	}
+	img := tt.Image()
+	lum := func(x, y int) float32 {
+		o := img.PixOffset(x, y)
+		return 0.2126*float32(img.Pix[o]) + 0.7152*float32(img.Pix[o+1]) + 0.0722*float32(img.Pix[o+2])
+	}
+	for _, x := range []int{1000, 1150, 1260} {
+		for y := int(all.Y) - 40; y < int(all.Y+all.H)+20; y++ {
+			if d := lum(x, y+1) - lum(x, y); d > 4 || d < -4 {
+				t.Errorf("at x %d, row %d differs from row %d by %.0f levels: a hard edge", x, y+1, y, d)
+				break
+			}
+		}
+	}
 }
