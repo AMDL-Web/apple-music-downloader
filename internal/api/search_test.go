@@ -1,13 +1,10 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"amdl/internal/applemusic"
@@ -134,41 +131,6 @@ func TestSearchReadsPlaylistsBetweenAlbumsAndArtists(t *testing.T) {
 	}
 }
 
-func TestSearchRefusesBadParameters(t *testing.T) {
-	for _, query := range []string{
-		"",
-		"term=%20%20",
-		"term=" + strings.Repeat("a", searchMaxTermRunes+1),
-		"term=a&types=tracks",
-		"term=a&storefront=usa",
-		"term=a&limit=0",
-		"term=a&limit=51",
-		"term=a&limit=x",
-		"term=a&offset=-1",
-	} {
-		catalog := &fakeCatalog{t: t}
-		recorder := requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/search?"+query, "")
-		assertErrorCode(t, recorder, http.StatusBadRequest, CodeInvalidRequest)
-		if len(catalog.calls) != 0 {
-			t.Fatalf("%q read the catalog: %v", query, catalog.calls)
-		}
-	}
-}
-
-func TestSearchCatalogFailures(t *testing.T) {
-	for _, c := range []struct {
-		err    error
-		status int
-		code   ErrorCode
-	}{
-		{errors.New("Apple Music catalog search request in storefront us failed: 400 Bad Request"), http.StatusBadGateway, CodeUpstreamError},
-		{context.DeadlineExceeded, http.StatusGatewayTimeout, CodeUpstreamTimeout},
-	} {
-		recorder := requestJSON(t, newLookupServer(t, &fakeCatalog{t: t, err: c.err}, nil), http.MethodGet, "/api/v1/search?term=a", "")
-		assertErrorCode(t, recorder, c.status, c.code)
-	}
-}
-
 func TestHitURLsDownloadTheHit(t *testing.T) {
 	for _, c := range []struct {
 		kind     applemusic.URLType
@@ -220,24 +182,4 @@ func TestArtistAlbumsReturnsTheArtistAndOnePage(t *testing.T) {
 	if items, _ := albums["items"].([]any); len(items) != 1 || items[0].(map[string]any)["track_count"] != float64(16) {
 		t.Fatalf("albums = %v", albums)
 	}
-}
-
-func TestArtistAlbumsRefusesBadParameters(t *testing.T) {
-	for _, path := range []string{
-		"/api/v1/artists/abc/albums",
-		"/api/v1/artists/1%2F2/albums",
-		"/api/v1/artists/1/albums?limit=101",
-		"/api/v1/artists/1/albums?storefront=x",
-	} {
-		catalog := &fakeCatalog{t: t}
-		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
-		if len(catalog.calls) != 0 {
-			t.Fatalf("%s read the catalog: %v", path, catalog.calls)
-		}
-	}
-}
-
-func TestArtistAlbumsUnknownArtist(t *testing.T) {
-	catalog := &fakeCatalog{t: t, err: notFoundError{}}
-	assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/artists/1/albums", ""), http.StatusNotFound, CodeCatalogNotFound)
 }

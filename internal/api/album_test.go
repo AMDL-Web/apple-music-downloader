@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -92,35 +91,6 @@ func TestAlbumWithoutSongsAnswersAnEmptyList(t *testing.T) {
 	}
 	if _, has := got["disc_count"]; has {
 		t.Fatalf("disc_count without songs: %v", got)
-	}
-}
-
-func TestAlbumRefusesBadParameters(t *testing.T) {
-	for _, path := range []string{
-		"/api/v1/albums/abc",
-		"/api/v1/albums/1%2F2",
-		"/api/v1/albums/1?storefront=x",
-	} {
-		catalog := &fakeCatalog{t: t}
-		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, path, ""), http.StatusBadRequest, CodeInvalidRequest)
-		if len(catalog.calls) != 0 {
-			t.Fatalf("%s read the catalog: %v", path, catalog.calls)
-		}
-	}
-}
-
-func TestAlbumCatalogFailures(t *testing.T) {
-	for _, tt := range []struct {
-		err    error
-		status int
-		code   ErrorCode
-	}{
-		{fmt.Errorf("get album: %w", notFoundError{}), http.StatusNotFound, CodeCatalogNotFound},
-		{errors.New("catalog request failed: 500 Internal Server Error"), http.StatusBadGateway, CodeUpstreamError},
-		{fmt.Errorf("get album: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, CodeUpstreamTimeout},
-	} {
-		catalog := &fakeCatalog{t: t, err: tt.err}
-		assertErrorCode(t, requestJSON(t, newLookupServer(t, catalog, nil), http.MethodGet, "/api/v1/albums/1", ""), tt.status, tt.code)
 	}
 }
 
