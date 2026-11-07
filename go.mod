@@ -16,6 +16,7 @@ require (
 	github.com/egoist/mygo v0.7.3
 	github.com/iyear/gowidevine v0.1.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/rogpeppe/go-internal v1.16.0
 	github.com/zhaarey/go-mp4tag v0.0.0-20260509131819-a89fa417cd97
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.49.0
@@ -45,7 +46,6 @@ require (
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
