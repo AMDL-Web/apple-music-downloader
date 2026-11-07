@@ -6,47 +6,52 @@ import (
 	"amdl/internal/domain"
 )
 
+// trackRun.stageSetter publishes at once when a stage flag flips
+// (stagesChanged) and through the progress gate when a meter rounds to
+// another whole percent (metersChanged); anything else is not published.
 func TestProgressChangedThrottle(t *testing.T) {
 	base := domain.ItemProgress{Download: 0.5, Decrypt: 0.25, Resolved: true}
 	for _, tc := range []struct {
-		name string
-		next domain.ItemProgress
-		want bool
+		name           string
+		next           domain.ItemProgress
+		stages, meters bool
 	}{
-		{"identical", base, false},
+		{name: "identical", next: base},
 		{
 			// Sub-percent meter movement is the 32KB-chunk case: dropping it is
 			// the whole point of the gate.
 			name: "download moves less than a percentage point",
 			next: domain.ItemProgress{Download: 0.502, Decrypt: 0.25, Resolved: true},
-			want: false,
 		},
 		{
-			name: "download crosses a percentage point",
-			next: domain.ItemProgress{Download: 0.51, Decrypt: 0.25, Resolved: true},
-			want: true,
+			name:   "download crosses a percentage point",
+			next:   domain.ItemProgress{Download: 0.51, Decrypt: 0.25, Resolved: true},
+			meters: true,
 		},
 		{
-			name: "decrypt crosses a percentage point",
-			next: domain.ItemProgress{Download: 0.5, Decrypt: 0.26, Resolved: true},
-			want: true,
+			name:   "decrypt crosses a percentage point",
+			next:   domain.ItemProgress{Download: 0.5, Decrypt: 0.26, Resolved: true},
+			meters: true,
 		},
 		{
 			// A stage finishing is never throttled, however little the meters
 			// moved — it is the only signal that step happened.
-			name: "stage flag flips with both meters still",
-			next: domain.ItemProgress{Download: 0.5, Decrypt: 0.25, Resolved: true, Tagged: true},
-			want: true,
+			name:   "stage flag flips with both meters still",
+			next:   domain.ItemProgress{Download: 0.5, Decrypt: 0.25, Resolved: true, Tagged: true},
+			stages: true,
 		},
 		{
-			name: "verified flips with both meters still",
-			next: domain.ItemProgress{Download: 0.5, Decrypt: 0.25, Resolved: true, Verified: true},
-			want: true,
+			name:   "verified flips with both meters still",
+			next:   domain.ItemProgress{Download: 0.5, Decrypt: 0.25, Resolved: true, Verified: true},
+			stages: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := progressChanged(base, tc.next); got != tc.want {
-				t.Fatalf("progressChanged(%+v, %+v) = %v, want %v", base, tc.next, got, tc.want)
+			if got := stagesChanged(base, tc.next); got != tc.stages {
+				t.Errorf("stagesChanged = %v, want %v", got, tc.stages)
+			}
+			if got := metersChanged(base, tc.next); got != tc.meters {
+				t.Errorf("metersChanged = %v, want %v", got, tc.meters)
 			}
 		})
 	}
@@ -112,10 +117,4 @@ func TestStageEntryMutatorsRestateMeters(t *testing.T) {
 	if midDownload.Download != 1 || midDownload.Decrypt != 0 {
 		t.Fatalf("meters after entering decrypt = %+v, want download=1 decrypt=0", midDownload)
 	}
-}
-
-// progressChanged is the value gate trackRun.stageSetter applies: any stage flag
-// flipping, or either meter rounding to a different whole percent.
-func progressChanged(prev, next domain.ItemProgress) bool {
-	return stagesChanged(prev, next) || metersChanged(prev, next)
 }

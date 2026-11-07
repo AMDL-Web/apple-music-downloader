@@ -9,7 +9,6 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/usertoken"
-	"amdl/internal/wrapper"
 )
 
 const inProcessTestToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -17,7 +16,7 @@ const inProcessTestToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 // recordingPlayback is a playbackClient that records the requests it got and
 // answers with the configured results.
 type recordingPlayback struct {
-	calls         *[]string
+	calls         *callLog
 	storefront    string
 	storefrontErr error
 	lyrics        string
@@ -34,7 +33,7 @@ func (p recordingPlayback) record(call, token string) {
 	if token != inProcessTestToken {
 		call += " with another token"
 	}
-	*p.calls = append(*p.calls, call)
+	p.calls.add(call)
 }
 
 func (p recordingPlayback) AccountStorefront(_ context.Context, token string) (string, error) {
@@ -60,28 +59,6 @@ func (p recordingPlayback) License(_ context.Context, token, _, _, _ string) (st
 	return p.license, p.licenseErr
 }
 
-// recordingWrapper answers lyrics, WebPlayback and license as the wrapper
-// and records each request.
-type recordingWrapper struct {
-	fakeDownloaderWrapper
-	calls *[]string
-}
-
-func (w recordingWrapper) Lyrics(context.Context, string, wrapper.LyricsRequestOptions) (string, error) {
-	*w.calls = append(*w.calls, "wrapper lyrics")
-	return "wrapper lyrics doc", nil
-}
-
-func (w recordingWrapper) WebPlayback(context.Context, string) (string, error) {
-	*w.calls = append(*w.calls, "wrapper webPlayback")
-	return "https://wrapper.example/playlist.m3u8", nil
-}
-
-func (w recordingWrapper) License(context.Context, string, string, string) (string, error) {
-	*w.calls = append(*w.calls, "wrapper license")
-	return "wrapper-license", nil
-}
-
 type tokenRejected struct{}
 
 func (tokenRejected) Error() string           { return "token rejected" }
@@ -96,22 +73,25 @@ func (notFound) NonRetryable() bool { return true }
 
 var errApple5xx = errors.New("Apple Music request failed: 503 Service Unavailable")
 
-func inProcessDownloader(token string, playback playbackClient, calls *[]string) *Downloader {
+func inProcessDownloader(token string, playback playbackClient, calls *callLog) *Downloader {
 	cfg := config.Default()
 	cfg.Catalog.Language = "ja"
-	return &Downloader{
+	return newTestDownloader(&Downloader{
 		cfg:      cfg,
 		tokens:   usertoken.NewReading(func(string) (string, error) { return token, nil }),
 		playback: playback,
-		wrapper:  recordingWrapper{calls: calls},
-	}
+		wrapper: fakeDownloaderWrapper{
+			lyrics: "wrapper lyrics doc", webPlayback: "https://wrapper.example/playlist.m3u8", license: "wrapper-license",
+			calls: calls,
+		},
+	})
 }
 
 func TestInProcessRequestsPickTheirRoute(t *testing.T) {
 	cases := []struct {
 		name     string
 		token    string
-		playback func(*[]string) playbackClient
+		playback func(*callLog) playbackClient
 		want     []string
 		// wantErr names the error webPlayback, license and lyrics return.
 		wantErr error
@@ -119,7 +99,7 @@ func TestInProcessRequestsPickTheirRoute(t *testing.T) {
 		{
 			name:  "no media-user-token goes to the wrapper",
 			token: "",
-			playback: func(calls *[]string) playbackClient {
+			playback: func(calls *callLog) playbackClient {
 				return recordingPlayback{calls: calls}
 			},
 			want: []string{"wrapper webPlayback", "wrapper license", "wrapper lyrics"},
@@ -127,13 +107,13 @@ func TestInProcessRequestsPickTheirRoute(t *testing.T) {
 		{
 			name:     "no in-process client goes to the wrapper",
 			token:    inProcessTestToken,
-			playback: func(*[]string) playbackClient { return nil },
+			playback: func(*callLog) playbackClient { return nil },
 			want:     []string{"wrapper webPlayback", "wrapper license", "wrapper lyrics"},
 		},
 		{
 			name:  "a media-user-token asks Apple directly",
 			token: inProcessTestToken,
-			playback: func(calls *[]string) playbackClient {
+			playback: func(calls *callLog) playbackClient {
 				return recordingPlayback{calls: calls, storefront: "cn", lyrics: "<tt/>", webPlayback: "https://apple.example/p.m3u8", license: "apple-license"}
 			},
 			want: []string{"webPlayback", "license", "storefront", "lyrics"},
@@ -141,7 +121,7 @@ func TestInProcessRequestsPickTheirRoute(t *testing.T) {
 		{
 			name:  "a rejected token falls back to the wrapper",
 			token: inProcessTestToken,
-			playback: func(calls *[]string) playbackClient {
+			playback: func(calls *callLog) playbackClient {
 				return recordingPlayback{calls: calls, storefront: "cn", lyricsErr: tokenRejected{}, webErr: tokenRejected{}, licenseErr: tokenRejected{}}
 			},
 			want: []string{"webPlayback", "wrapper webPlayback", "license", "wrapper license", "storefront", "lyrics", "wrapper lyrics"},
@@ -149,7 +129,7 @@ func TestInProcessRequestsPickTheirRoute(t *testing.T) {
 		{
 			name:  "a transient Apple failure is returned for the pipeline's retries",
 			token: inProcessTestToken,
-			playback: func(calls *[]string) playbackClient {
+			playback: func(calls *callLog) playbackClient {
 				return recordingPlayback{calls: calls, storefront: "cn", lyricsErr: errApple5xx, webErr: errApple5xx, licenseErr: errApple5xx}
 			},
 			want:    []string{"webPlayback", "license", "storefront", "lyrics"},
@@ -158,8 +138,8 @@ func TestInProcessRequestsPickTheirRoute(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var calls []string
-			d := inProcessDownloader(tc.token, tc.playback(&calls), &calls)
+			calls := &callLog{}
+			d := inProcessDownloader(tc.token, tc.playback(calls), calls)
 			ctx := context.Background()
 			if _, err := d.webPlaybackURL(ctx, "1"); !errors.Is(err, tc.wantErr) {
 				t.Fatalf("webPlaybackURL error = %v, want %v", err, tc.wantErr)
@@ -170,8 +150,8 @@ func TestInProcessRequestsPickTheirRoute(t *testing.T) {
 			if _, err := (realMedia{d: d}).lyrics(ctx, "1", lyricsRequest(d.cfg, true)); !errors.Is(err, tc.wantErr) {
 				t.Fatalf("lyrics error = %v, want %v", err, tc.wantErr)
 			}
-			if !slices.Equal(calls, tc.want) {
-				t.Fatalf("requests = %q, want %q", calls, tc.want)
+			if !slices.Equal(calls.list(), tc.want) {
+				t.Fatalf("requests = %q, want %q", calls.list(), tc.want)
 			}
 		})
 	}
@@ -192,24 +172,24 @@ func TestInProcessLyricsFallBackToTheWrapper(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var calls []string
-			tc.playback.calls = &calls
-			d := inProcessDownloader(inProcessTestToken, tc.playback, &calls)
+			calls := &callLog{}
+			tc.playback.calls = calls
+			d := inProcessDownloader(inProcessTestToken, tc.playback, calls)
 			doc, err := (realMedia{d: d}).lyrics(context.Background(), "1", lyricsRequest(d.cfg, true))
 			if err != nil || doc != "wrapper lyrics doc" {
 				t.Fatalf("lyrics = (%q, %v), want the wrapper's document", doc, err)
 			}
-			if !slices.Equal(calls, tc.want) {
-				t.Fatalf("requests = %q, want %q", calls, tc.want)
+			if !slices.Equal(calls.list(), tc.want) {
+				t.Fatalf("requests = %q, want %q", calls.list(), tc.want)
 			}
 		})
 	}
 }
 
 func TestInProcessLyricsUseTheAccountStorefrontAndCatalogLanguage(t *testing.T) {
-	var calls []string
+	calls := &callLog{}
 	var args [2]string
-	d := inProcessDownloader(inProcessTestToken, recordingPlayback{calls: &calls, storefront: "jp", lyrics: "<tt/>", lyricsArgs: &args}, &calls)
+	d := inProcessDownloader(inProcessTestToken, recordingPlayback{calls: calls, storefront: "jp", lyrics: "<tt/>", lyricsArgs: &args}, calls)
 	if _, err := (realMedia{d: d}).lyrics(context.Background(), "1", lyricsRequest(d.cfg, true)); err != nil {
 		t.Fatal(err)
 	}
@@ -221,12 +201,12 @@ func TestInProcessLyricsUseTheAccountStorefrontAndCatalogLanguage(t *testing.T) 
 // The syllable=0 request only follows a wrapper 404 for the word-timed one,
 // so it always goes to the wrapper.
 func TestLineTimedLyricsRequestGoesToTheWrapper(t *testing.T) {
-	var calls []string
-	d := inProcessDownloader(inProcessTestToken, recordingPlayback{calls: &calls, storefront: "cn", lyrics: "<tt/>"}, &calls)
+	calls := &callLog{}
+	d := inProcessDownloader(inProcessTestToken, recordingPlayback{calls: calls, storefront: "cn", lyrics: "<tt/>"}, calls)
 	if _, err := (realMedia{d: d}).lyrics(context.Background(), "1", lyricsRequest(d.cfg, false)); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"wrapper lyrics"}; !slices.Equal(calls, want) {
-		t.Fatalf("requests = %q, want %q", calls, want)
+	if want := []string{"wrapper lyrics"}; !slices.Equal(calls.list(), want) {
+		t.Fatalf("requests = %q, want %q", calls.list(), want)
 	}
 }

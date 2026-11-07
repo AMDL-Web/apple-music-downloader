@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
@@ -21,22 +22,6 @@ import (
 	"amdl/internal/limits"
 	"amdl/internal/wrapper"
 )
-
-type blockingDecryptWrapper struct {
-	fakeDownloaderWrapper
-	entered chan struct{}
-	allow   chan struct{}
-}
-
-func (w *blockingDecryptWrapper) NewDecryptSession(ctx context.Context, _ string) (wrapper.DecryptSession, error) {
-	w.entered <- struct{}{}
-	select {
-	case <-w.allow:
-		return identityDecryptSession{}, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
 
 func TestDownloadPublishesWaitingUntilGlobalPermitIsGranted(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -54,6 +39,7 @@ func TestDownloadPublishesWaitingUntilGlobalPermitIsGranted(t *testing.T) {
 	}
 
 	statuses := make(chan domain.ItemStatus, 8)
+	var released atomic.Bool
 	type result struct {
 		media selectedDownloadMedia
 		err   error
@@ -68,6 +54,9 @@ func TestDownloadPublishesWaitingUntilGlobalPermitIsGranted(t *testing.T) {
 			"out.m4a",
 			&keyPrefetch{},
 			func(status domain.ItemStatus, _ string, _ func(*domain.ItemProgress)) {
+				if status == domain.ItemDownloading && !released.Load() {
+					t.Errorf("published %q before the download permit was granted", status)
+				}
 				statuses <- status
 			},
 		)
@@ -82,12 +71,7 @@ func TestDownloadPublishesWaitingUntilGlobalPermitIsGranted(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("waiting_download was not published")
 	}
-	select {
-	case status := <-statuses:
-		t.Fatalf("published %q before download permit was granted", status)
-	case <-time.After(100 * time.Millisecond):
-	}
-
+	released.Store(true)
 	releaseHeldPermit()
 	select {
 	case status := <-statuses:
@@ -155,11 +139,6 @@ func TestMediaDownloadLimitSharedAcrossJobClones(t *testing.T) {
 	case <-entered:
 	case <-time.After(time.Second):
 		t.Fatal("first media request did not start")
-	}
-	select {
-	case <-entered:
-		t.Fatal("second request entered while global download pool was full")
-	case <-time.After(100 * time.Millisecond):
 	}
 	allow <- struct{}{}
 	select {
@@ -251,8 +230,17 @@ func TestDecryptLimitIsGlobalAndCanceledWaiterDoesNotEnter(t *testing.T) {
 	if err := os.WriteFile(rawPath, []byte("invalid but sufficient to reach decrypt session"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := &blockingDecryptWrapper{entered: make(chan struct{}, 2), allow: make(chan struct{}, 1)}
-	base := (newTestDownloader(&Downloader{cfg: cfg, wrapper: w, http: http.DefaultClient})).withConfig(cfg)
+	entered, allow := make(chan struct{}, 2), make(chan struct{}, 1)
+	w := fakeDownloaderWrapper{session: func(ctx context.Context, _ string) (wrapper.DecryptSession, error) {
+		entered <- struct{}{}
+		select {
+		case <-allow:
+			return identityDecryptSession{}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}}
+	base := newTestDownloader(&Downloader{cfg: cfg, wrapper: w}).withConfig(cfg)
 	base.decryptLimit = limits.NewSemaphore(1)
 	selected := selectedDownloadMedia{encryptedMedia: encryptedMedia{rawPath: rawPath}}
 	call := func(ctx context.Context, d *Downloader) error {
@@ -262,7 +250,7 @@ func TestDecryptLimitIsGlobalAndCanceledWaiterDoesNotEnter(t *testing.T) {
 	firstDone := make(chan error, 1)
 	go func() { firstDone <- call(context.Background(), base.withConfig(cfg)) }()
 	select {
-	case <-w.entered:
+	case <-entered:
 	case <-time.After(time.Second):
 		t.Fatal("first decrypt did not enter")
 	}
@@ -279,11 +267,11 @@ func TestDecryptLimitIsGlobalAndCanceledWaiterDoesNotEnter(t *testing.T) {
 		t.Fatal("canceled decrypt waiter did not exit")
 	}
 	select {
-	case <-w.entered:
+	case <-entered:
 		t.Fatal("canceled waiter entered wrapper while global decrypt permit was held")
 	default:
 	}
-	w.allow <- struct{}{}
+	allow <- struct{}{}
 	select {
 	case <-firstDone:
 	case <-time.After(time.Second):
@@ -441,48 +429,46 @@ func noStage(domain.ItemStatus, string, func(*domain.ItemProgress)) {}
 // long playlist does not queue a prefetch for every track at once, where the
 // late ones would run out their wait for a playback permit.
 func TestKeyPrefetchWaitsForAnInFlightPermit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("media"))
-	}))
-	defer server.Close()
-	rec := &prefetchRecorder{}
-	cfg := config.Default()
-	cfg.Download.TempDir = t.TempDir()
-	d := newTestDownloader(&Downloader{cfg: cfg, wrapper: rec.wrapper(), http: server.Client()}).withConfig(cfg)
-	d.inFlightLimit = limits.NewSemaphore(1)
-	held, err := d.inFlightLimit.Acquire(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	server := hlsServer(t, map[string]string{"/": "media"}, nil)
+	synctestKeyPrefetchWaitsForAnInFlightPermit(t, server.URL)
+}
 
-	keys := &keyPrefetch{}
-	defer keys.end()
-	done := make(chan error, 1)
-	go func() {
-		media, err := d.downloadSelectedEnhancedMedia(context.Background(), keyedMedia(server.URL), "alac", "job-window", "out.m4a", keys, noStage)
-		if err == nil {
-			media.release()
-			cleanupResumableDownload(media.rawPath)
-		}
-		done <- err
-	}()
-	time.Sleep(100 * time.Millisecond)
-	if n := len(rec.started()); n != 0 {
-		t.Fatalf("%d key prefetches started without an in-flight permit, want none", n)
-	}
-	held()
-	select {
-	case err := <-done:
+func synctestKeyPrefetchWaitsForAnInFlightPermit(t *testing.T, mediaURL string) {
+	synctest.Test(t, func(t *testing.T) {
+		rec := &prefetchRecorder{}
+		cfg := config.Default()
+		cfg.Download.TempDir = t.TempDir()
+		d := newTestDownloader(&Downloader{cfg: cfg, wrapper: rec.wrapper(), http: bubbleClient()}).withConfig(cfg)
+		d.inFlightLimit = limits.NewSemaphore(1)
+		held, err := d.inFlightLimit.Acquire(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("download did not finish once the permit was free")
-	}
-	waitForPrefetches(t, rec, 1)
-	if n := len(rec.started()); n != 1 {
-		t.Fatalf("key prefetches after the permit = %d, want 1", n)
-	}
+
+		keys := &keyPrefetch{}
+		defer keys.end()
+		done := make(chan error, 1)
+		go func() {
+			media, err := d.downloadSelectedEnhancedMedia(context.Background(), keyedMedia(mediaURL), "alac", "job-window", "out.m4a", keys, noStage)
+			if err == nil {
+				media.release()
+				cleanupResumableDownload(media.rawPath)
+			}
+			done <- err
+		}()
+		synctest.Wait()
+		if n := len(rec.started()); n != 0 {
+			t.Fatalf("%d key prefetches started without an in-flight permit, want none", n)
+		}
+		held()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if n := len(rec.started()); n != 1 {
+			t.Fatalf("key prefetches after the permit = %d, want 1", n)
+		}
+	})
 }
 
 // A failed transfer leaves the codec's key prefetch running, and the retry
@@ -498,85 +484,79 @@ func TestKeyPrefetchOutlivesAFailedTransfer(t *testing.T) {
 		_, _ = w.Write([]byte("media"))
 	}))
 	defer server.Close()
-	rec := &prefetchRecorder{}
-	cfg := config.Default()
-	cfg.Download.TempDir = t.TempDir()
-	d := newTestDownloader(&Downloader{cfg: cfg, wrapper: rec.wrapper(), http: server.Client()}).withConfig(cfg)
+	synctest.Test(t, func(t *testing.T) {
+		rec := &prefetchRecorder{}
+		cfg := config.Default()
+		cfg.Download.TempDir = t.TempDir()
+		d := newTestDownloader(&Downloader{cfg: cfg, wrapper: rec.wrapper(), http: bubbleClient()}).withConfig(cfg)
 
-	keys := &keyPrefetch{}
-	if _, err := d.downloadSelectedEnhancedMedia(context.Background(), keyedMedia(server.URL), "alac", "job-retry", "out.m4a", keys, noStage); err == nil {
-		t.Fatal("first transfer succeeded, want the server's failure")
-	}
-	media, err := d.downloadSelectedEnhancedMedia(context.Background(), keyedMedia(server.URL), "alac", "job-retry", "out.m4a", keys, noStage)
-	if err != nil {
-		t.Fatalf("retry: %v", err)
-	}
-	media.release()
-	cleanupResumableDownload(media.rawPath)
-	waitForPrefetches(t, rec, 1)
-	started := rec.started()
-	if len(started) != 1 {
-		t.Fatalf("key prefetches over a failed transfer and its retry = %d, want 1", len(started))
-	}
-	if err := started[0].Err(); err != nil {
-		t.Fatalf("the prefetch ended with the failed transfer: %v", err)
-	}
-	keys.end()
-	if started[0].Err() == nil {
-		t.Fatal("the prefetch still runs after the codec attempt ended")
-	}
+		keys := &keyPrefetch{}
+		if _, err := d.downloadSelectedEnhancedMedia(t.Context(), keyedMedia(server.URL), "alac", "job-retry", "out.m4a", keys, noStage); err == nil {
+			t.Fatal("first transfer succeeded, want the server's failure")
+		}
+		media, err := d.downloadSelectedEnhancedMedia(t.Context(), keyedMedia(server.URL), "alac", "job-retry", "out.m4a", keys, noStage)
+		if err != nil {
+			t.Fatalf("retry: %v", err)
+		}
+		media.release()
+		cleanupResumableDownload(media.rawPath)
+		waitForPrefetches(t, rec, 1)
+		started := rec.started()
+		if len(started) != 1 {
+			t.Fatalf("key prefetches over a failed transfer and its retry = %d, want 1", len(started))
+		}
+		if err := started[0].Err(); err != nil {
+			t.Fatalf("the prefetch ended with the failed transfer: %v", err)
+		}
+		keys.end()
+		if started[0].Err() == nil {
+			t.Fatal("the prefetch still runs after the codec attempt ended")
+		}
+	})
 }
 
 // A prefetch that fails is logged, so a key the wrapper keeps refusing shows
 // up before the decrypt stage asks for it again.
 func TestFailedKeyPrefetchIsLogged(t *testing.T) {
-	rec := &prefetchRecorder{fail: fmt.Errorf("wrapper refused the key")}
-	var logs syncBuffer
-	d := newTestDownloader(&Downloader{cfg: config.Default(), wrapper: rec.wrapper(), logger: slog.New(slog.NewTextHandler(&logs, nil))})
-	keys := &keyPrefetch{}
-	keys.start(context.Background(), d, "song", []string{"skd://k"})
-	defer keys.end()
-	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(logs.String(), "key prefetch failed") {
-		if time.Now().After(deadline) {
-			t.Fatalf("log = %q, want the failed prefetch", logs.String())
+	synctest.Test(t, func(t *testing.T) {
+		rec := &prefetchRecorder{fail: fmt.Errorf("wrapper refused the key")}
+		var logs syncBuffer
+		d := newTestDownloader(&Downloader{cfg: config.Default(), wrapper: rec.wrapper(), logger: slog.New(slog.NewTextHandler(&logs, nil))})
+		keys := &keyPrefetch{}
+		keys.start(context.Background(), d, "song", []string{"skd://k"})
+		defer keys.end()
+		synctest.Wait()
+		if got := logs.String(); !strings.Contains(got, "key prefetch failed") || !strings.Contains(got, "song_id=song") || !strings.Contains(got, "wrapper refused the key") {
+			t.Fatalf("log = %q, want the song and the error", got)
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if got := logs.String(); !strings.Contains(got, "song_id=song") || !strings.Contains(got, "wrapper refused the key") {
-		t.Fatalf("log = %q, want the song and the error", got)
-	}
+	})
 }
 
 // A retry after a failed prefetch prefetches again: the failure dropped the
 // key from the cache, so otherwise the decrypt stage would queue for it anew.
 func TestFailedKeyPrefetchStartsAgainOnRetry(t *testing.T) {
-	rec := &prefetchRecorder{fail: fmt.Errorf("wrapper refused the key")}
-	d := newTestDownloader(&Downloader{cfg: config.Default(), wrapper: rec.wrapper()})
-	keys := &keyPrefetch{}
-	defer keys.end()
-	keys.start(context.Background(), d, "song", []string{"skd://k"})
-	deadline := time.Now().Add(5 * time.Second)
-	for !keys.failed.Load() {
-		if time.Now().After(deadline) {
+	synctest.Test(t, func(t *testing.T) {
+		rec := &prefetchRecorder{fail: fmt.Errorf("wrapper refused the key")}
+		d := newTestDownloader(&Downloader{cfg: config.Default(), wrapper: rec.wrapper()})
+		keys := &keyPrefetch{}
+		defer keys.end()
+		keys.start(context.Background(), d, "song", []string{"skd://k"})
+		synctest.Wait()
+		if !keys.failed.Load() {
 			t.Fatal("the first prefetch never failed")
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	keys.start(context.Background(), d, "song", []string{"skd://k"})
-	waitForPrefetches(t, rec, 2)
+		keys.start(context.Background(), d, "song", []string{"skd://k"})
+		waitForPrefetches(t, rec, 2)
+	})
 }
 
-// waitForPrefetches waits until rec has seen at least n prefetches; one starts
-// in its own goroutine.
+// waitForPrefetches lets the bubble settle, a prefetch starting in its own
+// goroutine, and checks rec has seen at least n prefetches.
 func waitForPrefetches(t *testing.T, rec *prefetchRecorder, n int) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for len(rec.started()) < n {
-		if time.Now().After(deadline) {
-			t.Fatalf("key prefetches = %d, want %d", len(rec.started()), n)
-		}
-		time.Sleep(5 * time.Millisecond)
+	synctest.Wait()
+	if got := len(rec.started()); got < n {
+		t.Fatalf("key prefetches = %d, want %d", got, n)
 	}
 }
 

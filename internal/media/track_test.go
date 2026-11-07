@@ -8,14 +8,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/domain"
-	"amdl/internal/wrapper"
 )
 
 func TestProcessTrackEventsCarryRESTItemSnapshot(t *testing.T) {
@@ -138,7 +137,7 @@ func (stopAtWebPlayback) NonRetryable() bool { return true }
 // asked for: a re-download of an album sends neither request per track.
 func TestExistingTrackIsSkippedWithoutCoverOrLyricsRequests(t *testing.T) {
 	song := applemusic.Song{ID: "song-1", Name: "One", ArtistName: "Artist", AlbumName: "Album", TrackNumber: 1, HasLyrics: true, ArtworkURL: "https://example.com/{w}x{h}bb.jpg"}
-	run := func(t *testing.T, onDisk bool) (domain.JobItem, int, int32) {
+	run := func(t *testing.T, onDisk bool) (domain.JobItem, int, int) {
 		cfg := aacLCRunConfig(t)
 		cfg.Download.EmbedCover = true
 		cfg.Download.EmbedLyrics = true
@@ -152,31 +151,22 @@ func TestExistingTrackIsSkippedWithoutCoverOrLyricsRequests(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		var lyrics atomic.Int32
-		covers := &countingCoverCatalog{
-			fakeDownloaderCatalog: fakeDownloaderCatalog{song: song},
-			calls:                 map[coverCacheKey]int{},
-			fetch: func(context.Context, string, string, string) ([]byte, error) {
-				return []byte("cover"), nil
-			},
-		}
+		calls := &callLog{}
 		downloader := newTestDownloader(&Downloader{
-			cfg:     cfg,
-			catalog: covers,
-			wrapper: fakeDownloaderWrapper{webPlaybackErr: errStopAtWebPlayback, lyricsFor: func(wrapper.LyricsRequestOptions) (string, error) {
-				lyrics.Add(1)
-				return `<tt><body><div><p begin="00:01.000">line</p></div></body></tt>`, nil
+			cfg: cfg,
+			catalog: fakeDownloaderCatalog{song: song, calls: calls, cover: func(context.Context, string, string, string) ([]byte, error) {
+				return []byte("cover"), nil
 			}},
+			wrapper: fakeDownloaderWrapper{
+				webPlaybackErr: errStopAtWebPlayback, calls: calls,
+				lyrics: `<tt><body><div><p begin="00:01.000">line</p></div></body></tt>`,
+			},
 			tools: NewToolChecker(cfg.Tools),
 		})
 		reporter := &recordingReporter{}
 		item := domain.JobItem{ID: "item-1", JobID: "job-1", AdamID: "song-1"}
 		_ = downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter)
-		coverRequests := 0
-		for _, n := range covers.calls {
-			coverRequests += n
-		}
-		return reporter.items[len(reporter.items)-1], coverRequests, lyrics.Load()
+		return reporter.items[len(reporter.items)-1], len(calls.with("cover ")), calls.count("wrapper lyrics")
 	}
 
 	t.Run("on disk", func(t *testing.T) {
@@ -214,41 +204,43 @@ func (lyricsTimeout) Unwrap() error { return context.DeadlineExceeded }
 // and goes on to the download; the retry messages name what failed, not the
 // request's URL.
 func TestLyricsTimeoutDegradesAndGoesOnToTheDownload(t *testing.T) {
-	cfg := aacLCRunConfig(t)
-	cfg.Download.MaxAttempts = 2
-	cfg.Download.EmbedCover = false
-	cfg.Download.EmbedLyrics = true
-	var timeout error = lyricsTimeout{}
-	downloader := newTestDownloader(&Downloader{
-		cfg:     cfg,
-		catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "One", HasLyrics: true}},
-		wrapper: fakeDownloaderWrapper{lyricsErr: timeout, webPlaybackErr: errStopAtWebPlayback},
-		tools:   NewToolChecker(cfg.Tools),
-	})
-	reporter := &recordingReporter{}
-	item := domain.JobItem{ID: "item-1", JobID: "job-1", AdamID: "song-1"}
-	err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter)
-	if !errors.Is(err, errStopAtWebPlayback) {
-		t.Fatalf("processTrack = %v, want the download to have started and stopped at webplayback", err)
-	}
-	last := reporter.items[len(reporter.items)-1]
-	if last.LyricsStatus != domain.LyricsFailed {
-		t.Fatalf("lyrics_status = %q, want failed", last.LyricsStatus)
-	}
-	var retries int
-	for _, ev := range reporter.events {
-		if ev.Type == domain.EventOperationRetry || ev.Type == domain.EventOperationExhausted {
-			if ev.Phase == "lyrics" {
-				retries++
-				if ev.Message != "lyrics attempt "+strconv.Itoa(retries)+"/2 failed: wrapper /lyrics: no reply within 30s" {
-					t.Errorf("lyrics retry message = %q", ev.Message)
+	synctest.Test(t, func(t *testing.T) {
+		cfg := aacLCRunConfig(t)
+		cfg.Download.MaxAttempts = 2
+		cfg.Download.EmbedCover = false
+		cfg.Download.EmbedLyrics = true
+		var timeout error = lyricsTimeout{}
+		downloader := newTestDownloader(&Downloader{
+			cfg:     cfg,
+			catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "One", HasLyrics: true}},
+			wrapper: fakeDownloaderWrapper{lyricsErr: timeout, webPlaybackErr: errStopAtWebPlayback},
+			tools:   NewToolChecker(cfg.Tools),
+		})
+		reporter := &recordingReporter{}
+		item := domain.JobItem{ID: "item-1", JobID: "job-1", AdamID: "song-1"}
+		err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter)
+		if !errors.Is(err, errStopAtWebPlayback) {
+			t.Fatalf("processTrack = %v, want the download to have started and stopped at webplayback", err)
+		}
+		last := reporter.items[len(reporter.items)-1]
+		if last.LyricsStatus != domain.LyricsFailed {
+			t.Fatalf("lyrics_status = %q, want failed", last.LyricsStatus)
+		}
+		var retries int
+		for _, ev := range reporter.events {
+			if ev.Type == domain.EventOperationRetry || ev.Type == domain.EventOperationExhausted {
+				if ev.Phase == "lyrics" {
+					retries++
+					if ev.Message != "lyrics attempt "+strconv.Itoa(retries)+"/2 failed: wrapper /lyrics: no reply within 30s" {
+						t.Errorf("lyrics retry message = %q", ev.Message)
+					}
 				}
 			}
 		}
-	}
-	if retries != 2 {
-		t.Fatalf("lyrics retry events = %d, want 2", retries)
-	}
+		if retries != 2 {
+			t.Fatalf("lyrics retry events = %d, want 2", retries)
+		}
+	})
 }
 
 // TestProcessTrackRecordsLyricsStatus exercises the real (non-simulate)

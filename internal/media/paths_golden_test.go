@@ -122,40 +122,204 @@ func TestQualityLabelGolden(t *testing.T) {
 	}
 }
 
-// The default templates with one fixed track: the library template that
-// songs, albums and artists share, and the playlist and station templates.
-func TestDefaultTemplatePathsGolden(t *testing.T) {
-	cfg := config.Default()
-	cfg.Download.DownloadsDir = "downloads"
-	cfg.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}"
-	cfg.Download.PlaylistPathFormat = "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}"
-	cfg.Download.StationPathFormat = "stations/{StationName}/{SongNumber:02d}. {SongName}"
-	song := applemusic.Song{
+// Every template expansion with its on-disk result. A case names only the
+// templates it changes; the rest are config.Default()'s, so a change to a
+// default template shows up here as a moved path. Every result must also stay
+// inside downloads_dir.
+func TestTemplatePathsGolden(t *testing.T) {
+	hells := applemusic.Song{
 		ID: "s7", Name: "Hells: Bells?", ArtistName: "Guest", AlbumArtist: "AC/DC", AlbumName: "Back in Black.",
 		TrackNumber: 2, DiscNumber: 1,
 	}
-	album := applemusic.Collection{ID: "a1", Name: "Back in Black.", Artist: "AC/DC", Tracks: make([]applemusic.Song, 10)}
-	album.Tracks[6] = song
-
-	library := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 7, Number: 7})
-	if want := filepath.Join("downloads", "library", "AC_DC", "Back in Black", "07. Hells_ Bells_.m4a"); library != want {
-		t.Fatalf("libraryTrackPath() = %q, want %q", library, want)
+	backInBlack := applemusic.Collection{ID: "a1", Name: "Back in Black.", Artist: "AC/DC", Tracks: make([]applemusic.Song, 10)}
+	backInBlack.Tracks[6] = hells
+	shared := applemusic.Collection{
+		ID: "album-1", Name: "Shared Album", Artist: "Primary Artist",
+		Tracks: []applemusic.Song{
+			{ID: "song-1", Name: "Opener", ArtistName: "Primary Artist"},
+			{ID: "song-2", Name: "Guest Track", ArtistName: "Guest Artist", AlbumName: "Track-level album title"},
+		},
 	}
+	plain := applemusic.Song{ArtistName: "Artist", AlbumArtist: "Album Artist", AlbumName: "Album", Name: "Song"}
+	playlistSong := applemusic.Song{ArtistName: "Artist A", AlbumName: "Album X", Name: "Track One"}
+	compat := applemusic.Song{
+		ID: "song-123", Name: "Track One", ArtistName: "Track Artist", ArtistID: "artist-123",
+		AlbumName: "Album X", AlbumID: "album-123", AlbumArtist: "Album Artist",
+		AlbumRelease: "2024-05-17", ReleaseDate: "2024-05-18", Copyright: "2024 Label", RecordLabel: "Label Co",
+		UPC: "012345678901", DiscNumber: 1, DiscCount: 2, TrackNumber: 3, TrackCount: 12,
+	}
+	// "The Greatest Showman: Reimagined (Deluxe Edition)": disc two repeats
+	// disc one's titles in order. Apple orders the album's tracks disc by
+	// disc, so the reprise opening disc two is the 15th track of a 14-track
+	// first disc.
+	showman := applemusic.Collection{Name: "Album", Artist: "Artist", Tracks: make([]applemusic.Song, 15)}
+	showman.Tracks[0] = applemusic.Song{Name: "The Greatest Show", DiscNumber: 1, TrackNumber: 1, DiscCount: 2}
+	showman.Tracks[14] = applemusic.Song{Name: "The Greatest Show", DiscNumber: 2, TrackNumber: 1, DiscCount: 2}
+	const configured = "records/{AlbumArtist}/{AlbumName}/{SongNumber} {SongName}"
+	const codecQuality = "lists/{PlaylistName}/{SongName} [{Codec}] [{Quality}]"
+
 	tests := []struct {
-		kind       applemusic.URLType
-		collection string
-		want       string
+		name                       string
+		library, playlist, station string // "" keeps config.Default()'s
+		path                       func(cfg config.Config) string
+		want                       string
 	}{
-		{applemusic.TypePlaylist, "Road: Trip", filepath.Join("downloads", "playlists", "Road_ Trip", "07. Hells_ Bells_.m4a")},
-		{applemusic.TypeStation, "Rock Radio", filepath.Join("downloads", "stations", "Rock Radio", "07. Hells_ Bells_.m4a")},
+		// The default templates: the library template that songs, albums
+		// and artists share, and the playlist and station templates. Each
+		// segment is sanitized on its own.
+		{name: "default library", want: "downloads/library/AC_DC/Back in Black/07. Hells_ Bells_.m4a",
+			path: func(cfg config.Config) string {
+				return libraryTrackPath(cfg, libraryPlacement{Album: backInBlack, Index: 7, Number: 7})
+			}},
+		{name: "default playlist", want: "downloads/playlists/Road_ Trip/07. Hells_ Bells_.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, hells, applemusic.TypePlaylist, 7, "Road: Trip", "id.1", "aac-lc", aacLCQualityLabel)
+			}},
+		{name: "default station", want: "downloads/stations/Rock Radio/07. Hells_ Bells_.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, hells, applemusic.TypeStation, 7, "Rock Radio", "id.1", "aac-lc", aacLCQualityLabel)
+			}},
+		{name: "default station, CJK name", want: "downloads/stations/梁杨峻玮的电台/03. One Last Kiss.m4a",
+			path: func(cfg config.Config) string {
+				song := applemusic.Song{ArtistName: "Utada", AlbumName: "One Last Kiss", Name: "One Last Kiss"}
+				return outputPath(cfg, song, applemusic.TypeStation, 3, "梁杨峻玮的电台", "ra.u-abc", "", "")
+			}},
+		{name: "playlist folder is the tracks' folder", want: "downloads/playlists/My Playlist",
+			path: func(cfg config.Config) string {
+				return collectionFolderPath(cfg, plain, applemusic.TypePlaylist, "My Playlist", "pl.123")
+			}},
+
+		// A library folder is named by the album's own values: a guest's
+		// track lands in the album artist's folder, while the file name may
+		// still use the track's own artist.
+		{name: "library folders use album values", library: "{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {ArtistName} - {SongName}",
+			want: "downloads/Primary Artist/Shared Album/02. Guest Artist - Guest Track.m4a",
+			path: func(cfg config.Config) string {
+				return libraryTrackPath(cfg, libraryPlacement{Album: shared, Index: 2, Number: 2})
+			}},
+		{name: "album dir is the tracks' folder", library: "{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {ArtistName} - {SongName}",
+			want: "downloads/Primary Artist/Shared Album",
+			path: func(cfg config.Config) string { return libraryAlbumDir(cfg, shared) }},
+		// The folder needs only what an album summary (a search hit, an
+		// artist's album list) carries, so it can be found without reading
+		// the album's tracks.
+		{name: "album dir from a summary", library: "lib/{AlbumArtist}/{ReleaseYear} - {AlbumName} [{AlbumId}] {ReleaseDate}/{SongNumber}",
+			want: "downloads/lib/AC_DC/2024 - Album_ X [a1] 2024-05-17",
+			path: func(cfg config.Config) string {
+				return libraryAlbumDir(cfg, applemusic.Collection{ID: "a1", Name: "Album: X", Artist: "AC/DC", ReleaseDate: "2024-05-17"})
+			}},
+
+		// Songs, albums and artists share the one library template;
+		// playlists and stations keep theirs.
+		{name: "configured song", library: configured, want: "downloads/records/Album Artist/Album/1 Song.m4a",
+			path: func(cfg config.Config) string { return outputPath(cfg, plain, applemusic.TypeSong, 1, "", "", "", "") }},
+		{name: "configured album", library: configured, want: "downloads/records/Album Artist/Album/1 Song.m4a",
+			path: func(cfg config.Config) string { return outputPath(cfg, plain, applemusic.TypeAlbum, 1, "", "", "", "") }},
+		{name: "configured artist", library: configured, want: "downloads/records/Album Artist/Album/1 Song.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, plain, applemusic.TypeArtist, 1, "", "", "", "")
+			}},
+		{name: "configured playlist", playlist: "lists/{PlaylistName}/{SongName}", want: "downloads/lists/List/Song.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, plain, applemusic.TypePlaylist, 1, "List", "", "", "")
+			}},
+		{name: "configured station", station: "radio/{StationName}/{SongName}", want: "downloads/radio/Station/Song.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, plain, applemusic.TypeStation, 1, "Station", "", "", "")
+			}},
+
+		{name: "compatibility metadata variables",
+			playlist: "lists/{UrlArtistName} [{ArtistId}]/{ReleaseYear} - {AlbumName} ({AlbumId}) [{UPC}] {RecordLabel} {Copyright}/{DiscNumber:02d}-{TrackNumber:02d} of {DiscCount}-{TrackCount} {AlbumArtist} - {SongName} [{Codec}] [{Quality}] {UnknownVar}",
+			want:     "downloads/lists/Track Artist [artist-123]/2024 - Album X (album-123) [012345678901] Label Co 2024 Label/01-03 of 2-12 Album Artist - Track One [ALAC] [24-bit_96 kHz] {UnknownVar}.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, compat, applemusic.TypePlaylist, 1, "", "", "alac", "24-bit/96 kHz")
+			}},
+		{name: "playlist id and song number", playlist: "playlists/{PlaylistName} ({PlaylistId})/{SongNumber:02d}. {ArtistName} - {SongName}",
+			want: "downloads/playlists/My Playlist (pl.123)/07. Artist A - Track One.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, playlistSong, applemusic.TypePlaylist, 7, "My Playlist", "pl.123", "", "")
+			}},
+		// Each codec attempt names its own file.
+		{name: "codec and quality of an ALAC attempt", playlist: codecQuality, want: "downloads/lists/Mix/Song [ALAC] [24-bit_96 kHz].m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, plain, applemusic.TypePlaylist, 1, "Mix", "", "alac", "24-bit/96 kHz")
+			}},
+		{name: "codec and quality of an AAC attempt", playlist: codecQuality, want: "downloads/lists/Mix/Song [AAC] [256Kbps].m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, plain, applemusic.TypePlaylist, 1, "Mix", "", "aac", "256Kbps")
+			}},
+
+		// [regression] The library template numbers tracks by {SongNumber},
+		// not Apple's {TrackNumber}, which restarts at 1 on every disc: two
+		// discs with the same titles would resolve to one path, and the
+		// second would be skipped as already downloaded.
+		{name: "identically titled track on disc one", want: "downloads/library/Artist/Album/01. The Greatest Show.m4a",
+			path: func(cfg config.Config) string {
+				return libraryTrackPath(cfg, libraryPlacement{Album: showman, Index: 1, Number: 1})
+			}},
+		{name: "identically titled track on disc two", want: "downloads/library/Artist/Album/15. The Greatest Show.m4a",
+			path: func(cfg config.Config) string {
+				return libraryTrackPath(cfg, libraryPlacement{Album: showman, Index: 15, Number: 15})
+			}},
+
+		// No template can write outside downloads_dir: ".." collapses to "_"
+		// and an absolute template starts with a "_" segment under the root.
+		// Config.Validate rejects such templates up front; these pin the
+		// containment should one ever reach the builder.
+		{name: "parent segments", library: "../../{SongName}", want: "downloads/_/_/Song.m4a",
+			path: func(cfg config.Config) string {
+				return libraryTrackPath(cfg, libraryPlacement{Album: applemusic.Collection{Name: "Album", Tracks: []applemusic.Song{plain}}, Index: 1, Number: 1})
+			}},
+		{name: "parent segments for a song", library: "../../{SongName}", want: "downloads/_/_/Song.m4a",
+			path: func(cfg config.Config) string { return outputPath(cfg, plain, applemusic.TypeSong, 1, "", "", "", "") }},
+		{name: "absolute template", station: "/etc/{SongName}", want: "downloads/_/etc/Song.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, plain, applemusic.TypeStation, 1, "Radio", "ra.1", "", "")
+			}},
+		{name: "unsupported number spec kept literally", playlist: "{SongNumber:xx}. {SongName}", want: "downloads/{SongNumber_xx}. Song.m4a",
+			path: func(cfg config.Config) string {
+				return outputPath(cfg, plain, applemusic.TypePlaylist, 1, "List", "pl.1", "", "")
+			}},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.kind), func(t *testing.T) {
-			got := outputPath(cfg, song, tt.kind, 7, tt.collection, "id.1", "aac-lc", aacLCQualityLabel)
-			if got != tt.want {
-				t.Fatalf("outputPath() = %q, want %q", got, tt.want)
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Download.DownloadsDir = "downloads"
+			for _, override := range []struct {
+				to   *string
+				from string
+			}{
+				{&cfg.Download.LibraryPathFormat, tt.library},
+				{&cfg.Download.PlaylistPathFormat, tt.playlist},
+				{&cfg.Download.StationPathFormat, tt.station},
+			} {
+				if override.from != "" {
+					*override.to = override.from
+				}
+			}
+			got := tt.path(cfg)
+			if filepath.ToSlash(got) != tt.want {
+				t.Fatalf("path = %q, want %q", filepath.ToSlash(got), tt.want)
+			}
+			if rel, err := filepath.Rel("downloads", got); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(got) {
+				t.Fatalf("path %q is outside downloads_dir", got)
 			}
 		})
+	}
+}
+
+// A library path reads the album's values without writing them back into the
+// album's track list.
+func TestLibraryTrackPathLeavesTheTrackListAlone(t *testing.T) {
+	cfg := config.Default()
+	cfg.Download.DownloadsDir = "downloads"
+	cfg.Download.LibraryPathFormat = "{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {ArtistName} - {SongName}"
+	album := applemusic.Collection{Name: "Shared Album", Artist: "Primary Artist", Tracks: []applemusic.Song{
+		{Name: "Guest Track", ArtistName: "Guest Artist", AlbumName: "Track-level album title"},
+	}}
+	libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1, Number: 1})
+	if album.Tracks[0].ArtistName != "Guest Artist" || album.Tracks[0].AlbumName != "Track-level album title" {
+		t.Fatalf("track metadata was modified: %+v", album.Tracks[0])
 	}
 }
 
@@ -393,8 +557,6 @@ func TestSafeNameCappedTrimsAtItsOwnCap(t *testing.T) {
 func TestTrackTargetSlotPathsGolden(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.DownloadsDir = "downloads"
-	cfg.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}"
-	cfg.Download.PlaylistPathFormat = "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}"
 	song := applemusic.Song{ID: "s1", Name: "Hells Bells", AlbumArtist: "AC/DC", AlbumName: "Back in Black", TrackNumber: 1, DiscNumber: 1}
 	album := applemusic.Collection{ID: "a1", Name: "Back in Black", Artist: "AC/DC", Tracks: []applemusic.Song{song}}
 	placement := libraryPlacement{Album: album, Index: 1, Number: 1}
@@ -443,6 +605,59 @@ func TestTrackTargetSlotPathsGolden(t *testing.T) {
 			}
 			if got := tt.target.outputPath(c, song, tt.codec, tt.label); got != tt.want {
 				t.Fatalf("outputPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// The standalone covers sit at the album and artist folders the library
+// template names, wherever those are in it.
+func TestLibraryCoverDirsFollowTemplateVariables(t *testing.T) {
+	album := applemusic.Collection{ID: "a1", Name: "Album", Artist: "Album Artist", ReleaseDate: "2024-05-17"}
+
+	tests := []struct {
+		name       string
+		format     string
+		wantAlbum  string
+		wantArtist string
+	}{
+		{
+			name:       "default layout",
+			format:     config.Default().Download.LibraryPathFormat,
+			wantAlbum:  filepath.Join("downloads", "library", "Album Artist", "Album"),
+			wantArtist: filepath.Join("downloads", "library", "Album Artist"),
+		},
+		{
+			name:       "extra level between artist and album",
+			format:     "{AlbumArtist}/{ReleaseYear}/{AlbumName}/{SongNumber:02d}. {SongName}",
+			wantAlbum:  filepath.Join("downloads", "Album Artist", "2024", "Album"),
+			wantArtist: filepath.Join("downloads", "Album Artist"),
+		},
+		{
+			name:       "no artist folder skips the artist cover",
+			format:     "albums/{AlbumName}/{SongNumber:02d}. {SongName}",
+			wantAlbum:  filepath.Join("downloads", "albums", "Album"),
+			wantArtist: "",
+		},
+		{
+			name:       "a literal folder below the album keeps the cover at the album",
+			format:     "{AlbumArtist}/{AlbumName}/tracks/{SongNumber:02d}. {SongName}",
+			wantAlbum:  filepath.Join("downloads", "Album Artist", "Album"),
+			wantArtist: filepath.Join("downloads", "Album Artist"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Download.DownloadsDir = "downloads"
+			cfg.Download.LibraryPathFormat = tt.format
+
+			albumDir, artistDir := libraryCoverDirs(cfg, album)
+			if albumDir != tt.wantAlbum {
+				t.Fatalf("album cover dir = %q, want %q", albumDir, tt.wantAlbum)
+			}
+			if artistDir != tt.wantArtist {
+				t.Fatalf("artist cover dir = %q, want %q", artistDir, tt.wantArtist)
 			}
 		})
 	}

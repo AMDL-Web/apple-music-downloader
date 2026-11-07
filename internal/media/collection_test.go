@@ -53,12 +53,12 @@ func TestResolveCollectionArtistKeepsSharedSongInEveryAlbum(t *testing.T) {
 }
 
 func TestResolveCollectionStationPassesTokenAndTracks(t *testing.T) {
-	var gotToken string
+	calls := &callLog{}
 	mediaToken := strings.Repeat("m", 32)
 	downloader := &Downloader{
 		cfg:    config.Default(),
 		tokens: usertoken.NewReading(func(string) (string, error) { return mediaToken, nil }),
-		catalog: fakeDownloaderCatalog{stationToken: &gotToken, station: applemusic.Collection{
+		catalog: fakeDownloaderCatalog{calls: calls, station: applemusic.Collection{
 			ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station", ArtworkURL: "station-art",
 			Tracks: []applemusic.Song{{ID: "song-1", Name: "One"}, {ID: "song-2", Name: "Two"}},
 		}},
@@ -76,8 +76,8 @@ func TestResolveCollectionStationPassesTokenAndTracks(t *testing.T) {
 	if resolved.Name != "My Station" || resolved.ID != "ra.1" || resolved.ArtworkURL != "station-art" {
 		t.Fatalf("resolved = %+v", resolved)
 	}
-	if gotToken != mediaToken {
-		t.Fatalf("station token = %q, want the account's", gotToken)
+	if lastToken(calls) != mediaToken {
+		t.Fatalf("station token = %q, want the account's", lastToken(calls))
 	}
 }
 
@@ -94,13 +94,13 @@ func TestResolveCollectionStationUsesWrapperToken(t *testing.T) {
 		{"wrapper has none", "", ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotToken string
+			calls := &callLog{}
 			downloader := newTestDownloader(&Downloader{
 				cfg:    config.Default(),
 				tokens: usertoken.NewReading(func(string) (string, error) { return tt.wrapper, nil }),
 				catalog: fakeDownloaderCatalog{
-					station:      applemusic.Collection{ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station"},
-					stationToken: &gotToken,
+					station: applemusic.Collection{ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station"},
+					calls:   calls,
 				},
 			})
 			if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
@@ -108,8 +108,8 @@ func TestResolveCollectionStationUsesWrapperToken(t *testing.T) {
 			}, true); err != nil {
 				t.Fatal(err)
 			}
-			if gotToken != tt.want {
-				t.Fatalf("token: got %d bytes, want %d", len(gotToken), len(tt.want))
+			if lastToken(calls) != tt.want {
+				t.Fatalf("token: got %d bytes, want %d", len(lastToken(calls)), len(tt.want))
 			}
 		})
 	}

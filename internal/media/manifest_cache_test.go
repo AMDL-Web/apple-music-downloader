@@ -119,9 +119,9 @@ func TestWantsDeviceManifest(t *testing.T) {
 
 func TestSelectEnhancedStreamReusesTheDeviceManifest(t *testing.T) {
 	webMaster, deviceMaster := hiResManifests(t)
-	var calls int
+	log := &callLog{}
 	d := newTestDownloader(&Downloader{
-		cfg: config.Default(), wrapper: countingQualityWrapper{m3u8: deviceMaster, callCount: &calls}, http: newHTTPClient(),
+		cfg: config.Default(), wrapper: fakeDownloaderWrapper{status: readyWrapper, m3u8: deviceMaster, calls: log},
 	})
 	song := applemusic.Song{ID: "song-1", EnhancedHLS: webMaster, HiResLossless: true}
 
@@ -130,7 +130,7 @@ func TestSelectEnhancedStreamReusesTheDeviceManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if calls != 1 {
+	if calls := len(log.with("wrapper m3u8 ")); calls != 1 {
 		t.Fatalf("wrapper.M3U8 calls after three selections = %d, want 1", calls)
 	}
 	// A clone bound to a job's overrides shares the cache.
@@ -138,22 +138,22 @@ func TestSelectEnhancedStreamReusesTheDeviceManifest(t *testing.T) {
 	if _, err := clone.selectEnhancedStream(context.Background(), "cn", song, "alac"); err != nil {
 		t.Fatal(err)
 	}
-	if calls != 1 {
+	if calls := len(log.with("wrapper m3u8 ")); calls != 1 {
 		t.Fatalf("wrapper.M3U8 calls after a job-scoped clone = %d, want 1", calls)
 	}
 	if _, err := d.selectEnhancedStream(context.Background(), "us", song, "alac"); err != nil {
 		t.Fatal(err)
 	}
-	if calls != 2 {
+	if calls := len(log.with("wrapper m3u8 ")); calls != 2 {
 		t.Fatalf("wrapper.M3U8 calls after another storefront = %d, want 2", calls)
 	}
 }
 
 func TestSelectEnhancedStreamAsksAgainWhenACachedManifestIsGone(t *testing.T) {
 	webMaster, deviceMaster := hiResManifests(t)
-	var calls int
+	log := &callLog{}
 	d := newTestDownloader(&Downloader{
-		cfg: config.Default(), wrapper: countingQualityWrapper{m3u8: deviceMaster, callCount: &calls}, http: newHTTPClient(),
+		cfg: config.Default(), wrapper: fakeDownloaderWrapper{status: readyWrapper, m3u8: deviceMaster, calls: log},
 	})
 	key := deviceManifestKey{storefront: "cn", songID: "song-1"}
 	d.deviceManifests.put(key, deviceMaster+".gone")
@@ -162,7 +162,7 @@ func TestSelectEnhancedStreamAsksAgainWhenACachedManifestIsGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls != 1 || info.SampleRate != 88200 {
+	if calls := len(log.with("wrapper m3u8 ")); calls != 1 || info.SampleRate != 88200 {
 		t.Fatalf("selected %+v after %d wrapper.M3U8 calls, want the 88.2 kHz rendition from one fresh request", info, calls)
 	}
 	if url, _ := d.deviceManifests.get(key); url != deviceMaster {
@@ -172,9 +172,9 @@ func TestSelectEnhancedStreamAsksAgainWhenACachedManifestIsGone(t *testing.T) {
 
 func TestSelectEnhancedStreamForgetsAManifestThatDoesNotLoad(t *testing.T) {
 	webMaster, deviceMaster := hiResManifests(t)
-	var calls int
+	log := &callLog{}
 	d := newTestDownloader(&Downloader{
-		cfg: config.Default(), wrapper: countingQualityWrapper{m3u8: deviceMaster + ".gone", callCount: &calls}, http: newHTTPClient(),
+		cfg: config.Default(), wrapper: fakeDownloaderWrapper{status: readyWrapper, m3u8: deviceMaster + ".gone", calls: log},
 	})
 	song := applemusic.Song{ID: "song-1", EnhancedHLS: webMaster, HiResLossless: true}
 
