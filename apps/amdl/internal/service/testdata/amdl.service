@@ -1,0 +1,12 @@
+[Unit]
+Description=AMDL backend (amdl serve --local)
+After=network-online.target
+
+[Service]
+ExecStart="/home/x/go/bin/amdl" "serve" "--listen" "127.0.0.1:1"
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

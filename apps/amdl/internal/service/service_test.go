@@ -2,6 +2,9 @@ package service
 
 import (
 	"encoding/xml"
+	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,39 +18,38 @@ var spec = Spec{
 	User: `DESKTOP\alice`,
 }
 
-func TestPlist(t *testing.T) {
-	var doc struct {
-		Dict struct {
-			Keys    []string `xml:"key"`
-			Strings []string `xml:"string"`
-			Array   []string `xml:"array>string"`
-		} `xml:"dict"`
-	}
-	if err := xml.Unmarshal([]byte(plist(spec)), &doc); err != nil {
-		t.Fatal(err)
-	}
-	want := append([]string{spec.Exe}, spec.Args...)
-	if strings.Join(doc.Dict.Array, "|") != strings.Join(want, "|") {
-		t.Errorf("ProgramArguments = %q, want %q", doc.Dict.Array, want)
-	}
-	if doc.Dict.Strings[0] != Label || doc.Dict.Strings[1] != spec.Log {
-		t.Errorf("Label, StandardErrorPath = %q", doc.Dict.Strings)
-	}
-	for _, k := range []string{"RunAtLoad", "KeepAlive", "StandardErrorPath"} {
-		if !strings.Contains(strings.Join(doc.Dict.Keys, " "), k) {
-			t.Errorf("no %s key", k)
+var update = flag.Bool("update", false, "rewrite testdata/ with the service definitions generated now")
+
+// golden compares got with testdata/name, or writes it there with -update.
+func golden(t *testing.T, name, got string) {
+	t.Helper()
+	path := filepath.Join("testdata", name)
+	if *update {
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
 		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v (go test -update writes it)", err)
+	}
+	if got != string(want) {
+		t.Errorf("%s changed; go test ./apps/amdl/internal/service -update rewrites it. got:\n%s", path, got)
 	}
 }
 
+// The launchd agent: amdl with its arguments, started at login, restarted
+// when it exits, logging to the server log; paths with spaces stay one
+// argument.
+func TestPlist(t *testing.T) {
+	golden(t, "amdl.plist", plist(spec))
+}
+
+// The systemd user unit: ExecStart quotes each argument, restart on failure,
+// started with the user's session.
 func TestUnit(t *testing.T) {
-	u := unit(Spec{Exe: "/home/x/go/bin/amdl", Args: []string{"serve", "--listen", "127.0.0.1:1"}})
-	if !strings.Contains(u, "\nExecStart=\"/home/x/go/bin/amdl\" \"serve\" \"--listen\" \"127.0.0.1:1\"\n") {
-		t.Errorf("unit:\n%s", u)
-	}
-	if !strings.Contains(u, "WantedBy=default.target") || !strings.Contains(u, "Restart=on-failure") {
-		t.Errorf("unit:\n%s", u)
-	}
+	golden(t, "amdl.service", unit(Spec{Exe: "/home/x/go/bin/amdl", Args: []string{"serve", "--listen", "127.0.0.1:1"}}))
 	// systemd.service(5): "%%" is a literal percent and "$$" a literal dollar.
 	if got := systemdQuote(`50%$HOME"\`); got != `"50%%$$HOME\"\\"` {
 		t.Errorf("systemdQuote = %s", got)
@@ -81,6 +83,7 @@ func TestTaskXML(t *testing.T) {
 	for i := 2; i < len(raw); i += 2 {
 		u = append(u, uint16(raw[i])|uint16(raw[i+1])<<8)
 	}
+	golden(t, "amdl-task.xml", string(utf16.Decode(u)))
 	text := strings.Replace(string(utf16.Decode(u)), `encoding="UTF-16"`, `encoding="UTF-8"`, 1)
 	var task struct {
 		Trigger       string `xml:"Triggers>LogonTrigger>UserId"`
