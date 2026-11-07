@@ -2,12 +2,10 @@ package wrapper
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,124 +17,6 @@ const (
 	testPassword = "pw-1"
 	testCode     = "123456"
 )
-
-// fakeManager answers like wrapper-manager v2: every reply is HTTP 200 with a
-// {code, msg, data} envelope, code 2 asks for a two-step code, and a code is
-// accepted only for an account whose first phase asked for one.
-type fakeManager struct {
-	bare      bool
-	needsCode bool
-
-	mu       sync.Mutex
-	pending  map[string]bool
-	accounts map[string]bool
-	logins   []loginBody
-	logouts  []string
-	// hold, when set, blocks every /login that carries a code until it is closed.
-	hold chan struct{}
-	// stall, when set, blocks every /login without a code until it is closed
-	// or the client goes away.
-	stall chan struct{}
-	// gone counts the stalled logins whose client went away.
-	gone int
-	// reply, when set for a username, answers that account's /login.
-	reply map[string][2]any
-}
-
-func (m *fakeManager) loginCalls() []loginBody {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]loginBody(nil), m.logins...)
-}
-
-func (m *fakeManager) logoutCalls() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]string(nil), m.logouts...)
-}
-
-func (m *fakeManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch r.URL.Path {
-	case "/status":
-		data := map[string]any{"regions": []string{"us"}}
-		if !m.bare {
-			m.mu.Lock()
-			data["clientCount"] = len(m.accounts)
-			m.mu.Unlock()
-			data["ready"] = true
-		}
-		writeReply(w, 0, "SUCCESS", data)
-	case "/login":
-		var body loginBody
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeReply(w, -1, "bad body", nil)
-			return
-		}
-		m.mu.Lock()
-		m.logins = append(m.logins, body)
-		hold, stall := m.hold, m.stall
-		m.mu.Unlock()
-		if hold != nil && body.Code != "" {
-			<-hold
-		}
-		if stall != nil && body.Code == "" {
-			select {
-			case <-stall:
-			case <-r.Context().Done():
-				m.mu.Lock()
-				m.gone++
-				m.mu.Unlock()
-				return
-			}
-		}
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		if canned, ok := m.reply[body.Username]; ok {
-			writeReply(w, canned[0].(int), canned[1].(string), nil)
-			return
-		}
-		switch {
-		case m.accounts[body.Username]:
-			writeReply(w, -1, "already login", nil)
-		case body.Password != testPassword:
-			writeReply(w, -1, "login failed (exit code 1)", nil)
-		case body.Code == "" && m.needsCode:
-			if m.pending == nil {
-				m.pending = map[string]bool{}
-			}
-			m.pending[body.Username] = true
-			writeReply(w, replyNeedsTwoStep, "need 2fa", nil)
-		case body.Code != "" && !m.pending[body.Username]:
-			writeReply(w, -1, "no pending login for this account, restart login without code", nil)
-		case body.Code != "" && body.Code != testCode:
-			delete(m.pending, body.Username)
-			writeReply(w, -1, "login failed (exit code 1)", nil)
-		default:
-			delete(m.pending, body.Username)
-			if m.accounts == nil {
-				m.accounts = map[string]bool{}
-			}
-			m.accounts[body.Username] = true
-			writeReply(w, 0, "SUCCESS", nil)
-		}
-	case "/logout":
-		var body struct {
-			Username string `json:"username"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		m.logouts = append(m.logouts, body.Username)
-		if !m.accounts[body.Username] {
-			writeReply(w, -1, "no such account", nil)
-			return
-		}
-		delete(m.accounts, body.Username)
-		writeReply(w, 0, "SUCCESS", nil)
-	default:
-		http.NotFound(w, r)
-	}
-}
 
 func TestStatusReadsBothWrapperFormats(t *testing.T) {
 	tests := []struct {
@@ -182,7 +62,7 @@ func TestStatusReadsBothWrapperFormats(t *testing.T) {
 }
 
 func TestLoginNeedsAWrapperManager(t *testing.T) {
-	m := &fakeManager{bare: true}
+	m := &fakeWrapper{bare: true}
 	c := newTestClient(t, m)
 	ctx := context.Background()
 	if _, err := c.StartLogin(ctx, testUser, testPassword); !errors.Is(err, ErrLoginUnsupported) {
@@ -215,7 +95,7 @@ func TestLoginOfAnUnreachableWrapperIsNotUnsupported(t *testing.T) {
 }
 
 func TestLoginWithoutTwoStep(t *testing.T) {
-	m := &fakeManager{}
+	m := &fakeWrapper{}
 	c := newTestClient(t, m)
 	got, err := c.StartLogin(context.Background(), testUser, testPassword)
 	if err != nil {
@@ -234,7 +114,7 @@ func TestLoginWithoutTwoStep(t *testing.T) {
 }
 
 func TestLoginWithTwoStepResendsThePasswordWithTheCode(t *testing.T) {
-	m := &fakeManager{needsCode: true}
+	m := &fakeWrapper{needsCode: true}
 	c := newTestClient(t, m)
 	ctx := context.Background()
 	first, err := c.StartLogin(ctx, testUser, testPassword)
@@ -267,7 +147,7 @@ func TestLoginWithTwoStepResendsThePasswordWithTheCode(t *testing.T) {
 }
 
 func TestWrongCodeEndsTheLogin(t *testing.T) {
-	m := &fakeManager{needsCode: true}
+	m := &fakeWrapper{needsCode: true}
 	c := newTestClient(t, m)
 	ctx := context.Background()
 	first, err := c.StartLogin(ctx, testUser, testPassword)
@@ -286,7 +166,7 @@ func TestWrongCodeEndsTheLogin(t *testing.T) {
 }
 
 func TestANewLoginReplacesOneWaitingForItsCode(t *testing.T) {
-	m := &fakeManager{needsCode: true}
+	m := &fakeWrapper{needsCode: true}
 	c := newTestClient(t, m)
 	ctx := context.Background()
 	first, err := c.StartLogin(ctx, testUser, testPassword)
@@ -310,7 +190,7 @@ func TestANewLoginReplacesOneWaitingForItsCode(t *testing.T) {
 }
 
 func TestALoginWhileACodeIsVerifiedIsPending(t *testing.T) {
-	m := &fakeManager{needsCode: true, hold: make(chan struct{})}
+	m := &fakeWrapper{needsCode: true, hold: make(chan struct{})}
 	c := newTestClient(t, m)
 	ctx := context.Background()
 	first, err := c.StartLogin(ctx, testUser, testPassword)
@@ -322,13 +202,7 @@ func TestALoginWhileACodeIsVerifiedIsPending(t *testing.T) {
 		_, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode)
 		verified <- err
 	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for len(m.loginCalls()) < 2 {
-		if time.Now().After(deadline) {
-			t.Fatal("the code never reached the wrapper")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	m.events().await(t, "/login", 2) // the code reached the wrapper
 	if _, err := c.StartLogin(ctx, testUser, testPassword); !errors.Is(err, ErrLoginPending) {
 		t.Fatalf("StartLogin() while the code is verified = %v, want ErrLoginPending", err)
 	}
@@ -339,7 +213,7 @@ func TestALoginWhileACodeIsVerifiedIsPending(t *testing.T) {
 }
 
 func TestACanceledLoginFreesTheAccount(t *testing.T) {
-	m := &fakeManager{stall: make(chan struct{})}
+	m := &fakeWrapper{stall: make(chan struct{})}
 	c := newTestClient(t, m)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -347,13 +221,7 @@ func TestACanceledLoginFreesTheAccount(t *testing.T) {
 		_, err := c.StartLogin(ctx, "slow@example.invalid", testPassword)
 		done <- err
 	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for len(m.loginCalls()) < 1 {
-		if time.Now().After(deadline) {
-			t.Fatal("the login never reached the wrapper")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	m.events().await(t, "/login", 1)
 	cancel()
 	select {
 	case err := <-done:
@@ -364,18 +232,7 @@ func TestACanceledLoginFreesTheAccount(t *testing.T) {
 		t.Fatal("a canceled login did not return")
 	}
 	// The wrapper sees the client go away, as wrapper-manager's /login does.
-	for deadline := time.Now().Add(5 * time.Second); ; {
-		m.mu.Lock()
-		gone := m.gone
-		m.mu.Unlock()
-		if gone == 1 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the wrapper never saw the canceled login go away")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	m.events().await(t, "gone", 1)
 	m.mu.Lock()
 	close(m.stall)
 	m.stall = nil
@@ -386,7 +243,7 @@ func TestACanceledLoginFreesTheAccount(t *testing.T) {
 }
 
 func TestCodeSubmittedTwiceAtOnceIsBusy(t *testing.T) {
-	m := &fakeManager{needsCode: true, hold: make(chan struct{})}
+	m := &fakeWrapper{needsCode: true, hold: make(chan struct{})}
 	c := newTestClient(t, m)
 	ctx := context.Background()
 	first, err := c.StartLogin(ctx, testUser, testPassword)
@@ -398,13 +255,7 @@ func TestCodeSubmittedTwiceAtOnceIsBusy(t *testing.T) {
 		_, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode)
 		verified <- err
 	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for len(m.loginCalls()) < 2 {
-		if time.Now().After(deadline) {
-			t.Fatal("the first code never reached the wrapper")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	m.events().await(t, "/login", 2) // the first code reached the wrapper
 	if _, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode); !errors.Is(err, ErrLoginSessionBusy) {
 		t.Fatalf("SubmitTwoStepCode() while verifying = %v, want ErrLoginSessionBusy", err)
 	}
@@ -415,9 +266,15 @@ func TestCodeSubmittedTwiceAtOnceIsBusy(t *testing.T) {
 }
 
 func TestParkedPasswordIsDroppedAfterTheWindow(t *testing.T) {
-	m := &fakeManager{needsCode: true}
+	m := &fakeWrapper{needsCode: true}
 	c := newTestClient(t, m)
-	c.logins.window = 20 * time.Millisecond
+	// The window's timer is captured and fired by hand instead of waited for.
+	var window time.Duration
+	var expire func()
+	c.logins.afterFunc = func(d time.Duration, f func()) *time.Timer {
+		window, expire = d, f
+		return time.AfterFunc(time.Hour, func() {})
+	}
 	ctx := context.Background()
 	first, err := c.StartLogin(ctx, testUser, testPassword)
 	if err != nil {
@@ -426,26 +283,20 @@ func TestParkedPasswordIsDroppedAfterTheWindow(t *testing.T) {
 	c.logins.mu.Lock()
 	session := c.logins.sessions[first.LoginID]
 	c.logins.mu.Unlock()
-	if session == nil {
+	if session == nil || expire == nil {
 		t.Fatal("no session is parked for the login id")
 	}
-
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		c.logins.mu.Lock()
-		parked := len(c.logins.sessions)
-		c.logins.mu.Unlock()
-		if parked == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the session outlived its window")
-		}
-		time.Sleep(5 * time.Millisecond)
+	if window != twoStepWindow {
+		t.Fatalf("session expires after %v, want the %v window", window, twoStepWindow)
 	}
+
+	expire()
 	c.logins.mu.Lock()
-	remaining := session.password
+	remaining, parked := session.password, len(c.logins.sessions)
 	c.logins.mu.Unlock()
+	if parked != 0 {
+		t.Fatal("the session outlived its window")
+	}
 	if remaining != "" {
 		t.Fatal("the dropped session still holds the password")
 	}
@@ -464,33 +315,37 @@ func TestParkedPasswordIsDroppedAfterTheWindow(t *testing.T) {
 // verification, but no longer than the window plus the login timeout, even when
 // that ends before the verification request's own timeout would.
 func TestPasswordUnderVerificationIsDroppedByWindowPlusLoginTimeout(t *testing.T) {
-	m := &fakeManager{needsCode: true, hold: make(chan struct{})}
+	m := &fakeWrapper{needsCode: true, hold: make(chan struct{})}
 	c := newTestClient(t, m)
 	t.Cleanup(func() { close(m.hold) }) // runs before the server closes
-	c.loginTimeout = 3 * time.Second
+	// The request's own timeout is an hour. The login was parked so long ago
+	// that its window plus that hour ends 50 ms from now, as if the code were
+	// taken late with the expiry not yet run: only the session's deadline can
+	// end the verification within the test.
+	c.loginTimeout = time.Hour
+	parkedAt := time.Now().Add(50*time.Millisecond - c.loginTimeout - twoStepWindow)
+	c.logins.now = func() time.Time { return parkedAt }
 	ctx := context.Background()
 	first, err := c.StartLogin(ctx, testUser, testPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The code is taken 2.5 s after the window ended, as if take ran late,
-	// with the expiry not yet run. The session's deadline is then 0.5 s away
-	// and the request's own timeout 3 s away, so only the session's deadline
-	// can end the verification in time.
 	c.logins.mu.Lock()
 	session := c.logins.sessions[first.LoginID]
-	session.expiry.Stop()
-	session.expires = time.Now().Add(-2500 * time.Millisecond)
-	deadline := session.expires.Add(c.loginTimeout)
 	c.logins.mu.Unlock()
 
-	if _, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode); !errors.Is(err, ErrLoginTimeout) {
-		t.Fatalf("SubmitTwoStepCode() with a hung wrapper = %v, want ErrLoginTimeout", err)
-	}
-	// Scheduling slack on top of the deadline, well short of the request
-	// timeout.
-	if late := time.Since(deadline); late > time.Second {
-		t.Fatalf("the verification ended %v after the session's deadline, want about 0", late)
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrLoginTimeout) {
+			t.Fatalf("SubmitTwoStepCode() with a hung wrapper = %v, want ErrLoginTimeout", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the verification outlived the session's deadline")
 	}
 	c.logins.mu.Lock()
 	remaining, sessions := session.password, len(c.logins.sessions)
@@ -514,7 +369,7 @@ func TestLoginFailuresMapToPackageErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &fakeManager{reply: map[string][2]any{testUser: tt.reply}}
+			m := &fakeWrapper{reply: map[string][2]any{testUser: tt.reply}}
 			c := newTestClient(t, m)
 			_, err := c.StartLogin(context.Background(), testUser, testPassword)
 			if !errors.Is(err, tt.want) {
@@ -548,7 +403,7 @@ func TestConnectionDroppedMidLoginIsATimeout(t *testing.T) {
 }
 
 func TestLogout(t *testing.T) {
-	m := &fakeManager{accounts: map[string]bool{testUser: true}}
+	m := &fakeWrapper{accounts: map[string]bool{testUser: true}}
 	c := newTestClient(t, m)
 	ctx := context.Background()
 	if err := c.Logout(ctx, testUser); err != nil {

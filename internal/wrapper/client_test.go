@@ -12,51 +12,21 @@ import (
 	"net/url"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 )
-
-// writeReply writes a wrapper-lite envelope with HTTP 200, as wrapper-lite
-// answers every handled request.
-func writeReply(w http.ResponseWriter, code int, msg string, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	body := map[string]any{"code": code, "msg": msg}
-	if data != nil {
-		body["data"] = data
-	}
-	_ = json.NewEncoder(w).Encode(body)
-}
-
-func newTestClient(t *testing.T, handler http.Handler) *Client {
-	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	c, err := NewClient(config.WrapperConfig{Address: srv.URL, TimeoutSeconds: 5}, WithTemplateParser(parseXOR))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.retryDelays = make([]time.Duration, len(keyRetryDelays))
-	t.Cleanup(func() { _ = c.Close() })
-	return c
-}
 
 // wrapper-lite answers /key and /m3u8 one at a time behind one mutex, so the
 // client keeps the rest of a burst waiting on its own side.
 func TestKeyAndM3U8ShareOnePlaybackLimit(t *testing.T) {
-	var inFlight, peak atomic.Int32
+	gate := make(chan struct{})
+	inFlight := newCounts()
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := inFlight.Add(1)
-		for {
-			p := peak.Load()
-			if n <= p || peak.CompareAndSwap(p, n) {
-				break
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-		inFlight.Add(-1)
+		inFlight.add("playback", 1)
+		<-gate
+		inFlight.add("playback", -1)
 		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 1, "m3u8": "#EXTM3U"})
 	}))
+	waits := watchPermitWaits(c)
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() {
@@ -71,8 +41,16 @@ func TestKeyAndM3U8ShareOnePlaybackLimit(t *testing.T) {
 			}
 		})
 	}
+	// The burst is all in: every permit is taken, the wrapper holds them, and
+	// the rest waits on the client's side. 8 manifests share one manifest
+	// permit, and the 8 keys and the manifest holding it share the playback
+	// permits.
+	inFlight.await(t, "playback", playbackRequestLimit)
+	waits.await(t, c.manifestLimit, 8-manifestRequestLimit)
+	waits.await(t, c.playbackLimit, 8+manifestRequestLimit-playbackRequestLimit)
+	close(gate)
 	wg.Wait()
-	if p := peak.Load(); p > playbackRequestLimit {
+	if p := inFlight.max("playback"); p > playbackRequestLimit {
 		t.Fatalf("peak /key + /m3u8 requests in flight = %d, want at most %d", p, playbackRequestLimit)
 	}
 }

@@ -67,6 +67,11 @@ type loginBook struct {
 	window   time.Duration
 	active   map[string]struct{}
 	sessions map[string]*loginSession
+
+	// now and afterFunc are time.Now and time.AfterFunc unless a test sets
+	// them.
+	now       func() time.Time
+	afterFunc func(time.Duration, func()) *time.Timer
 }
 
 // begin claims username for a login. Two requests of one account must not
@@ -123,8 +128,15 @@ func (b *loginBook) park(username, password string) (string, error) {
 		b.sessions = make(map[string]*loginSession)
 	}
 	b.sessions[id] = session
-	session.expires = time.Now().Add(window)
-	session.expiry = time.AfterFunc(window, func() { b.expire(id) })
+	now, afterFunc := b.now, b.afterFunc
+	if now == nil {
+		now = time.Now
+	}
+	if afterFunc == nil {
+		afterFunc = time.AfterFunc
+	}
+	session.expires = now().Add(window)
+	session.expiry = afterFunc(window, func() { b.expire(id) })
 	return id, nil
 }
 

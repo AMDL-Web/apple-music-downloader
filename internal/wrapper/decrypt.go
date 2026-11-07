@@ -230,7 +230,7 @@ func (c *Client) withKeyPermits(ctx context.Context, needed <-chan struct{}, run
 			case <-stop:
 			}
 		}()
-		release, err := c.manifestLimit.Acquire(laneCtx)
+		release, err := c.acquire(laneCtx, c.manifestLimit)
 		close(stop)
 		leaveLane()
 		if err == nil {
@@ -239,7 +239,7 @@ func (c *Client) withKeyPermits(ctx context.Context, needed <-chan struct{}, run
 			return playbackWaitError(ctx, "/key", wait, err)
 		}
 	}
-	release, err := c.playbackLimit.Acquire(waitCtx)
+	release, err := c.acquire(waitCtx, c.playbackLimit)
 	if err != nil {
 		return playbackWaitError(ctx, "/key", wait, err)
 	}
@@ -282,6 +282,11 @@ type templateCache struct {
 	limit   int
 	entries map[string]*templateEntry
 	lru     *list.List // of key URIs; front is the most recently used
+
+	// waiting, when set (by tests only), is called under mu each time a
+	// caller starts waiting for key's fetch, with the number of callers now
+	// waiting for it. It is nil in production.
+	waiting func(key string, waiters int)
 }
 
 type templateEntry struct {
@@ -330,6 +335,9 @@ func (c *templateCache) get(ctx context.Context, key string, pinned, needed bool
 		close(entry.needed)
 	}
 	entry.waiters++
+	if c.waiting != nil {
+		c.waiting(key, entry.waiters)
+	}
 	c.mu.Unlock()
 	select {
 	case <-entry.ready:
