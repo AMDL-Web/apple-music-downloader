@@ -159,7 +159,7 @@ func stalledAndResumed(t *testing.T, pic []byte) {
 	cover := []string{cdnURL + "/sq-mq-us-037-000002/99/76/61/997661f0/image?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=aaaa"}
 	start := time.Now()
 	var stopped, givenUp time.Time
-	skipped := false
+	// After the stall the retry waits retryFirst, on the bubble's clock.
 	for time.Since(start) < 50*time.Second {
 		if win.frame(cover, 512) == 1 {
 			break
@@ -172,11 +172,6 @@ func stalledAndResumed(t *testing.T, pic []byte) {
 				givenUp = at
 			}
 		default:
-		}
-		if e := win.c.entries[coverKey{keyOf(cover[0]), 0}]; !skipped && e != nil && e.failures > 0 {
-			// The retry waits retryFirst, which the test need not.
-			skipped = true
-			win.clock = win.clock.Add(retryFirst)
 		}
 	}
 	if win.frame(cover, 512) != 1 {
