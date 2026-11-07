@@ -58,3 +58,22 @@ func TestCleanupStaleTempMissingDirIsNoop(t *testing.T) {
 	CleanupStaleTemp(filepath.Join(t.TempDir(), "does-not-exist"), nil)
 	CleanupStaleTemp("", nil)
 }
+
+// A startup sweep keeps the checkpoints of records and live one-off runs and
+// removes the others.
+func TestCleanupStaleResumeKeepsLiveOwners(t *testing.T) {
+	dir := t.TempDir()
+	live, gone := resumeOwnerDir(dir, "album:1"), resumeOwnerDir(dir, "album:2")
+	for _, d := range []string{live, gone} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	CleanupStaleResume(dir, []string{"album:1"}, nil)
+	if _, err := os.Stat(live); err != nil {
+		t.Errorf("a live record's checkpoints went: %v", err)
+	}
+	if _, err := os.Stat(gone); !os.IsNotExist(err) {
+		t.Errorf("a deleted record's checkpoints stay: %v", err)
+	}
+}

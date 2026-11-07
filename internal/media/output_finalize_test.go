@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -192,3 +193,50 @@ func (sidecarOnlyMedia) tag(context.Context, stagedFile, applemusic.Song, string
 }
 
 func noopStage(domain.ItemStatus, string, func(*domain.ItemProgress)) {}
+
+// overwriteDownload runs the output steps of a download that finds a file at
+// its target in a slot that was never done, with download.overwrite_existing
+// on: the existing check, then finalize, then the sweep after a failure.
+func (f *replaceFixture) overwriteDownload(t *testing.T) error {
+	t.Helper()
+	f.d.cfg.Download.OverwriteExisting = true
+	run := newOutputRun(f.d, &recordingReporter{}, false)
+	skip, err := run.handleExistingOutput(context.Background(), f.outPath)
+	if err != nil || skip {
+		t.Fatalf("handleExistingOutput = skip %v, err %v, want a replacing download", skip, err)
+	}
+	item := run.item
+	err = f.d.finalizeTrackOutput(context.Background(), f.media, trackOutput{
+		item: &item, song: applemusic.Song{Name: "Song"}, codec: "alac",
+		lyrics: trackLyrics{lrc: "[00:01.00]new", ttml: "<tt>new</tt>"}, staged: stagedFile{path: f.staged}, outPath: f.outPath, labels: enhancedOutputLabels,
+	}, noopStage)
+	if err != nil {
+		f.media.discardOutput(f.outPath)
+	}
+	return err
+}
+
+// With overwrite_existing on, a file found at the target is replaced, with
+// its sidecars, once the new copy is complete; a download that fails first
+// leaves it byte-identical.
+func TestOverwriteExistingReplacesAFoundFile(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		f := newReplaceFixture(t)
+		if err := f.overwriteDownload(t); err != nil {
+			t.Fatal(err)
+		}
+		f.assertFolder(t, map[string]string{
+			f.outPath:                            "new audio",
+			lyricsSidecarPath(f.outPath, "lrc"):  "[00:01.00]new",
+			lyricsSidecarPath(f.outPath, "ttml"): "<tt>new</tt>",
+		})
+	})
+	t.Run("failure", func(t *testing.T) {
+		f := newReplaceFixture(t)
+		f.media.commitErr = errors.New("disk full")
+		if err := f.overwriteDownload(t); err == nil {
+			t.Fatal("download succeeded, want the injected failure")
+		}
+		f.assertFolder(t, f.old)
+	})
+}
