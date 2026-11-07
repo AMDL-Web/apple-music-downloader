@@ -165,8 +165,8 @@ jobs:
 
   # The console's browser tests (apps/console/e2e): Playwright against the real
   # embedded console and the in-memory demo backend, with axe accessibility
-  # checks and screenshot comparisons. It runs in the Playwright image, which
-  # has Chromium and is where the screenshot baselines are made. It runs for a
+  # checks. It runs in the Playwright image, which has Chromium and is where
+  # the screenshot baselines are made. It runs for a
   # change to the console, the API spec or the demo backend (changes job), and
   # for every push to dev.
   console-e2e:
@@ -178,8 +178,10 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.65.0-noble
       options: --ipc=host
     timeout-minutes: 15
+    # Screenshot comparisons stay off until baselines made in this image are
+    # committed (apps/console/e2e/README.md#screenshots); then add
+    # CONSOLE_E2E_SCREENSHOTS: '1' here.
     env:
-      CONSOLE_E2E_SCREENSHOTS: '1'
       HOME: /root
     defaults:
       run:

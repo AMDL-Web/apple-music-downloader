@@ -65,6 +65,12 @@ npm run test:update       # the same, rewriting the baselines; review and commit
 ./docker.sh tests/screens.spec.mjs -g overview --update-snapshots   # just some
 ```
 
+No baselines are committed yet: the first `npm run test:update` in the image
+writes them. Until they are committed, CI leaves the comparisons off (it does
+not set `CONSOLE_E2E_SCREENSHOTS`); once they are, set
+`CONSOLE_E2E_SCREENSHOTS: '1'` in the Console browser tests job of
+`.github/workflows/ci.yml`.
+
 `docker.sh` builds the server on the host (the image has no Go) and runs
 Playwright in the image with the repository mounted. A failed comparison
 leaves the expected, actual and diff images under `out/test-results/` and
