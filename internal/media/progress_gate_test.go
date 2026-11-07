@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
@@ -142,19 +143,25 @@ func simulateTrackEvents(t *testing.T, intervalMS, durationMS, minKBps, maxKBps 
 		ID: "song-1", Name: "Track", ArtistName: "Artist", AlbumName: "Album",
 		DurationInMillis: durationMS, EnhancedHLS: server.URL + "/master.m3u8",
 	}
-	downloader := (newTestDownloader(&Downloader{
-		cfg:     cfg,
-		catalog: fakeDownloaderCatalog{song: song},
-		http:    server.Client(),
-	})).withConfig(cfg)
+	// The simulated transfer and the progress gate run on the bubble's
+	// virtual clock; the manifest server stays outside it.
+	var events []domain.Event
+	synctest.Test(t, func(t *testing.T) {
+		downloader := (newTestDownloader(&Downloader{
+			cfg:     cfg,
+			catalog: fakeDownloaderCatalog{song: song},
+			http:    bubbleClient(),
+		})).withConfig(cfg)
 
-	reporter := &recordingReporter{}
-	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"},
-		domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn",
-		applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
-		t.Fatalf("simulated processTrack failed: %v", err)
-	}
-	return reporter.events
+		reporter := &recordingReporter{}
+		if err := downloader.processTrack(t.Context(), domain.Job{ID: "job-1"},
+			domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn",
+			applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
+			t.Fatalf("simulated processTrack failed: %v", err)
+		}
+		events = reporter.events
+	})
+	return events
 }
 
 func itemProgressSnapshot(t *testing.T, ev domain.Event) domain.JobItem {

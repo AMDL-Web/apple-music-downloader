@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"amdl/internal/config"
-
 	"github.com/zhaarey/go-mp4tag"
 )
 
@@ -563,5 +562,23 @@ func TestRewriteLyricsKeepsOtherTags(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(cfg.Download.TempDir); len(entries) != 0 {
 		t.Fatalf("temp dir keeps %d files, want the copy gone", len(entries))
+	}
+}
+
+// go-mp4tag stores the iTunes album and artist IDs as int32. Catalog IDs that
+// outgrow it are left out of the tags rather than wrapped.
+func TestITunesTagIDFitsInt32(t *testing.T) {
+	ctx := context.Background()
+	if got := itunesTagID(ctx, "album_id", "1858184006"); got != 1858184006 {
+		t.Fatalf("itunesTagID(1858184006) = %d", got)
+	}
+	if got := itunesTagID(ctx, "album_id", "2147483647"); got != 2147483647 {
+		t.Fatalf("itunesTagID(max int32) = %d", got)
+	}
+	if got := itunesTagID(ctx, "album_id", "2147483648"); got != 0 {
+		t.Fatalf("itunesTagID(2^31) = %d, want 0 (omitted)", got)
+	}
+	if got := itunesTagID(ctx, "artist_id", ""); got != 0 {
+		t.Fatalf("itunesTagID(empty) = %d, want 0", got)
 	}
 }

@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
@@ -37,36 +39,48 @@ func wantSimulatedProgress(cfg config.Config, downloadBytes int64) domain.ItemPr
 }
 
 // Two simulated tracks share one download and one decrypt permit: the second
-// downloads while the first decrypts, so the pair takes well under twice one
-// track's time (about 0.95 s each at this speed, 1.25 s pipelined, 1.9 s serial).
+// downloads while the first decrypts, instead of waiting for it to finish.
 func TestSimulateUsesSharedPipelinedMediaPools(t *testing.T) {
-	cfg := config.Default()
-	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
-	cfg.Download.DownloadsDir = t.TempDir()
-	cfg.Download.QualityPriority = []string{"aac-lc"}
-	cfg.Download.CodecAlternative = false
-	cfg.Download.MaxParallelDownloads = 1
-	cfg.Download.EmbedCover = false
-	base := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg}, 1)).withConfig(cfg)
+	synctest.Test(t, func(t *testing.T) {
+		cfg := simulateConfig(t)
+		cfg.Download.QualityPriority = []string{"aac-lc"}
+		cfg.Download.CodecAlternative = false
+		cfg.Download.MaxParallelDownloads = 1
+		cfg.Download.EmbedCover = false
+		base := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg}, 1)).withConfig(cfg)
 
-	start := time.Now()
-	var wg sync.WaitGroup
-	for i := range 2 {
-		wg.Go(func() {
-			reporter := &recordingReporter{}
-			item := domain.JobItem{ID: fmt.Sprintf("item-%d", i), JobID: fmt.Sprintf("job-%d", i)}
-			song := applemusic.Song{ID: item.ID, Name: fmt.Sprintf("Track %d", i), DurationInMillis: 1000}
-			err := base.withConfig(cfg).processTrack(context.Background(), domain.Job{ID: item.JobID}, item, song,
-				"cn", applemusic.TypeSong, "", "", 1, reporter)
-			if err != nil {
-				t.Errorf("simulated track %d: %v", i, err)
+		reporter := &recordingReporter{}
+		var wg sync.WaitGroup
+		for i := range 2 {
+			wg.Go(func() {
+				item := domain.JobItem{ID: fmt.Sprintf("item-%d", i), JobID: "job-1"}
+				song := applemusic.Song{ID: item.ID, Name: fmt.Sprintf("Track %d", i), DurationInMillis: 1000}
+				err := base.withConfig(cfg).processTrack(t.Context(), domain.Job{ID: item.JobID}, item, song,
+					"cn", applemusic.TypeSong, "", "", 1, reporter)
+				if err != nil {
+					t.Errorf("simulated track %d: %v", i, err)
+				}
+			})
+		}
+		wg.Wait()
+
+		// The track that finishes first decrypts while the other downloads:
+		// the other starts downloading before the first completes.
+		events := reporter.eventList()
+		first, completedAt := "", -1
+		for i, ev := range events {
+			if ev.Type == domain.EventItemCompleted {
+				first, completedAt = ev.ItemID, i
+				break
 			}
+		}
+		downloadingAt := slices.IndexFunc(events, func(ev domain.Event) bool {
+			return ev.ItemID != first && ev.Type == domain.EventItemProgress && ev.Phase == string(domain.ItemDownloading)
 		})
-	}
-	wg.Wait()
-	if elapsed := time.Since(start); elapsed >= 1700*time.Millisecond {
-		t.Fatalf("simulated tracks did not pipeline download/decrypt/postprocess: %v", elapsed)
-	}
+		if completedAt < 0 || downloadingAt < 0 || downloadingAt > completedAt {
+			t.Fatalf("the second track started downloading at event %d, after the first completed at %d: download and decrypt did not pipeline", downloadingAt, completedAt)
+		}
+	})
 }
 
 func TestSimulateTrackSelectsRealMediaButNeverDownloadsOrWrites(t *testing.T) {
@@ -91,17 +105,21 @@ func TestSimulateTrackSelectsRealMediaButNeverDownloadsOrWrites(t *testing.T) {
 	}))
 	defer server.Close()
 
+	synctest.Test(t, func(t *testing.T) { simulateTrackSelectsRealMedia(t, server.URL, &encryptedMediaHits) })
+}
+
+func simulateTrackSelectsRealMedia(t *testing.T, serverURL string, encryptedMediaHits *atomic.Int32) {
 	cfg := config.Default()
 	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
 	cfg.Download.DownloadsDir = t.TempDir()
 	song := applemusic.Song{
 		ID: "song-1", Name: "Track", ArtistName: "Artist", AlbumName: "Album",
-		DurationInMillis: 1000, EnhancedHLS: server.URL + "/master.m3u8",
+		DurationInMillis: 1000, EnhancedHLS: serverURL + "/master.m3u8",
 	}
 	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		catalog: fakeDownloaderCatalog{song: song},
-		http:    server.Client(),
+		http:    bubbleClient(),
 	})
 	reporter := &recordingReporter{}
 	job := domain.Job{ID: "job-1"}
@@ -196,62 +214,64 @@ func TestSimulateTrackSelectsRealMediaButNeverDownloadsOrWrites(t *testing.T) {
 }
 
 func TestSimulateTrackFallsBackToAACLCWithoutManifest(t *testing.T) {
-	cfg := config.Default()
-	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
-	cfg.Download.DownloadsDir = t.TempDir()
-	cfg.Download.MaxAttempts = 1 // avoid retry backoff delays; selection retries mirror the real path
-	// No EnhancedHLS manifest: every enhanced codec fails selection and the
-	// simulated run must walk the same fallback chain down to AAC-LC.
-	downloader := newTestDownloader(&Downloader{
-		cfg:     cfg,
-		catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}},
-	})
-	reporter := &recordingReporter{}
+	synctest.Test(t, func(t *testing.T) {
+		cfg := config.Default()
+		cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
+		cfg.Download.DownloadsDir = t.TempDir()
+		cfg.Download.MaxAttempts = 1 // avoid retry backoff delays; selection retries mirror the real path
+		// No EnhancedHLS manifest: every enhanced codec fails selection and the
+		// simulated run must walk the same fallback chain down to AAC-LC.
+		downloader := newTestDownloader(&Downloader{
+			cfg:     cfg,
+			catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}},
+		})
+		reporter := &recordingReporter{}
 
-	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
-		t.Fatalf("simulated processTrack failed: %v", err)
-	}
-	var fallbacks, completed int
-	remuxing := false
-	for _, ev := range reporter.events {
-		switch ev.Type {
-		case "codec_fallback":
-			fallbacks++
-			var raw map[string]any
-			if err := json.Unmarshal(ev.Payload, &raw); err != nil {
-				t.Fatalf("decode codec_fallback payload: %v", err)
-			}
-			var snapshot domain.JobItem
-			if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
-				t.Fatalf("decode codec_fallback snapshot: %v", err)
-			}
-			if snapshot.Codec != raw["to_codec"] {
-				t.Fatalf("codec_fallback snapshot.Codec = %q, want it to already match to_codec %v", snapshot.Codec, raw["to_codec"])
-			}
-		case "item_completed":
-			completed++
-		case "item_progress":
-			if ev.Phase == string(domain.ItemRemuxing) {
-				remuxing = true
+		if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
+			t.Fatalf("simulated processTrack failed: %v", err)
+		}
+		var fallbacks, completed int
+		remuxing := false
+		for _, ev := range reporter.events {
+			switch ev.Type {
+			case "codec_fallback":
+				fallbacks++
+				var raw map[string]any
+				if err := json.Unmarshal(ev.Payload, &raw); err != nil {
+					t.Fatalf("decode codec_fallback payload: %v", err)
+				}
+				var snapshot domain.JobItem
+				if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
+					t.Fatalf("decode codec_fallback snapshot: %v", err)
+				}
+				if snapshot.Codec != raw["to_codec"] {
+					t.Fatalf("codec_fallback snapshot.Codec = %q, want it to already match to_codec %v", snapshot.Codec, raw["to_codec"])
+				}
+			case "item_completed":
+				completed++
+			case "item_progress":
+				if ev.Phase == string(domain.ItemRemuxing) {
+					remuxing = true
+				}
 			}
 		}
-	}
-	if fallbacks == 0 {
-		t.Error("expected codec_fallback events when the enhanced manifest is missing")
-	}
-	if completed != 1 {
-		t.Fatalf("item_completed events = %d, want 1", completed)
-	}
-	if !remuxing {
-		t.Error("AAC-LC fallback did not publish the production remuxing phase")
-	}
-	final := reporter.items[len(reporter.items)-1]
-	if final.OutputPath == "" {
-		t.Fatal("final item OutputPath is empty, want non-empty simulated output path")
-	}
-	if final.Codec != "aac-lc" || final.Status != domain.ItemCompleted {
-		t.Fatalf("final item codec/status = %q/%s, want aac-lc/completed", final.Codec, final.Status)
-	}
+		if fallbacks == 0 {
+			t.Error("expected codec_fallback events when the enhanced manifest is missing")
+		}
+		if completed != 1 {
+			t.Fatalf("item_completed events = %d, want 1", completed)
+		}
+		if !remuxing {
+			t.Error("AAC-LC fallback did not publish the production remuxing phase")
+		}
+		final := reporter.items[len(reporter.items)-1]
+		if final.OutputPath == "" {
+			t.Fatal("final item OutputPath is empty, want non-empty simulated output path")
+		}
+		if final.Codec != "aac-lc" || final.Status != domain.ItemCompleted {
+			t.Fatalf("final item codec/status = %q/%s, want aac-lc/completed", final.Codec, final.Status)
+		}
+	})
 }
 
 func TestSimulateModeSkipsWrapperStorefrontCheck(t *testing.T) {
@@ -267,29 +287,35 @@ func TestSimulateModeSkipsWrapperStorefrontCheck(t *testing.T) {
 // phase's key wait, which shows as waiting_decrypt, and starts decrypting as
 // soon as it holds a decrypt slot instead of sitting in decrypting first.
 func TestSimulatedKeyWaitIsBeforeDecrypting(t *testing.T) {
-	cfg := config.Default()
-	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
-	m := simulatedMedia{cfg: cfg}
+	synctest.Test(t, func(t *testing.T) {
+		cfg := config.Default()
+		cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
+		m := simulatedMedia{cfg: cfg}
 
-	start := time.Now()
-	if err := m.prepareKeys(context.Background(), "song", []string{"skd://k"}); err != nil {
-		t.Fatal(err)
-	}
-	if waited := time.Since(start); waited < simulatedKeyPause {
-		t.Fatalf("simulated key wait = %v, want the %v key pause", waited, simulatedKeyPause)
-	}
+		keyed := make(chan error, 1)
+		go func() { keyed <- m.prepareKeys(t.Context(), "song", []string{"skd://k"}) }()
+		synctest.Wait()
+		select {
+		case <-keyed:
+			t.Fatal("the simulated key wait returned at once, want it to pause for the key")
+		default:
+		}
+		time.Sleep(simulatedKeyPause)
+		if err := <-keyed; err != nil {
+			t.Fatal(err)
+		}
 
-	start = time.Now()
-	var ready time.Duration
-	err := m.decrypt(context.Background(), decryptRequest{codec: "alac", size: 3}, decryptHooks{
-		ready:      func() { ready = time.Since(start) },
-		progress:   func(float64) {},
-		afterInput: func() {},
+		var hooks []string
+		err := m.decrypt(t.Context(), decryptRequest{codec: "alac", size: 3}, decryptHooks{
+			ready:      func() { hooks = append(hooks, "ready") },
+			progress:   func(float64) { hooks = append(hooks, "progress") },
+			afterInput: func() { hooks = append(hooks, "afterInput") },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hooks) < 3 || hooks[0] != "ready" || hooks[len(hooks)-1] != "afterInput" {
+			t.Fatalf("decrypt hooks = %v, want ready first: no key pause inside decrypt", hooks)
+		}
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ready >= simulatedKeyPause/2 {
-		t.Fatalf("simulated decrypt was ready after %v, want it to stop pausing for the key", ready)
-	}
 }

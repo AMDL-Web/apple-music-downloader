@@ -1,6 +1,8 @@
 package media
 
 import (
+	"amdl/internal/config"
+	"amdl/internal/domain"
 	"bytes"
 	"errors"
 	"io/fs"
@@ -130,5 +132,28 @@ func TestFileSinkReportsEachSync(t *testing.T) {
 	}
 	if !slices.Equal(reported, []int64{2000, 3000}) {
 		t.Fatalf("synced lengths %v, want 2000 (past 1024 unsynced) and 3000 (close)", reported)
+	}
+}
+
+func TestCleanupJobArtifactsUsesConfiguredTempDir(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Default()
+	cfg.Download.TempDir = filepath.Join(root, "temp")
+	downloader := newTestDownloader(&Downloader{store: config.NewStore(cfg)})
+	alternative := false
+	job := domain.Job{ID: "job-clean", Overrides: &config.DownloadOverrides{CodecAlternative: &alternative}}
+	path, metadataPath := resumableDownloadPaths(cfg.Download.TempDir, job.ID, "output")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range []string{path, metadataPath} {
+		if err := os.WriteFile(candidate, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	downloader.CleanupJobArtifacts(job)
+	if _, err := os.Stat(resumeOwnerDir(cfg.Download.TempDir, job.ID)); !os.IsNotExist(err) {
+		t.Fatalf("job resume directory still exists: %v", err)
 	}
 }

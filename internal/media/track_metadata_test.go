@@ -9,9 +9,9 @@ import (
 )
 
 func TestTrackMetadataResolverReusesResolvedSingleSong(t *testing.T) {
-	catalog := &metadataCountingCatalog{
-		metadataCalls: make(map[string]int),
-		albumCalls:    make(map[string]int),
+	calls := &callLog{}
+	catalog := fakeDownloaderCatalog{
+		calls: calls,
 	}
 	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	initial := applemusic.Song{
@@ -26,19 +26,19 @@ func TestTrackMetadataResolverReusesResolvedSingleSong(t *testing.T) {
 	if got.ID != initial.ID || got.Name != initial.Name || got.AlbumID != initial.AlbumID || got.TrackCount != initial.TrackCount || got.DiscCount != initial.DiscCount || got.HasLyrics != initial.HasLyrics {
 		t.Fatalf("song = %+v, want resolved value %+v", got, initial)
 	}
-	metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := idCounts(calls)
 	if len(metadataCalls) != 0 || len(albumCalls) != 0 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want no duplicate reads", metadataCalls, albumCalls)
 	}
 }
 
 func TestTrackMetadataResolverMergesResolvedAlbumWithoutRefetch(t *testing.T) {
-	catalog := &metadataCountingCatalog{
-		metadataSongs: map[string]applemusic.Song{
+	calls := &callLog{}
+	catalog := fakeDownloaderCatalog{
+		calls: calls,
+		songs: map[string]applemusic.Song{
 			"song-1": {ID: "song-1", Name: "Fresh Song", AlbumID: "album-1", HasLyrics: false},
 		},
-		metadataCalls: make(map[string]int),
-		albumCalls:    make(map[string]int),
 	}
 	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	initial := applemusic.Song{
@@ -58,22 +58,22 @@ func TestTrackMetadataResolverMergesResolvedAlbumWithoutRefetch(t *testing.T) {
 	if got.AlbumArtist != "Album Artist" || got.AlbumArtistID != "artist-1" || got.AlbumArtworkURL != "album-art" || got.TrackCount != 10 || got.DiscCount != 2 || got.UPC != "123456" {
 		t.Fatalf("album fields were not preserved: %+v", got)
 	}
-	metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := idCounts(calls)
 	if metadataCalls["song-1"] != 1 || len(albumCalls) != 0 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want one lightweight song read and no album read", metadataCalls, albumCalls)
 	}
 }
 
 func TestTrackMetadataResolverPreservesArtistAlbumPlacement(t *testing.T) {
-	catalog := &metadataCountingCatalog{
-		metadataSongs: map[string]applemusic.Song{
+	calls := &callLog{}
+	catalog := fakeDownloaderCatalog{
+		calls: calls,
+		songs: map[string]applemusic.Song{
 			"song-1": {
 				ID: "song-1", Name: "Fresh Song", AlbumID: "default-album", AlbumName: "Default Album",
 				ArtworkURL: "default-art", TrackNumber: 1, DiscNumber: 1,
 			},
 		},
-		metadataCalls: make(map[string]int),
-		albumCalls:    make(map[string]int),
 	}
 	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	initial := applemusic.Song{
@@ -96,8 +96,10 @@ func TestTrackMetadataResolverPreservesArtistAlbumPlacement(t *testing.T) {
 func TestTrackMetadataResolverCoalescesPlaylistAlbumReads(t *testing.T) {
 	albumWait := make(chan struct{})
 	albumStarted := make(chan struct{}, 1)
-	catalog := &metadataCountingCatalog{
-		metadataSongs: map[string]applemusic.Song{
+	calls := &callLog{}
+	catalog := fakeDownloaderCatalog{
+		calls: calls,
+		songs: map[string]applemusic.Song{
 			"song-1": {ID: "song-1", Name: "One", AlbumID: "album-1"},
 			"song-2": {ID: "song-2", Name: "Two", AlbumID: "album-1"},
 		},
@@ -112,10 +114,18 @@ func TestTrackMetadataResolverCoalescesPlaylistAlbumReads(t *testing.T) {
 				},
 			},
 		},
-		metadataCalls: make(map[string]int),
-		albumCalls:    make(map[string]int),
-		albumWait:     albumWait,
-		albumStarted:  albumStarted,
+		albumHook: func(ctx context.Context, _ string) error {
+			select {
+			case albumStarted <- struct{}{}:
+			default:
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-albumWait:
+				return nil
+			}
+		},
 	}
 	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	resolver := newTrackMetadataResolver(downloader, "cn")
@@ -150,15 +160,17 @@ func TestTrackMetadataResolverCoalescesPlaylistAlbumReads(t *testing.T) {
 			t.Fatalf("playlist song missed album palette or artist URL: colors=%+v artist_url=%q", song.AlbumArtworkColors, song.ArtistURL)
 		}
 	}
-	metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := idCounts(calls)
 	if metadataCalls["song-1"] != 1 || metadataCalls["song-2"] != 1 || albumCalls["album-1"] != 1 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want one song read each and one shared album read", metadataCalls, albumCalls)
 	}
 }
 
 func TestTrackMetadataResolverEnrichesStationTracksWithAlbum(t *testing.T) {
-	catalog := &metadataCountingCatalog{
-		metadataSongs: map[string]applemusic.Song{
+	calls := &callLog{}
+	catalog := fakeDownloaderCatalog{
+		calls: calls,
+		songs: map[string]applemusic.Song{
 			"song-1": {ID: "song-1", Name: "One", AlbumID: "album-1", AlbumArtist: "Album Artist"},
 			"song-2": {ID: "song-2", Name: "Two", AlbumID: "album-1", AlbumArtist: "Album Artist"},
 		},
@@ -171,8 +183,6 @@ func TestTrackMetadataResolverEnrichesStationTracksWithAlbum(t *testing.T) {
 				},
 			},
 		},
-		metadataCalls: make(map[string]int),
-		albumCalls:    make(map[string]int),
 	}
 	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	resolver := newTrackMetadataResolver(downloader, "cn")
@@ -189,7 +199,7 @@ func TestTrackMetadataResolverEnrichesStationTracksWithAlbum(t *testing.T) {
 			t.Fatalf("station song %s was not album-enriched: %+v", id, song)
 		}
 	}
-	metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := idCounts(calls)
 	if metadataCalls["song-1"] != 1 || metadataCalls["song-2"] != 1 || albumCalls["album-1"] != 1 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want one song read each and one shared album read", metadataCalls, albumCalls)
 	}

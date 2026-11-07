@@ -149,3 +149,70 @@ func (zeroReader) Read(p []byte) (int, error) {
 	clear(p)
 	return len(p), nil
 }
+
+// The integrity check's error is what an operator reads on a failed item, so it
+// must carry ffmpeg's own diagnosis.
+func TestCheckIntegrityFileReportsFFmpegDiagnostics(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.m4a")
+	if err := os.WriteFile(file, []byte("not audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name   string
+		script string
+		want   []string
+	}{
+		{
+			name:   "decoder errors and failing exit",
+			script: `echo "[aac @ 0x1] channel element 0.0 is not allocated" >&2; exit 1`,
+			want:   []string{"ffmpeg decode: exit status 1", "channel element 0.0 is not allocated"},
+		},
+		{
+			name:   "decoder errors with a clean exit",
+			script: `echo "[alac @ 0x1] invalid samples per frame" >&2`,
+			want:   []string{"ffmpeg decode reported errors", "invalid samples per frame"},
+		},
+		{
+			name:   "failing exit without output",
+			script: `exit 3`,
+			want:   []string{"ffmpeg decode: exit status 3"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newPipeTestProcessor(t, writePipeTestCommand(t, tt.script))
+			err := p.checkIntegrityFile(context.Background(), file)
+			if err == nil {
+				t.Fatal("check passed, want an error")
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want it to contain %q", err, want)
+				}
+			}
+		})
+	}
+
+	t.Run("clean decode", func(t *testing.T) {
+		p := newPipeTestProcessor(t, writePipeTestCommand(t, "exit 0"))
+		if err := p.checkIntegrityFile(context.Background(), file); err != nil {
+			t.Fatalf("clean check = %v, want nil", err)
+		}
+	})
+
+	t.Run("long output is capped", func(t *testing.T) {
+		// 200 lines of 41 bytes is 8200 bytes of diagnostics.
+		p := newPipeTestProcessor(t, writePipeTestCommand(t,
+			`i=0; while [ $i -lt 200 ]; do echo "[aac @ 0x1] error decoding packet $i" >&2; i=$((i+1)); done; exit 1`))
+		err := p.checkIntegrityFile(context.Background(), file)
+		if err == nil {
+			t.Fatal("check passed, want an error")
+		}
+		if len(err.Error()) > maxToolDiagnosticBytes+200 {
+			t.Fatalf("error is %d bytes, want it capped near %d", len(err.Error()), maxToolDiagnosticBytes)
+		}
+		if !strings.Contains(err.Error(), "error decoding packet 0") || !strings.Contains(err.Error(), "more bytes)") {
+			t.Fatalf("error = %q, want the first lines and a truncation note", err)
+		}
+	})
+}

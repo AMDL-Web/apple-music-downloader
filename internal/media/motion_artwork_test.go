@@ -3,14 +3,14 @@ package media
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
-	"sync/atomic"
+	"slices"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
+	"amdl/internal/domain"
 )
 
 func TestMotionArtworkAlbumIDPicksTheAlbumBehindTheJob(t *testing.T) {
@@ -61,186 +61,107 @@ func TestMotionArtworkAlbumIDPicksTheAlbumBehindTheJob(t *testing.T) {
 	}
 }
 
-// The backfill must survive the job context, which the manager cancels as soon
-// as the job finishes. Short jobs would otherwise cancel the lookup mid-flight
-// and silently never persist a cover the album actually has.
-func TestMotionArtworkBackfillOutlivesTheJobContext(t *testing.T) {
-	reporter := &recordingReporter{}
-	d := newTestDownloader(&Downloader{
-		cfg: motionArtworkEnabledConfig(),
-		catalog: fakeDownloaderCatalog{motionArtwork: applemusic.MotionArtwork{
-			Square:       "https://mvod.example/square.m3u8",
-			Tall:         "https://mvod.example/tall.m3u8",
-			SquareColors: applemusic.ArtworkColors{BgColor: "5c6786", TextColor1: "f7ebf6"},
-			TallColors:   applemusic.ArtworkColors{BgColor: "05104b", TextColor1: "d5d9ed"},
-		}},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	d.startMotionArtworkBackfill(ctx, "job-1", applemusic.ParsedURL{
-		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
-	}, nil, reporter)
-	cancel()
-
-	writes := waitForMotionArtworkWrites(t, reporter)
-	if len(writes) != 1 {
-		t.Fatalf("motion artwork writes = %d, want 1", len(writes))
+// The backfill runs detached from the job: it must survive the job context,
+// which the manager cancels as soon as the job finishes (short jobs would
+// otherwise cancel the lookup mid-flight and never persist a cover the album
+// has). A catalog failure or an empty answer means "no animated cover", never
+// a job failure; a job deleted while the lookup was in flight gets no
+// motion_artwork_resolved event, which would land after the job_deleted
+// tombstone the overview feed replays as that job's last word; and
+// catalog.motion_artwork_enabled=false stops it before any request is made.
+func TestMotionArtworkBackfill(t *testing.T) {
+	art := applemusic.MotionArtwork{
+		Square:       "https://mvod.example/square.m3u8",
+		Tall:         "https://mvod.example/tall.m3u8",
+		SquareColors: applemusic.ArtworkColors{BgColor: "5c6786", TextColor1: "f7ebf6"},
+		TallColors:   applemusic.ArtworkColors{BgColor: "05104b", TextColor1: "d5d9ed"},
 	}
-	if writes[0].JobID != "job-1" || writes[0].Art.SquareURL != "https://mvod.example/square.m3u8" || writes[0].Art.TallURL != "https://mvod.example/tall.m3u8" {
-		t.Fatalf("unexpected write %+v", writes[0])
+	tests := []struct {
+		name        string
+		disabled    bool
+		art         applemusic.MotionArtwork
+		err         error
+		jobGone     bool
+		wantLookup  bool
+		wantWrite   bool
+		wantResolve bool
+	}{
+		{name: "found, job context already cancelled", art: art, wantLookup: true, wantWrite: true, wantResolve: true},
+		{name: "catalog failure is swallowed", err: errors.New("amp-api unavailable"), wantLookup: true},
+		{name: "empty result writes nothing", wantLookup: true},
+		{name: "job deleted meanwhile", art: art, jobGone: true, wantLookup: true, wantWrite: true},
+		{name: "disabled by config", art: art, disabled: true},
 	}
-	// The palette must travel with its own variant, never the still cover's.
-	if writes[0].Art.TallColors.BgColor != "05104b" {
-		t.Fatalf("tall palette = %+v, want the tall previewFrame background", writes[0].Art.TallColors)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := &callLog{}
+			reporter := &recordingReporter{missingJobs: tt.jobGone}
+			d := newTestDownloader(&Downloader{
+				cfg:     config.Config{Catalog: config.CatalogConfig{MotionArtworkEnabled: !tt.disabled}},
+				catalog: fakeDownloaderCatalog{motionArtwork: tt.art, motionArtworkErr: tt.err, calls: calls},
+				logger:  discardLogger(),
+			})
+			ctx, cancel := context.WithCancel(t.Context())
+			d.startMotionArtworkBackfill(ctx, "job-1", applemusic.ParsedURL{
+				Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
+			}, nil, reporter)
+			cancel()
+			if err := d.Wait(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := calls.with("motion "); tt.wantLookup != (len(got) == 1) {
+				t.Fatalf("motion artwork lookups = %v, want lookup %v", got, tt.wantLookup)
+			}
+			writes := reporter.motionArtwork
+			if !tt.wantWrite {
+				if len(writes) != 0 {
+					t.Fatalf("motion artwork writes = %+v, want none", writes)
+				}
+			} else {
+				want := motionArtworkWrite{JobID: "job-1", Art: domain.MotionArtwork{
+					SquareURL: art.Square, TallURL: art.Tall,
+					// Each palette travels with its own variant, never the still cover's.
+					SquareColors: domain.ArtworkPalette(art.SquareColors), TallColors: domain.ArtworkPalette(art.TallColors),
+				}}
+				if len(writes) != 1 || writes[0] != want {
+					t.Fatalf("motion artwork writes = %+v, want %+v", writes, want)
+				}
+			}
+			resolved := slices.Contains(reporter.eventTypes(), domain.EventMotionArtworkResolved)
+			if resolved != tt.wantResolve {
+				t.Fatalf("motion_artwork_resolved announced = %v, want %v", resolved, tt.wantResolve)
+			}
+		})
 	}
 }
 
-// A catalog failure means "no animated cover", never a job failure: the caller
-// already returned and the download is in flight by now.
-func TestMotionArtworkBackfillSwallowsCatalogFailure(t *testing.T) {
-	reporter := &recordingReporter{}
-	d := newTestDownloader(&Downloader{
-		cfg:     motionArtworkEnabledConfig(),
-		catalog: fakeDownloaderCatalog{motionArtworkErr: errors.New("amp-api unavailable")},
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-	})
+func TestDownloaderWaitDrainsBackgroundWork(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		d := newTestDownloader(&Downloader{
+			cfg: config.Config{Catalog: config.CatalogConfig{MotionArtworkEnabled: true}}, logger: discardLogger(),
+			catalog: fakeDownloaderCatalog{motionHook: func(ctx context.Context) (applemusic.MotionArtwork, error) {
+				select {
+				case <-release:
+					return applemusic.MotionArtwork{}, nil
+				case <-ctx.Done():
+					return applemusic.MotionArtwork{}, ctx.Err()
+				}
+			}},
+		})
+		d.startMotionArtworkBackfill(t.Context(), "job-1", applemusic.ParsedURL{
+			Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
+		}, nil, &recordingReporter{})
 
-	d.startMotionArtworkBackfill(context.Background(), "job-1", applemusic.ParsedURL{
-		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
-	}, nil, reporter)
-
-	// Nothing to wait on when it fails, so give the goroutine room to misbehave.
-	time.Sleep(100 * time.Millisecond)
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	if len(reporter.motionArtwork) != 0 {
-		t.Fatalf("motion artwork writes = %d, want none", len(reporter.motionArtwork))
-	}
-	for _, ev := range reporter.events {
-		if ev.Type == "motion_artwork_resolved" {
-			t.Fatal("a failed lookup must not announce a motion cover")
+		short, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		if err := d.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Wait with the backfill in flight = %v, want the deadline", err)
 		}
-	}
-}
-
-// An album with no animated cover writes nothing rather than blanking the row.
-func TestMotionArtworkBackfillIgnoresEmptyResult(t *testing.T) {
-	reporter := &recordingReporter{}
-	d := newTestDownloader(&Downloader{
-		cfg:     motionArtworkEnabledConfig(),
-		catalog: fakeDownloaderCatalog{motionArtwork: applemusic.MotionArtwork{}},
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-	})
-
-	d.startMotionArtworkBackfill(context.Background(), "job-1", applemusic.ParsedURL{
-		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
-	}, nil, reporter)
-
-	time.Sleep(100 * time.Millisecond)
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	if len(reporter.motionArtwork) != 0 {
-		t.Fatalf("motion artwork writes = %d, want none", len(reporter.motionArtwork))
-	}
-}
-
-func waitForMotionArtworkWrites(t *testing.T, reporter *recordingReporter) []motionArtworkWrite {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		reporter.mu.Lock()
-		writes := append([]motionArtworkWrite(nil), reporter.motionArtwork...)
-		reporter.mu.Unlock()
-		if len(writes) > 0 {
-			return writes
+		close(release)
+		if err := d.Wait(t.Context()); err != nil {
+			t.Fatalf("Wait after the backfill finished = %v, want nil", err)
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for the motion artwork write")
-	return nil
-}
-
-// motionArtworkEnabledConfig is the config these backfill tests need: the
-// lookup is opt-out, but a zero-value Config reads as disabled, so a test that
-// builds a Downloader literal has to say so explicitly.
-func motionArtworkEnabledConfig() config.Config {
-	return config.Config{Catalog: config.CatalogConfig{MotionArtworkEnabled: true}}
-}
-
-// catalog.motion_artwork_enabled=false must stop the lookup before any request
-// is built — the point of the switch is not generating the amp-api traffic at
-// all, not discarding the answer.
-func TestMotionArtworkBackfillDisabledByConfig(t *testing.T) {
-	reporter := &recordingReporter{}
-	catalog := &countingMotionArtworkCatalog{art: applemusic.MotionArtwork{
-		Square: "https://example.test/square.m3u8",
-	}}
-	d := newTestDownloader(&Downloader{
-		cfg:     config.Config{Catalog: config.CatalogConfig{MotionArtworkEnabled: false}},
-		catalog: catalog,
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
-
-	d.startMotionArtworkBackfill(context.Background(), "job-1", applemusic.ParsedURL{
-		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
-	}, nil, reporter)
-
-	// No goroutine should have been started at all; sleep so one that was gets
-	// a chance to show itself.
-	time.Sleep(100 * time.Millisecond)
-	if got := catalog.calls.Load(); got != 0 {
-		t.Fatalf("amp-api calls = %d, want 0 when the lookup is switched off", got)
-	}
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	if len(reporter.motionArtwork) != 0 {
-		t.Fatalf("motion artwork writes = %d, want none", len(reporter.motionArtwork))
-	}
-	for _, ev := range reporter.events {
-		if ev.Type == "motion_artwork_resolved" {
-			t.Fatal("a disabled lookup must not announce a motion cover")
-		}
-	}
-}
-
-type countingMotionArtworkCatalog struct {
-	fakeDownloaderCatalog
-	art   applemusic.MotionArtwork
-	calls atomic.Int32
-}
-
-func (c *countingMotionArtworkCatalog) MotionArtworkViaWebToken(context.Context, string, string) (applemusic.MotionArtwork, error) {
-	c.calls.Add(1)
-	return c.art, nil
-}
-
-// A job deleted while the detached lookup was in flight must not get a
-// motion_artwork_resolved event: it would land after the job_deleted tombstone
-// the overview feed replays as that job's last word.
-func TestMotionArtworkBackfillSkipsTheEventWhenTheJobIsGone(t *testing.T) {
-	reporter := &recordingReporter{missingJobs: true}
-	d := newTestDownloader(&Downloader{
-		cfg: motionArtworkEnabledConfig(),
-		catalog: fakeDownloaderCatalog{motionArtwork: applemusic.MotionArtwork{
-			Square: "https://example.test/square.m3u8",
-		}},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	})
-
-	d.startMotionArtworkBackfill(context.Background(), "job-gone", applemusic.ParsedURL{
-		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
-	}, nil, reporter)
-
-	// The write is attempted — only its outcome decides whether the event goes
-	// out — so wait for it rather than for an event that must never arrive.
-	waitForMotionArtworkWrites(t, reporter)
-	time.Sleep(100 * time.Millisecond)
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	for _, ev := range reporter.events {
-		if ev.Type == "motion_artwork_resolved" {
-			t.Fatal("announced a motion cover for a job that no longer exists")
-		}
-	}
 }

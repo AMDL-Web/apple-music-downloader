@@ -37,12 +37,12 @@ type Downloader struct {
 	// of the account that serves it is used (usertoken.Provider.TokenFor).
 	// Empty uses the default account's.
 	storefront string
-	catalog    downloaderCatalog
+	catalog    Catalog
 	// playback sends lyrics, WebPlayback and license requests to Apple
 	// itself when there is a media-user-token (see playbackClient); nil
 	// leaves all of them to the wrapper.
 	playback playbackClient
-	wrapper  downloaderWrapper
+	wrapper  Wrapper
 	tools    *ToolChecker
 	http     *http.Client
 	mp4      *MP4Processor
@@ -72,7 +72,9 @@ type Downloader struct {
 	background *sync.WaitGroup
 }
 
-type downloaderCatalog interface {
+// Catalog is the Apple Music catalog a Downloader reads metadata and
+// artwork from; *applemusic.CatalogClient is the production one.
+type Catalog interface {
 	SongMetadata(context.Context, string, string) (applemusic.Song, error)
 	Album(context.Context, string, string) (applemusic.Collection, error)
 	Playlist(context.Context, string, string, string) (applemusic.Collection, error)
@@ -83,7 +85,9 @@ type downloaderCatalog interface {
 	MotionArtworkViaWebToken(context.Context, string, string) (applemusic.MotionArtwork, error)
 }
 
-type downloaderWrapper interface {
+// Wrapper is the decryptor a Downloader asks for manifests, lyrics, keys and
+// decryption; *wrapper.Client is the production one.
+type Wrapper interface {
 	Status(context.Context) (wrapper.Status, error)
 	M3U8(context.Context, string) (string, error)
 	Lyrics(context.Context, string, wrapper.LyricsRequestOptions) (string, error)
@@ -97,18 +101,33 @@ type downloaderWrapper interface {
 // NewDownloader builds the process-wide Downloader. It creates the shared media
 // pools from the current config; changing their sizes needs a restart.
 func NewDownloader(store *config.Store, tokens *usertoken.Provider, catalog *applemusic.CatalogClient, wrapperClient *wrapper.Client, tools *ToolChecker, logger *slog.Logger) *Downloader {
+	return NewDownloaderFrom(store, tokens, catalog, wrapperClient, tools, logger)
+}
+
+// NewDownloaderFrom is NewDownloader over any Catalog and Wrapper, so tests
+// can run the real pipeline against fakes. A catalog that also answers
+// Apple's playback requests (as *applemusic.CatalogClient does) serves the
+// in-process lyrics/WebPlayback/license path, and one with a RequestGate
+// shares it with the media requests.
+func NewDownloaderFrom(store *config.Store, tokens *usertoken.Provider, catalog Catalog, wrapperClient Wrapper, tools *ToolChecker, logger *slog.Logger) *Downloader {
 	cfg := store.Get()
-	return &Downloader{
-		store: store, cfg: cfg, tokens: tokens, catalog: catalog, playback: catalog, wrapper: wrapperClient, tools: tools,
+	d := &Downloader{
+		store: store, cfg: cfg, tokens: tokens, catalog: catalog, wrapper: wrapperClient, tools: tools,
 		http: newHTTPClient(), mp4: newMP4Processor(cfg), logger: logger,
 		downloadLimit:    limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
 		decryptLimit:     limits.NewSemaphore(config.MaxParallelDecrypts),
 		inFlightLimit:    limits.NewSemaphore(cfg.Download.MaxParallelDownloads + config.MaxParallelDecrypts),
-		requestGate:      catalog.RequestGate(),
 		deviceManifests:  newDeviceManifestCache(),
 		simulatedOutputs: newOutputSet(),
 		background:       &sync.WaitGroup{},
 	}
+	if playback, ok := catalog.(playbackClient); ok {
+		d.playback = playback
+	}
+	if gated, ok := catalog.(interface{ RequestGate() *limits.RequestGate }); ok {
+		d.requestGate = gated.RequestGate()
+	}
+	return d
 }
 
 // Wait blocks until the background work jobs started has finished, or ctx is
@@ -206,8 +225,8 @@ func (d *Downloader) requestStorefront(ctx context.Context, typ applemusic.URLTy
 
 // How long a run waits for a wrapper that does not answer or is not ready
 // yet, as when the backend starts it with runs to recover, and how often it
-// asks. Variables so tests can shorten them.
-var (
+// asks. Tests run the wait on synctest's virtual clock.
+const (
 	wrapperStartWait = 2 * time.Minute
 	wrapperStartPoll = 2 * time.Second
 )

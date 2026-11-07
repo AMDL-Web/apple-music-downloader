@@ -13,17 +13,6 @@ import (
 	"amdl/internal/domain"
 )
 
-// fakeAACLCWrapper overrides WebPlayback to point at a test playlist server,
-// keeping every other method delegated to fakeDownloaderWrapper's no-ops.
-type fakeAACLCWrapper struct {
-	fakeDownloaderWrapper
-	webPlaybackURL string
-}
-
-func (f fakeAACLCWrapper) WebPlayback(context.Context, string) (string, error) {
-	return f.webPlaybackURL, nil
-}
-
 // TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot guards against the
 // real (non-simulate) AAC-LC codec_selected event regressing back to the
 // bare codec/attempt payload used before MarshalEventPayload was introduced;
@@ -49,7 +38,7 @@ func TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot(t *testing.T) {
 	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		http:    server.Client(),
-		wrapper: fakeAACLCWrapper{webPlaybackURL: server.URL + "/track.m3u8"},
+		wrapper: fakeDownloaderWrapper{webPlayback: server.URL + "/track.m3u8"},
 	})
 	createdAt := time.Now().UTC().Add(-time.Minute)
 	item := &domain.JobItem{
