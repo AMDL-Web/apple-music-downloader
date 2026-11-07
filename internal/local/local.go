@@ -277,7 +277,8 @@ func (b Backend) Start() (*Running, error) {
 }
 
 // lockPoll is how often Serve retries the lock while another backend has it.
-const lockPoll = time.Second
+// It is a variable only so tests can shorten it.
+var lockPoll = time.Second
 
 // Serve runs the backend in the foreground on addr until ctx ends, as amdl
 // serve --local does under a service manager. While another process has the

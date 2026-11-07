@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/wrapper"
@@ -59,6 +60,10 @@ func accountsProvider(t *testing.T, w *instanceWrapper, dir string) *Provider {
 // Each active account has its own GET /token loop, asked by instance id, and
 // TokenFor picks the account of the storefront, else the default.
 func TestTokenPerAccountAndByStorefront(t *testing.T) {
+	synctest.Test(t, testTokenPerAccountAndByStorefront)
+}
+
+func testTokenPerAccountAndByStorefront(t *testing.T) {
 	w := &instanceWrapper{tokens: map[string]string{"us-id": usTok, "jp-id": jpTok}}
 	p := accountsProvider(t, w, t.TempDir())
 	p.SetAccounts([]Account{
@@ -68,9 +73,9 @@ func TestTokenPerAccountAndByStorefront(t *testing.T) {
 	})
 	runLoop(t, p)
 	cfg := cfg0()
-	waitFor(t, "both tokens", func() bool {
-		return p.Account(cfg, "us-id").Value == usTok && p.Account(cfg, "jp-id").Value == jpTok
-	})
+	if p.Account(cfg, "us-id").Value != usTok || p.Account(cfg, "jp-id").Value != jpTok {
+		t.Fatal("the accounts' tokens were not fetched")
+	}
 	if w.askedFor("") || w.askedFor("gone") {
 		t.Fatalf("asked for %v; want only the active instances", w.asked)
 	}
@@ -94,12 +99,18 @@ func TestTokenPerAccountAndByStorefront(t *testing.T) {
 
 // Two accounts of one region: the lower position's token is used.
 func TestSameRegionLowerPositionWins(t *testing.T) {
+	synctest.Test(t, testSameRegionLowerPositionWins)
+}
+
+func testSameRegionLowerPositionWins(t *testing.T) {
 	w := &instanceWrapper{tokens: map[string]string{"a": usTok, "b": jpTok}}
 	p := accountsProvider(t, w, t.TempDir())
 	p.SetAccounts([]Account{{ID: "b", Region: "us", Position: 1, Active: true}, {ID: "a", Region: "us", Position: 0, Active: true}})
 	runLoop(t, p)
 	cfg := cfg0()
-	waitFor(t, "token of a", func() bool { return p.TokenFor(cfg, "us").Value == usTok })
+	if got := p.TokenFor(cfg, "us"); got.Account != "a" || got.Value != usTok {
+		t.Fatalf("TokenFor(us) = %q, want a", got.Account)
+	}
 	p.SetAccounts([]Account{{ID: "b", Region: "us", Position: 0, Active: true}, {ID: "a", Region: "us", Position: 1, Active: true}})
 	if got := p.TokenFor(cfg, "us"); got.Account != "b" {
 		t.Fatalf("after the move TokenFor(us) = %q, want b", got.Account)
@@ -109,27 +120,45 @@ func TestSameRegionLowerPositionWins(t *testing.T) {
 // Before any account is known the implicit account is asked for with a bare
 // GET /token; once instances are known its loop stops.
 func TestImplicitAccountUntilAccountsAreKnown(t *testing.T) {
+	synctest.Test(t, testImplicitAccountUntilAccountsAreKnown)
+}
+
+func testImplicitAccountUntilAccountsAreKnown(t *testing.T) {
 	w := &instanceWrapper{tokens: map[string]string{"": usTok, "jp-id": jpTok}}
 	p := accountsProvider(t, w, t.TempDir())
 	runLoop(t, p)
 	cfg := cfg0()
-	waitFor(t, "implicit token", func() bool { return p.Token(cfg).Value == usTok })
+	if p.Token(cfg).Value != usTok {
+		t.Fatal("no implicit token")
+	}
 	if p.DefaultAccount() != implicitID {
 		t.Fatalf("default = %q", p.DefaultAccount())
 	}
 	p.SetAccounts([]Account{{ID: "jp-id", Region: "jp", Active: true}})
-	waitFor(t, "jp token", func() bool { return p.Token(cfg).Value == jpTok })
+	synctest.Wait()
+	if p.Token(cfg).Value != jpTok {
+		t.Fatal("no jp token after SetAccounts")
+	}
+	if p.DefaultAccount() != "jp-id" {
+		t.Fatalf("default after SetAccounts = %q", p.DefaultAccount())
+	}
 }
 
 // Forget drops a deleted account's stored copy.
 func TestForgetDropsTheStoredCopy(t *testing.T) {
+	synctest.Test(t, testForgetDropsTheStoredCopy)
+}
+
+func testForgetDropsTheStoredCopy(t *testing.T) {
 	dir := t.TempDir()
 	w := &instanceWrapper{tokens: map[string]string{"jp-id": jpTok}}
 	p := accountsProvider(t, w, dir)
 	p.SetAccounts([]Account{{ID: "jp-id", Region: "jp", Active: true}})
 	runLoop(t, p)
 	path := filepath.Join(dir, "account-jp-id.json")
-	waitFor(t, "stored copy", func() bool { _, err := os.Stat(path); return err == nil })
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("no stored copy: %v", err)
+	}
 	if err := p.Forget("jp-id"); err != nil {
 		t.Fatal(err)
 	}

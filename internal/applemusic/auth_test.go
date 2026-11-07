@@ -2,192 +2,64 @@ package applemusic
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/config"
 )
 
-func TestCacheUntilIsHalfLife(t *testing.T) {
-	now := time.Unix(1_700_000_000, 0)
-	tests := []struct {
-		name string
-		ttl  time.Duration
-	}{
-		{"12h default", 12 * time.Hour},
-		{"custom 6h", 6 * time.Hour},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cacheUntil(now, tt.ttl)
-			want := now.Add(tt.ttl / 2)
-			if !got.Equal(want) {
-				t.Fatalf("cacheUntil(%v, %v) = %v, want %v", now, tt.ttl, got, want)
-			}
-		})
-	}
-}
-
-func TestTokenRefreshUsesHalfLife(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.String() == "https://music.apple.com" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-	})}
-
-	before := time.Now()
-	if _, err := client.webToken.get(context.Background()); err != nil {
-		t.Fatalf("Token: %v", err)
-	}
-	after := time.Now()
-
-	wantTTL := client.cfg.TokenTTL()
-	minUntil := before.Add(wantTTL / 2)
-	maxUntil := after.Add(wantTTL / 2)
-	if client.webToken.until.Before(minUntil) || client.webToken.until.After(maxUntil) {
-		t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v)", client.webToken.until, minUntil, maxUntil, wantTTL)
-	}
-}
-
-func TestProactiveTokenRefresh(t *testing.T) {
-	newScrapingClient := func(calls *int32) *CatalogClient {
-		client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
-		client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			switch req.URL.String() {
-			case "https://music.apple.com":
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-			case "https://music.apple.com/assets/index~abc123.js":
-				atomic.AddInt32(calls, 1)
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.fresh-signature"`)), Header: make(http.Header)}, nil
-			default:
-				return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected")), Header: make(http.Header)}, nil
-			}
-		})}
-		return client
-	}
-
-	t.Run("renews a token near expiry", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		client.webToken.value = "stale"
-		client.webToken.until = time.Now().Add(tokenRefreshLead / 2)
-
-		client.refreshExpiringWebToken(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 1 {
-			t.Fatalf("scrape calls = %d, want 1", got)
-		}
-		if client.webToken.value == "stale" || client.webToken.value == "" {
-			t.Fatalf("webToken = %q, want a freshly scraped value", client.webToken.value)
-		}
-	})
-
-	t.Run("leaves a token that is not near expiry", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		client.webToken.value, client.webToken.until = "still-good", time.Now().Add(time.Hour)
-
-		client.refreshExpiringWebToken(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 0 {
-			t.Fatalf("scrape calls = %d, want 0 (nothing near expiry)", got)
-		}
-	})
-
-	t.Run("never scrapes an empty cache", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		// webToken left empty: nothing has been fetched yet, so the
-		// proactive loop must not scrape Apple on its own.
-
-		client.refreshExpiringWebToken(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 0 {
-			t.Fatalf("scrape calls = %d, want 0 (empty cache must not trigger a scrape)", got)
-		}
-	})
-}
-
-func TestConcurrentTokenCacheMissScrapesOnce(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
+// The scrape reads the index script's path out of the web player's page, the
+// JWT out of that script, and reports the configured TTL; the half-life
+// caching on top of it is tokenCache's (tokencache_test.go).
+func TestScrapeWebTokenReadsTheJWTFromThePlayerScript(t *testing.T) {
 	var mu sync.Mutex
-	homeCalls, jsCalls := 0, 0
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	var paths []string
+	client := newTestClient(t, config.CatalogConfig{TokenCacheTTLHours: 6}, func(req *http.Request) *http.Response {
 		mu.Lock()
-		defer mu.Unlock()
-		switch req.URL.String() {
-		case "https://music.apple.com":
-			homeCalls++
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-		case "https://music.apple.com/assets/index~abc123.js":
-			jsCalls++
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		default:
-			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected")), Header: make(http.Header)}, nil
+		paths = append(paths, req.URL.Host+req.URL.Path)
+		mu.Unlock()
+		if resp, ok := scrapeResponse(req); ok {
+			return resp
 		}
-	})}
+		return jsonResponse(http.StatusNotFound, "unexpected")
+	})
 
-	const callers = 20
-	start := make(chan struct{})
-	errCh := make(chan error, callers)
-	var wg sync.WaitGroup
-	for range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-start
-			_, err := client.webToken.get(context.Background())
-			errCh <- err
-		}()
+	token, ttl, err := client.scrapeWebToken(context.Background())
+	if err != nil {
+		t.Fatal(err)
 	}
-	close(start)
-	wg.Wait()
-	close(errCh)
-	for err := range errCh {
-		if err != nil {
-			t.Fatalf("Token: %v", err)
-		}
+	if token != "eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.refreshed-sig" || ttl != 6*time.Hour {
+		t.Fatalf("scrape = (%q, %v), want the script's JWT and the configured 6h", token, ttl)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if homeCalls != 1 || jsCalls != 1 {
-		t.Fatalf("token scrape calls = home %d, js %d; want one each", homeCalls, jsCalls)
+	if want := []string{"music.apple.com/", "music.apple.com/assets/index~abc123.js"}; len(paths) != 2 || paths[0] != want[0] || paths[1] != want[1] {
+		t.Fatalf("requests = %q, want %q", paths, want)
 	}
 }
 
 func TestGetWithUserTokenRetriesOnce401ThenSucceeds(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "stale-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-
 	var catalogCalls int
 	var authHeaders []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/cn/songs/song-1" {
-			catalogCalls++
-			authHeaders = append(authHeaders, req.Header.Get("Authorization"))
-			if catalogCalls == 1 {
-				return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"401"}]}`)), Header: make(http.Header)}, nil
-			}
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album"},"relationships":{}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	client := newTestClient(t, config.CatalogConfig{Language: "en-US"}, func(req *http.Request) *http.Response {
+		if resp, ok := scrapeResponse(req); ok {
+			return resp
 		}
-		if req.URL.String() == "https://music.apple.com" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
+		if req.URL.Path != "/v1/catalog/cn/songs/song-1" {
+			return jsonResponse(http.StatusNotFound, "unexpected: "+req.URL.String())
 		}
-		if req.URL.String() == "https://music.apple.com/assets/index~abc123.js" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
+		catalogCalls++
+		authHeaders = append(authHeaders, req.Header.Get("Authorization"))
+		if catalogCalls == 1 {
+			return jsonResponse(http.StatusUnauthorized, `{"errors":[{"status":"401"}]}`)
 		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected: " + req.URL.String())), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album"},"relationships":{}}]}`)
+	})
 
 	song, err := client.SongMetadata(context.Background(), "cn", "song-1")
 	if err != nil {
@@ -199,33 +71,25 @@ func TestGetWithUserTokenRetriesOnce401ThenSucceeds(t *testing.T) {
 	if catalogCalls != 2 {
 		t.Fatalf("catalog calls = %d, want 2 (401 then retry)", catalogCalls)
 	}
-	if len(authHeaders) != 2 || authHeaders[0] != "Bearer stale-token" || authHeaders[0] == authHeaders[1] {
-		t.Fatalf("auth headers = %#v, want stale token then a different re-minted token", authHeaders)
+	if len(authHeaders) != 2 || authHeaders[0] != "Bearer "+testWebToken || authHeaders[0] == authHeaders[1] {
+		t.Fatalf("auth headers = %#v, want the cached token then a different re-minted token", authHeaders)
 	}
 }
 
 func TestGetWithUserTokenReturnsErrorAfterSingleRetryOn401Twice(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "stale-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-
 	var catalogCalls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/cn/songs/song-1" {
-			catalogCalls++
-			return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"401"}]}`)), Header: make(http.Header)}, nil
+	client := newTestClient(t, config.CatalogConfig{Language: "en-US"}, func(req *http.Request) *http.Response {
+		if resp, ok := scrapeResponse(req); ok {
+			return resp
 		}
-		if req.URL.String() == "https://music.apple.com" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
+		if req.URL.Path != "/v1/catalog/cn/songs/song-1" {
+			return jsonResponse(http.StatusNotFound, "unexpected: "+req.URL.String())
 		}
-		if req.URL.String() == "https://music.apple.com/assets/index~abc123.js" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected: " + req.URL.String())), Header: make(http.Header)}, nil
-	})}
+		catalogCalls++
+		return jsonResponse(http.StatusUnauthorized, `{"errors":[{"status":"401"}]}`)
+	})
 
-	_, err := client.SongMetadata(context.Background(), "cn", "song-1")
-	if err == nil {
+	if _, err := client.SongMetadata(context.Background(), "cn", "song-1"); err == nil {
 		t.Fatal("expected error after repeated 401")
 	}
 	if catalogCalls != 2 {
@@ -233,40 +97,56 @@ func TestGetWithUserTokenReturnsErrorAfterSingleRetryOn401Twice(t *testing.T) {
 	}
 }
 
-// RunTokenRefresher blocks until its context ends and returns only after a
-// refresh in flight has stopped, so shutdown can wait for it.
-func TestRunTokenRefresherReturnsAfterCancelAndInFlightRefresh(t *testing.T) {
-	entered := make(chan struct{})
-	var once sync.Once
-	var finished atomic.Bool
-	client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		once.Do(func() { close(entered) })
-		<-req.Context().Done()
-		finished.Store(true)
-		return nil, req.Context().Err()
-	})}
-	client.webToken.value = "stale"
-	client.webToken.until = time.Now().Add(tokenRefreshLead / 2)
+// RunTokenRefresher wakes every tokenRefreshCheckInterval, never scrapes a
+// token nothing has used, renews a used one once it is within tokenRefreshLead
+// of its cached expiry, and returns only after a refresh in flight has stopped,
+// so shutdown can wait for it.
+func TestRunTokenRefresher(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
+		var fetches atomic.Int32
+		var fetchedAt time.Time
+		entered := make(chan struct{})
+		var once sync.Once
+		var finished atomic.Bool
+		client.webToken.fetch = func(ctx context.Context) (string, time.Duration, error) {
+			fetches.Add(1)
+			once.Do(func() {
+				fetchedAt = time.Now()
+				close(entered)
+			})
+			<-ctx.Done()
+			finished.Store(true)
+			return "", 0, ctx.Err()
+		}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		client.runTokenRefresher(ctx, time.Millisecond)
-		close(done)
-	}()
-	select {
-	case <-entered:
-	case <-time.After(3 * time.Second):
-		t.Fatal("refresher never refreshed the expiring token")
-	}
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("RunTokenRefresher did not return after its context ended")
-	}
-	if !finished.Load() {
-		t.Fatal("RunTokenRefresher returned while a refresh was still in flight")
-	}
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan struct{})
+		go func() {
+			client.RunTokenRefresher(ctx)
+			close(done)
+		}()
+
+		// Nothing has fetched a token yet: the refresher leaves the cache alone.
+		time.Sleep(3 * tokenRefreshCheckInterval)
+		synctest.Wait()
+		if got := fetches.Load(); got != 0 {
+			t.Fatalf("fetches with an empty cache = %d, want 0", got)
+		}
+
+		start := time.Now()
+		client.webToken.mu.Lock()
+		client.webToken.value, client.webToken.until = "used", start.Add(time.Hour)
+		client.webToken.mu.Unlock()
+
+		<-entered
+		if want := start.Add(time.Hour - tokenRefreshLead); !fetchedAt.Equal(want) {
+			t.Fatalf("refresh began at +%v, want +%v (tokenRefreshLead before the cached expiry)", fetchedAt.Sub(start), want.Sub(start))
+		}
+		cancel()
+		<-done
+		if !finished.Load() {
+			t.Fatal("RunTokenRefresher returned while a refresh was still in flight")
+		}
+	})
 }

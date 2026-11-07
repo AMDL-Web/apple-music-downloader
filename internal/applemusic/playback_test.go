@@ -13,16 +13,15 @@ import (
 
 const testUserToken = "user-token-value-0123456789"
 
-// playbackClient answers every request with respond and keeps the last
-// request and its body.
+// playbackClient answers every request but a token scrape with respond and
+// keeps each request and its JSON body.
 func playbackClient(t *testing.T, respond func(*http.Request) *http.Response) (*CatalogClient, *[]*http.Request, *[]map[string]any) {
 	t.Helper()
-	client := newLibraryClient()
 	var reqs []*http.Request
 	var bodies []map[string]any
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, libraryConfig, func(req *http.Request) *http.Response {
 		if resp, ok := scrapeResponse(req); ok {
-			return resp, nil
+			return resp
 		}
 		reqs = append(reqs, req)
 		var body map[string]any
@@ -35,10 +34,8 @@ func playbackClient(t *testing.T, respond func(*http.Request) *http.Response) (*
 			}
 		}
 		bodies = append(bodies, body)
-		resp := respond(req)
-		resp.Request = req
-		return resp, nil
-	})}
+		return respond(req)
+	})
 	return client, &reqs, &bodies
 }
 

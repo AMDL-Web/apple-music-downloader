@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "id": "2",
+      "type": "albums",
+      "attributes": {
+        "name": "B",
+        "artistName": "Y",
+        "artwork": {
+          "url": "art"
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "s2",
+              "type": "songs",
+              "attributes": {
+                "name": "Two"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

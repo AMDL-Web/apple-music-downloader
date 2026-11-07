@@ -20,23 +20,18 @@ import (
 // /key must still get a playback permit instead of queueing behind the batch.
 func TestKeyIsNotStarvedByQueuedManifests(t *testing.T) {
 	gate := make(chan struct{})
-	var manifestsInFlight, manifestPeak atomic.Int32
+	manifests := newCounts()
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/m3u8" {
-			n := manifestsInFlight.Add(1)
-			for {
-				p := manifestPeak.Load()
-				if n <= p || manifestPeak.CompareAndSwap(p, n) {
-					break
-				}
-			}
+			manifests.add("in flight", 1)
 			<-gate
-			manifestsInFlight.Add(-1)
+			manifests.add("in flight", -1)
 			writeReply(w, 0, "SUCCESS", map[string]any{"m3u8": "#EXTM3U"})
 			return
 		}
 		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 3})
 	}))
+	waits := watchPermitWaits(c)
 
 	var probes sync.WaitGroup
 	for i := range 8 {
@@ -48,8 +43,9 @@ func TestKeyIsNotStarvedByQueuedManifests(t *testing.T) {
 	}
 	defer probes.Wait()
 	defer close(gate)
-	waitFor(t, func() bool { return manifestsInFlight.Load() >= 1 })
-	time.Sleep(50 * time.Millisecond) // let the rest of the batch queue
+	manifests.await(t, "in flight", manifestRequestLimit)
+	// The rest of the batch queues for the manifest permit.
+	waits.await(t, c.manifestLimit, 8-manifestRequestLimit)
 
 	jobCtx, cancel := context.WithTimeout(limits.WithPriority(context.Background(), 1), 2*time.Second)
 	defer cancel()
@@ -62,7 +58,7 @@ func TestKeyIsNotStarvedByQueuedManifests(t *testing.T) {
 	if !bytes.Equal(got[0], plain) {
 		t.Fatalf("decrypted = %x, want %x", got[0], plain)
 	}
-	if p := manifestPeak.Load(); p > manifestRequestLimit {
+	if p := manifests.max("in flight"); p > manifestRequestLimit {
 		t.Fatalf("peak /m3u8 requests in flight = %d, want at most %d", p, manifestRequestLimit)
 	}
 }
@@ -169,6 +165,7 @@ func TestAbandonedTemplateFetchStops(t *testing.T) {
 		calls.Add(1)
 		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 5})
 	}))
+	waits := watchPermitWaits(c)
 	release := holdPermits(t, c.playbackLimit, playbackRequestLimit)
 
 	ctx, cancel := context.WithCancel(limits.WithPriority(context.Background(), 1))
@@ -178,18 +175,22 @@ func TestAbandonedTemplateFetchStops(t *testing.T) {
 		_, err := session.DecryptFragment("skd://k", [][]byte{make([]byte, 16)})
 		done <- err
 	}()
-	waitFor(t, func() bool {
-		c.templates.mu.Lock()
-		defer c.templates.mu.Unlock()
-		return c.templates.entries["skd://k"] != nil
-	})
-	time.Sleep(20 * time.Millisecond) // let the fetch queue for a permit
+	waits.await(t, c.playbackLimit, 1) // the fetch queued for a permit
+	c.templates.mu.Lock()
+	fetch := c.templates.entries["skd://k"]
+	c.templates.mu.Unlock()
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled caller = %v, want context.Canceled", err)
 	}
+	// The fetch ends while every permit is still taken: it gave up its wait
+	// rather than sending a /key later.
+	select {
+	case <-fetch.ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the fetch kept running after every caller left")
+	}
 	release()
-	time.Sleep(100 * time.Millisecond) // time for a fetch still running to send its /key
 	if n := calls.Load(); n != 0 {
 		t.Fatalf("/key calls after every caller left = %d, want 0", n)
 	}
@@ -208,42 +209,6 @@ func TestAbandonedTemplateFetchStops(t *testing.T) {
 	}
 }
 
-// serialWrapper stands in for wrapper-lite, which answers /key and /m3u8 one
-// at a time: it serves one request at a time, records the order it served
-// them in, and holds the first one until hold is closed.
-type serialWrapper struct {
-	hold  chan struct{}
-	serve sync.Mutex
-	mu    sync.Mutex
-	order []string
-}
-
-func newSerialWrapper() *serialWrapper { return &serialWrapper{hold: make(chan struct{})} }
-
-func (s *serialWrapper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.serve.Lock()
-	defer s.serve.Unlock()
-	s.mu.Lock()
-	s.order = append(s.order, r.URL.Path+" "+r.URL.Query().Get("adamId"))
-	first := len(s.order) == 1
-	s.mu.Unlock()
-	if first {
-		<-s.hold
-	}
-	writeReply(w, 0, "SUCCESS", map[string]any{"xor": 1, "m3u8": "#EXTM3U"})
-}
-
-func (s *serialWrapper) served() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return slices.Clone(s.order)
-}
-
-// trackCtx is the context a job's track i runs under.
-func trackCtx(i int) context.Context {
-	return limits.WithSubpriority(limits.WithPriority(context.Background(), 1), int64(i))
-}
-
 // A key fetched ahead of need reaches the wrapper only after the /m3u8
 // requests queued for the same job: a track cannot start its download before
 // its stream is chosen, while a prefetched key is only needed once the download
@@ -251,8 +216,9 @@ func trackCtx(i int) context.Context {
 // made the wrapper alternate between the two, so with every track of a
 // Hi-Res album prefetching, the last stream was chosen about twice as late.
 func TestPrefetchedKeysWaitForQueuedManifests(t *testing.T) {
-	wl := newSerialWrapper()
+	wl := &fakeWrapper{serial: true, holdFirst: make(chan struct{})}
 	c := newTestClient(t, wl)
+	waits := watchPermitWaits(c)
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	wg.Go(func() {
@@ -260,22 +226,23 @@ func TestPrefetchedKeysWaitForQueuedManifests(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	waitFor(t, func() bool { return len(wl.served()) == 1 })
+	wl.events().await(t, "arrived", 1)
 	wg.Go(func() {
 		if err := c.PrefetchKeys(trackCtx(0), "100", []string{"skd://k0"}); err != nil {
 			t.Error(err)
 		}
 	})
-	time.Sleep(50 * time.Millisecond) // the prefetch queues before the next track's manifest
+	// The prefetch queues before the next track's manifest.
+	waits.await(t, c.manifestLimit, 1)
 	for i := 1; i <= 2; i++ {
 		wg.Go(func() {
 			if _, err := c.M3U8(trackCtx(i), fmt.Sprint(100+i)); err != nil {
 				t.Error(err)
 			}
 		})
-		time.Sleep(50 * time.Millisecond)
+		waits.await(t, c.manifestLimit, 1+i)
 	}
-	close(wl.hold)
+	close(wl.holdFirst)
 	wg.Wait()
 	want := []string{"/m3u8 100", "/m3u8 101", "/m3u8 102", "/key 100"}
 	if got := wl.served(); !slices.Equal(got, want) {
@@ -288,8 +255,9 @@ func TestPrefetchedKeysWaitForQueuedManifests(t *testing.T) {
 // would: tracks whose downloads have finished must not wait for every stream
 // still to be chosen in a long playlist.
 func TestNeededKeyStopsWaitingForManifests(t *testing.T) {
-	wl := newSerialWrapper()
+	wl := &fakeWrapper{serial: true, holdFirst: make(chan struct{})}
 	c := newTestClient(t, wl)
+	waits := watchPermitWaits(c)
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	wg.Go(func() {
@@ -297,13 +265,13 @@ func TestNeededKeyStopsWaitingForManifests(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	waitFor(t, func() bool { return len(wl.served()) == 1 })
+	wl.events().await(t, "arrived", 1)
 	wg.Go(func() {
 		if err := c.PrefetchKeys(trackCtx(0), "100", []string{"skd://k0"}); err != nil {
 			t.Error(err)
 		}
 	})
-	time.Sleep(50 * time.Millisecond)
+	waits.await(t, c.manifestLimit, 1)
 	for i := 1; i <= 2; i++ {
 		wg.Go(func() {
 			if _, err := c.M3U8(trackCtx(i), fmt.Sprint(100+i)); err != nil {
@@ -311,14 +279,17 @@ func TestNeededKeyStopsWaitingForManifests(t *testing.T) {
 			}
 		})
 	}
-	time.Sleep(50 * time.Millisecond)
+	waits.await(t, c.manifestLimit, 3)
 	wg.Go(func() {
 		if err := c.PrepareKeys(trackCtx(0), "100", []string{"skd://k0"}); err != nil {
 			t.Error(err)
 		}
 	})
-	time.Sleep(50 * time.Millisecond)
-	close(wl.hold)
+	// Once needed, the key leaves the manifest lane, takes the free playback
+	// permit and reaches the wrapper, which is still busy with the first
+	// manifest.
+	wl.events().await(t, "arrived", 2)
+	close(wl.holdFirst)
 	wg.Wait()
 	want := []string{"/m3u8 100", "/key 100", "/m3u8 101", "/m3u8 102"}
 	if got := wl.served(); !slices.Equal(got, want) {
@@ -346,12 +317,15 @@ func holdPermits(t *testing.T, sem *limits.Semaphore, n int) func() {
 }
 
 // overtake keeps every permit of sem busy with interactive-rank requests, which
-// outrank every job, and keeps more of them queued, so each release goes to one
-// of them ahead of any job waiting. It returns once they are cycling, and the
-// returned function stops them.
+// outrank every job, and keeps more of them queued: a holder releases its
+// permit only once another of them waits in sem's queue, so each release goes
+// to one of them ahead of any job waiting. It returns once they are cycling,
+// and the returned function stops them.
 func overtake(t *testing.T, sem *limits.Semaphore) func() {
 	t.Helper()
 	stop := make(chan struct{})
+	queued := make(chan struct{}, 64)
+	cycling := make(chan struct{})
 	var wg sync.WaitGroup
 	var grants atomic.Int32
 	for range 6 {
@@ -362,31 +336,31 @@ func overtake(t *testing.T, sem *limits.Semaphore) func() {
 					return
 				default:
 				}
-				release, err := sem.Acquire(context.Background())
+				ctx := &queuedContext{Context: context.Background(), queued: func() { queued <- struct{}{} }}
+				release, err := sem.Acquire(ctx)
 				if err != nil {
 					return
 				}
-				grants.Add(1)
-				time.Sleep(2 * time.Millisecond)
+				if grants.Add(1) == 12 {
+					close(cycling)
+				}
+				select {
+				case <-queued:
+				case <-stop:
+				}
 				release()
 			}
 		})
 	}
 	var once sync.Once
 	stopAll := func() { once.Do(func() { close(stop); wg.Wait() }) }
-	// Every looper has been granted a permit twice, so the others queue
-	// behind each holder from now on.
-	waitFor(t, func() bool { return grants.Load() >= 12 })
-	return stopAll
-}
-
-func waitFor(t *testing.T, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatal("condition not met within 5s")
-		}
-		time.Sleep(5 * time.Millisecond)
+	// Every looper has been granted a permit twice, on average, so the
+	// others queue behind each holder from now on.
+	select {
+	case <-cycling:
+	case <-time.After(5 * time.Second):
+		stopAll()
+		t.Fatal("the interactive requests never started cycling")
 	}
+	return stopAll
 }

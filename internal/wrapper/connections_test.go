@@ -135,14 +135,15 @@ func TestLyricsWaitEndsOnCancelWithoutKeepingAPermit(t *testing.T) {
 	var gate atomic.Pointer[chan struct{}]
 	first := make(chan struct{})
 	gate.Store(&first)
-	var inFlight atomic.Int32
+	inFlight := newCounts()
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wait := *gate.Load()
-		inFlight.Add(1)
+		inFlight.add("lyrics", 1)
 		<-wait
-		inFlight.Add(-1)
+		inFlight.add("lyrics", -1)
 		writeReply(w, 0, "SUCCESS", map[string]any{"lyrics": "doc"})
 	}))
+	waits := watchPermitWaits(c)
 
 	var holders sync.WaitGroup
 	for i := range config.MaxParallelWrapperRequests {
@@ -152,7 +153,7 @@ func TestLyricsWaitEndsOnCancelWithoutKeepingAPermit(t *testing.T) {
 			}
 		})
 	}
-	waitFor(t, func() bool { return inFlight.Load() == config.MaxParallelWrapperRequests })
+	inFlight.await(t, "lyrics", config.MaxParallelWrapperRequests)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	waited := make(chan error, 1)
@@ -160,7 +161,7 @@ func TestLyricsWaitEndsOnCancelWithoutKeepingAPermit(t *testing.T) {
 		_, err := c.Lyrics(ctx, "cancelled", LyricsRequestOptions{})
 		waited <- err
 	}()
-	time.Sleep(20 * time.Millisecond)
+	waits.await(t, c.dataLimit, 1) // the call queued for a permit
 	cancel()
 	select {
 	case err := <-waited:
@@ -184,7 +185,7 @@ func TestLyricsWaitEndsOnCancelWithoutKeepingAPermit(t *testing.T) {
 			}
 		})
 	}
-	waitFor(t, func() bool { return inFlight.Load() == config.MaxParallelWrapperRequests })
+	inFlight.await(t, "lyrics", config.MaxParallelWrapperRequests)
 	close(second)
 	again.Wait()
 }

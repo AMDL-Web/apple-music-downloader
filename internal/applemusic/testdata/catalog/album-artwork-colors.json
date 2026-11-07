@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": "album-1",
+      "type": "albums",
+      "attributes": {
+        "name": "Album",
+        "artistName": "Album Artist",
+        "artwork": {
+          "url": "album-art",
+          "bgColor": "1a1a1a",
+          "textColor1": "ffffff",
+          "textColor2": "eeeeee",
+          "textColor3": "cccccc",
+          "textColor4": "aaaaaa"
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "song-1",
+              "type": "songs",
+              "attributes": {
+                "name": "One",
+                "artwork": {
+                  "url": "song-art",
+                  "bgColor": "0b0b0b",
+                  "textColor1": "f1f1f1"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

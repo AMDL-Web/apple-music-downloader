@@ -12,7 +12,7 @@ import (
 // The library list filters by state and flag, counts before paging, and the
 // marks search reads say the same as the records.
 func TestRecordListsFilterAndMarksAgree(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-01T10:00:00Z")
 	for _, id := range []string{"1", "2", "3"} {
@@ -89,7 +89,7 @@ func TestRecordListsFilterAndMarksAgree(t *testing.T) {
 // the library or of the record count as the record's last check. Once the
 // record is removed, its check is no longer the library's last.
 func TestCheckRunsRecordTheLastCheck(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	t0 := mustTime(t, "2026-11-01T10:00:00Z")
 	_, err := store.AddAlbum(ctx, AlbumAdd{ID: "1", WantedAll: true, Source: domain.SourceManual, Now: t0})
@@ -129,7 +129,7 @@ func TestCheckRunsRecordTheLastCheck(t *testing.T) {
 // ended without writing a file included, and a record without runs at its
 // add time.
 func TestRecordListByActivity(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	t0 := mustTime(t, "2026-11-01T10:00:00Z")
 	for i, id := range []string{"1", "2", "3"} {
@@ -179,7 +179,7 @@ func TestRecordListByActivity(t *testing.T) {
 // the counts, though none of its tracks failed: what was asked for is not
 // downloaded.
 func TestARecordAppleDoesNotListIsFailed(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-01T10:00:00Z")
 	for _, id := range []string{"1", "2", "3"} {
@@ -212,7 +212,7 @@ func TestARecordAppleDoesNotListIsFailed(t *testing.T) {
 // An add naming a storefront moves the pin of a record its own storefront
 // did not have, and leaves the pin of one it had.
 func TestAnAddMovesThePinOfARecordNotInItsStorefront(t *testing.T) {
-	store := openRecordStore(t)
+	store := openStore(t)
 	ctx := context.Background()
 	now := mustTime(t, "2026-11-01T10:00:00Z")
 	add := func(id, pin string) {

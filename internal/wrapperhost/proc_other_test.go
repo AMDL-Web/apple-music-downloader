@@ -40,12 +40,10 @@ func alive(pid int) bool {
 func TestReapStaleKillsOnlyItsOwnGuest(t *testing.T) {
 	dir := t.TempDir()
 	other := leftover(t, "-kernel", filepath.Join(t.TempDir(), "assets", "k", "vmlinuz"))
-	reapStale(dir, other)
-	time.Sleep(200 * time.Millisecond)
-	if !alive(other.PID) {
-		t.Fatal("killed a process that runs no kernel from this directory")
-	}
 	own := leftover(t, "-kernel", filepath.Join(dir, "assets", "k", "vmlinuz"))
+	// reapStale sends its SIGKILL before it returns, so by the time own has
+	// died of the second call, other would have died of the first.
+	reapStale(dir, other)
 	reapStale(dir, own)
 	deadline := time.Now().Add(3 * time.Second)
 	for alive(own.PID) && time.Now().Before(deadline) {
@@ -53,5 +51,8 @@ func TestReapStaleKillsOnlyItsOwnGuest(t *testing.T) {
 	}
 	if alive(own.PID) {
 		t.Fatal("left this directory's own guest running on its port")
+	}
+	if !alive(other.PID) {
+		t.Fatal("killed a process that runs no kernel from this directory")
 	}
 }

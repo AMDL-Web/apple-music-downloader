@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,11 +11,7 @@ import (
 )
 
 func TestListJobsFilterPaginationAndSort(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 
 	base := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -132,11 +127,7 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 // timestamps are stored fixed-width, so ORDER BY keeps chronological order
 // across whole-second and sub-second rows.
 func TestListJobsOrdersFractionalTimes(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 
 	sec := time.Date(2024, 7, 10, 12, 0, 0, 0, time.UTC)
@@ -182,11 +173,7 @@ func idsOf(jobs []domain.Job) []string {
 // so the list must break the tie by insert order: a batch reads in submission
 // order, and pages cut inside it neither skip nor repeat a job.
 func TestListJobsBatchSharingTimestampKeepsSubmissionOrderAcrossPages(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 
 	base := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -247,11 +234,7 @@ func TestListJobsBatchSharingTimestampKeepsSubmissionOrderAcrossPages(t *testing
 // Current leaves out a failed run that a newer run of its record (or its
 // station link) replaced, and a run of a record that is now complete.
 func TestListJobsCurrentLeavesOutReplacedRuns(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	base := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	if _, err := store.AddAlbum(ctx, AlbumAdd{ID: "B", WantedAll: true, Source: domain.SourceManual, Now: base}); err != nil {

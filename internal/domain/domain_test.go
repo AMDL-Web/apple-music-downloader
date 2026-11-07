@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -60,45 +61,40 @@ func TestMarshalEventPayloadKeepsSnapshotFields(t *testing.T) {
 	}
 }
 
-func TestSummarizeHooksKeepsLatestStatePerHook(t *testing.T) {
-	events := []Event{
-		{ID: 1, Type: "hook_started", Phase: "emby-refresh"},
-		{ID: 2, Type: "hook_started", Phase: "notify"},
-		{ID: 3, Type: "job_finished"}, // non-hook events must be ignored
-		{ID: 4, Type: "hook_succeeded", Phase: "emby-refresh"},
-		{ID: 5, Type: "hook_failed", Phase: "notify", Message: "connect: refused"},
+func TestSummarizeHooks(t *testing.T) {
+	started := []Event{{ID: 1, Type: "hook_started", Phase: "notify"}}
+	tests := []struct {
+		name         string
+		events       []Event
+		stillRunning bool
+		want         []HookState
+	}{
+		{name: "empty", events: nil, want: nil},
+		{
+			name: "latest state per hook",
+			events: []Event{
+				{ID: 1, Type: "hook_started", Phase: "emby-refresh"},
+				{ID: 2, Type: "hook_started", Phase: "notify"},
+				{ID: 3, Type: "job_finished"}, // non-hook events must be ignored
+				{ID: 4, Type: "hook_succeeded", Phase: "emby-refresh"},
+				{ID: 5, Type: "hook_failed", Phase: "notify", Message: "connect: refused"},
+			},
+			want: []HookState{
+				{Name: "emby-refresh", Status: "succeeded"},
+				{Name: "notify", Status: "failed", Error: "connect: refused"},
+			},
+		},
+		{name: "started while the job runs", events: started, stillRunning: true, want: []HookState{{Name: "notify", Status: "running"}}},
+		// Started but nothing in flight anymore (e.g. restart mid-hook): its
+		// terminal event will never arrive, so it must not read as running forever.
+		{name: "started, nothing in flight", events: started, want: []HookState{{Name: "notify", Status: "interrupted"}}},
 	}
-	got := SummarizeHooks(events, false)
-	want := []HookState{
-		{Name: "emby-refresh", Status: "succeeded"},
-		{Name: "notify", Status: "failed", Error: "connect: refused"},
-	}
-	if len(got) != len(want) {
-		t.Fatalf("SummarizeHooks = %+v, want %+v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("SummarizeHooks[%d] = %+v, want %+v", i, got[i], want[i])
-		}
-	}
-}
-
-func TestSummarizeHooksStartedState(t *testing.T) {
-	events := []Event{{ID: 1, Type: "hook_started", Phase: "notify"}}
-
-	if got := SummarizeHooks(events, true); len(got) != 1 || got[0].Status != "running" {
-		t.Fatalf("SummarizeHooks(stillRunning=true) = %+v, want notify running", got)
-	}
-	// Started but nothing in flight anymore (e.g. restart mid-hook): its
-	// terminal event will never arrive, so it must not read as running forever.
-	if got := SummarizeHooks(events, false); len(got) != 1 || got[0].Status != "interrupted" {
-		t.Fatalf("SummarizeHooks(stillRunning=false) = %+v, want notify interrupted", got)
-	}
-}
-
-func TestSummarizeHooksEmpty(t *testing.T) {
-	if got := SummarizeHooks(nil, false); len(got) != 0 {
-		t.Fatalf("SummarizeHooks(nil) = %+v, want empty", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SummarizeHooks(tt.events, tt.stillRunning); !slices.Equal(got, tt.want) {
+				t.Fatalf("SummarizeHooks(stillRunning=%v) = %+v, want %+v", tt.stillRunning, got, tt.want)
+			}
+		})
 	}
 }
 

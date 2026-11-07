@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"amdl/internal/config"
@@ -237,6 +238,11 @@ type Client struct {
 	// life ends at Close and stops template fetches no caller waits for.
 	life     context.Context
 	shutdown context.CancelFunc
+
+	// permitWaited, when set (by tests only), is called with the semaphore
+	// each time a request has queued for one of its permits because none was
+	// free. It is nil in production.
+	permitWaited func(*limits.Semaphore)
 }
 
 type ClientOption func(*Client)
@@ -408,7 +414,7 @@ func (c *Client) withPlaybackPermits(ctx context.Context, endpoint string, sems 
 	waitCtx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	for _, sem := range sems {
-		release, err := sem.Acquire(waitCtx)
+		release, err := c.acquire(waitCtx, sem)
 		if err != nil {
 			return playbackWaitError(ctx, endpoint, wait, err)
 		}
@@ -426,13 +432,36 @@ func playbackWaitError(ctx context.Context, endpoint string, wait time.Duration,
 	return err
 }
 
-func withPermit(ctx context.Context, limit *limits.Semaphore, run func() error) error {
-	release, err := limit.Acquire(ctx)
+func (c *Client) withPermit(ctx context.Context, limit *limits.Semaphore, run func() error) error {
+	release, err := c.acquire(ctx, limit)
 	if err != nil {
 		return err
 	}
 	defer release()
 	return run()
+}
+
+// acquire takes one of sem's permits. With permitWaited set, sem.Acquire gets
+// a context that reports the first call of its Done method: Acquire selects on
+// Done only after it queued the caller, so the hook runs once the caller is
+// waiting in sem's queue, never on the uncontended path.
+func (c *Client) acquire(ctx context.Context, sem *limits.Semaphore) (func(), error) {
+	if c.permitWaited != nil {
+		ctx = &queuedContext{Context: ctx, queued: func() { c.permitWaited(sem) }}
+	}
+	return sem.Acquire(ctx)
+}
+
+// queuedContext calls queued on the first call of Done.
+type queuedContext struct {
+	context.Context
+	once   sync.Once
+	queued func()
+}
+
+func (q *queuedContext) Done() <-chan struct{} {
+	q.once.Do(q.queued)
+	return q.Context.Done()
 }
 
 // Status asks /status whether the wrapper is up and logged in. A wrapper-lite

@@ -41,7 +41,7 @@ func (c *Client) Lyrics(ctx context.Context, adamID string, opts LyricsRequestOp
 	var body struct {
 		Lyrics string `json:"lyrics"`
 	}
-	err := withPermit(ctx, c.dataLimit, func() error {
+	err := c.withPermit(ctx, c.dataLimit, func() error {
 		return c.get(ctx, "/lyrics", query, &body)
 	})
 	return body.Lyrics, err
@@ -53,7 +53,7 @@ func (c *Client) WebPlayback(ctx context.Context, adamID string) (string, error)
 	var body struct {
 		M3U8 string `json:"m3u8"`
 	}
-	err := withPermit(ctx, c.dataLimit, func() error {
+	err := c.withPermit(ctx, c.dataLimit, func() error {
 		return c.get(ctx, "/webplayback", url.Values{"adamId": {adamID}}, &body)
 	})
 	return body.M3U8, err
@@ -64,7 +64,7 @@ func (c *Client) License(ctx context.Context, adamID, challenge, uri string) (st
 	var body struct {
 		License string `json:"license"`
 	}
-	err := withPermit(ctx, c.dataLimit, func() error {
+	err := c.withPermit(ctx, c.dataLimit, func() error {
 		data, err := c.call(ctx, http.MethodPost, "/license", nil, map[string]string{
 			"adamId": adamID, "challenge": challenge, "uri": uri,
 		})

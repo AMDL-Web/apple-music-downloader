@@ -15,75 +15,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 )
-
-// xorTemplate stands in for a FairPlay template: it XORs every byte of the
-// 16-byte-aligned prefix with its value, so a test can build ciphertext from
-// known plaintext and tell which template decrypted it.
-type xorTemplate byte
-
-func (x xorTemplate) DecryptSample(sample []byte) {
-	for i := range len(sample) / 16 * 16 {
-		sample[i] ^= byte(x)
-	}
-}
-
-// parseXOR reads {"xor": n}; a reply without it is a template wrapper-lite
-// failed to capture.
-func parseXOR(data []byte) (SampleDecrypter, error) {
-	var body struct {
-		XOR *int `json:"xor"`
-	}
-	if err := json.Unmarshal(data, &body); err != nil {
-		return nil, err
-	}
-	if body.XOR == nil {
-		return nil, errors.New("reply has no template fields")
-	}
-	return xorTemplate(*body.XOR), nil
-}
-
-func encrypt(plain []byte, x byte) []byte {
-	out := append([]byte(nil), plain...)
-	xorTemplate(x).DecryptSample(out)
-	return out
-}
-
-type keyServer struct {
-	mu     sync.Mutex
-	xor    map[string]int
-	calls  map[string]int
-	adamID map[string][]string
-}
-
-func newKeyServer(xor map[string]int) *keyServer {
-	return &keyServer{xor: xor, calls: map[string]int{}, adamID: map[string][]string{}}
-}
-
-func (s *keyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	uri := r.URL.Query().Get("uri")
-	s.mu.Lock()
-	s.calls[uri]++
-	s.adamID[uri] = append(s.adamID[uri], r.URL.Query().Get("adamId"))
-	x, ok := s.xor[uri]
-	s.mu.Unlock()
-	if r.URL.Path != "/key" || !ok {
-		writeReply(w, 400, "unexpected request", nil)
-		return
-	}
-	writeReply(w, 0, "SUCCESS", map[string]any{"xor": x})
-}
-
-func (s *keyServer) callCount(uri string) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.calls[uri]
-}
 
 func TestDecryptFragmentReusesTemplatesAcrossSessions(t *testing.T) {
 	const key = "skd://itunes.apple.com/p1/c6"
-	keys := newKeyServer(map[string]int{key: 0x5a})
+	keys := &fakeWrapper{xor: map[string]int{key: 0x5a}}
 	c := newTestClient(t, keys)
 
 	aligned := []byte("0123456789abcdef0123456789abcdef")
@@ -114,7 +50,7 @@ func TestDecryptFragmentReusesTemplatesAcrossSessions(t *testing.T) {
 // uses: the session sends no /key of its own.
 func TestPrepareKeysWarmsTheSessionsTemplates(t *testing.T) {
 	const key = "skd://itunes.apple.com/p1/c6"
-	keys := newKeyServer(map[string]int{key: 0x5a, prefetchKeyURI: 0x11})
+	keys := &fakeWrapper{xor: map[string]int{key: 0x5a, prefetchKeyURI: 0x11}}
 	c := newTestClient(t, keys)
 
 	if err := c.PrepareKeys(context.Background(), "101", []string{prefetchKeyURI, key, "", key}); err != nil {
@@ -175,7 +111,7 @@ func TestBuiltInParserDecryptsTheGoldenSample(t *testing.T) {
 }
 
 func TestDecryptFragmentRejectsAFragmentWithoutKey(t *testing.T) {
-	c := newTestClient(t, newKeyServer(nil))
+	c := newTestClient(t, &fakeWrapper{xor: map[string]int{}})
 	session, _ := c.NewDecryptSession(context.Background(), "1")
 	if out, err := session.DecryptFragment("", nil); out != nil || err != nil {
 		t.Fatalf("empty fragment = (%v, %v), want (nil, nil)", out, err)
@@ -188,13 +124,15 @@ func TestDecryptFragmentRejectsAFragmentWithoutKey(t *testing.T) {
 func TestPrefetchKeyIsFetchedOnceForAdamIDZero(t *testing.T) {
 	var calls atomic.Int32
 	var adamIDs sync.Map
+	gate := make(chan struct{})
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		adamIDs.Store(r.URL.Query().Get("adamId"), true)
-		time.Sleep(50 * time.Millisecond)
+		<-gate
 		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 7})
 	}))
 	c.templates = newTemplateCache(1)
+	waiting := watchTemplateWaits(c)
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
@@ -205,6 +143,9 @@ func TestPrefetchKeyIsFetchedOnceForAdamIDZero(t *testing.T) {
 			errs <- err
 		})
 	}
+	// Every session waits for the one fetch before the wrapper answers it.
+	waiting.await(t, prefetchKeyURI, 20)
+	close(gate)
 	wg.Wait()
 	close(errs)
 	for err := range errs {
@@ -322,7 +263,7 @@ func TestFailedTemplateFetchIsNotCached(t *testing.T) {
 }
 
 func TestTemplateCacheEvictsTheLeastRecentlyUsedKey(t *testing.T) {
-	keys := newKeyServer(map[string]int{"skd://a": 1, "skd://b": 2, "skd://c": 3})
+	keys := &fakeWrapper{xor: map[string]int{"skd://a": 1, "skd://b": 2, "skd://c": 3}}
 	c := newTestClient(t, keys)
 	c.templates = newTemplateCache(2)
 	session, _ := c.NewDecryptSession(context.Background(), "1")
@@ -349,6 +290,7 @@ func TestCancelledCallerDoesNotFailOthersWaitingForTheSameKey(t *testing.T) {
 		<-release
 		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 9})
 	}))
+	waiting := watchTemplateWaits(c)
 	plain := []byte("0123456789abcdef")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -372,12 +314,7 @@ func TestCancelledCallerDoesNotFailOthersWaitingForTheSameKey(t *testing.T) {
 	}()
 	// Cancel only once the second caller waits too: the fetch ends when
 	// nobody is left waiting for it.
-	waitFor(t, func() bool {
-		c.templates.mu.Lock()
-		defer c.templates.mu.Unlock()
-		entry := c.templates.entries["skd://k"]
-		return entry != nil && entry.waiters == 2
-	})
+	waiting.await(t, "skd://k", 2)
 	cancel()
 	if err := <-first; !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled caller = %v, want context.Canceled", err)

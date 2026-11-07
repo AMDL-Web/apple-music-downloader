@@ -4,14 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
-
-	"amdl/internal/config"
 )
 
 // TestAppleEndpointsClassifyRetries pins that the station and motion-artwork
@@ -53,24 +48,21 @@ func TestAppleEndpointsClassifyRetries(t *testing.T) {
 	for _, endpoint := range endpoints {
 		for _, status := range statuses {
 			t.Run(fmt.Sprintf("%s %d", endpoint.name, status.code), func(t *testing.T) {
-				client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-				client.webToken.value, client.webToken.until = "web-token", time.Now().Add(time.Hour)
 				var hits int
-				client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 					switch req.URL.Path {
 					case endpoint.path:
 						hits++
-						header := make(http.Header)
+						resp := jsonResponse(status.code, `{"errors":[]}`)
 						if status.retryAfter != "" {
-							header.Set("Retry-After", status.retryAfter)
+							resp.Header.Set("Retry-After", status.retryAfter)
 						}
-						return &http.Response{StatusCode: status.code, Status: http.StatusText(status.code), Body: io.NopCloser(strings.NewReader(`{"errors":[]}`)), Header: header}, nil
+						return resp
 					case "/v1/catalog/us/stations/ra.1":
-						body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"Station","playParams":{"format":"tracks"}}}]}`
-						return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+						return jsonResponse(http.StatusOK, `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"Station","playParams":{"format":"tracks"}}}]}`)
 					}
-					return &http.Response{StatusCode: http.StatusTeapot, Body: io.NopCloser(strings.NewReader("unexpected " + req.URL.Path)), Header: make(http.Header)}, nil
-				})}
+					return jsonResponse(http.StatusTeapot, "unexpected "+req.URL.Path)
+				})
 
 				err := endpoint.call(client)
 				if err == nil {

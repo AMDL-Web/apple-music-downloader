@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,11 +11,7 @@ import (
 )
 
 func TestGetJobFailsOnCorruptOverrides(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	ctx := context.Background()
 
 	force := true
@@ -47,11 +42,7 @@ func TestGetJobFailsOnCorruptOverrides(t *testing.T) {
 // A run whose overrides do not decode still lists, complete but for them, so
 // the queues can show it and its record; reading it to run it still fails.
 func TestAListKeepsARunWhoseOverridesDoNotDecode(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	ctx := context.Background()
 
 	now := time.Now().UTC()
@@ -87,11 +78,7 @@ func TestAListKeepsARunWhoseOverridesDoNotDecode(t *testing.T) {
 // No migration removes them: every read decodes the row with those keys
 // ignored, and the job's terminal write drops them.
 func TestRemovedOverrideKeysDoNotBlockHistoricalJobLoad(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
+	store := openStore(t)
 	ctx := context.Background()
 
 	now := time.Now().UTC()

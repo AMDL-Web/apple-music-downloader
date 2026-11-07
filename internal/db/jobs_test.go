@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,11 +12,7 @@ import (
 )
 
 func TestJobCountersAreDerivedFromItemsOnEveryRead(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	job := domain.Job{
@@ -86,11 +81,7 @@ func TestJobCountersAreDerivedFromItemsOnEveryRead(t *testing.T) {
 }
 
 func TestJobTimingRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	created := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	job := domain.Job{ID: "job-timing", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobQueued, CreatedAt: created, UpdatedAt: created}
@@ -133,11 +124,7 @@ func TestJobTimingRoundTrip(t *testing.T) {
 }
 
 func TestFinalizeJobPersistsStatusAndEventTogether(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	job := domain.Job{ID: "job-finalize", Input: "song|us|1", Type: "song", Status: domain.JobRunning, CreatedAt: now, UpdatedAt: now}
@@ -201,73 +188,10 @@ func TestFinalizeJobPersistsStatusAndEventTogether(t *testing.T) {
 	}
 }
 
-func TestArtworkURLRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	job := domain.Job{
-		ID: "job-art", Input: "https://music.apple.com/cn/album/test/1", Type: "album", Storefront: "cn",
-		Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-
-	// Artwork is written back after the input resolves, via UpdateJob.
-	job.ArtworkURL = "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg"
-	job.Status = domain.JobRunning
-	if err := store.UpdateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-	got, err := store.GetJob(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.ArtworkURL != job.ArtworkURL {
-		t.Fatalf("job artwork_url = %q, want %q", got.ArtworkURL, job.ArtworkURL)
-	}
-	listed, total, err := store.ListJobs(ctx, JobListFilter{Limit: 10})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if total != 1 {
-		t.Fatalf("total = %d, want 1", total)
-	}
-	if len(listed) != 1 || listed[0].ArtworkURL != job.ArtworkURL {
-		t.Fatalf("listed job artwork_url = %+v, want %q", listed, job.ArtworkURL)
-	}
-
-	item := domain.JobItem{
-		ID: "item-art", JobID: job.ID, AdamID: "123", Kind: "song", Index: 1,
-		ArtworkURL: "https://is1-ssl.mzstatic.com/image/thumb/Music/track/{w}x{h}bb.jpg",
-		Status:     domain.ItemQueued, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := store.CreateItem(ctx, item); err != nil {
-		t.Fatal(err)
-	}
-	item.ArtworkURL = "https://is1-ssl.mzstatic.com/image/thumb/Music/track-refreshed/{w}x{h}bb.jpg"
-	if err := store.UpdateItem(ctx, item); err != nil {
-		t.Fatal(err)
-	}
-	items, err := store.ListItems(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(items) != 1 || items[0].ArtworkURL != item.ArtworkURL {
-		t.Fatalf("item artwork_url = %+v, want %q", items, item.ArtworkURL)
-	}
-}
-
+// Artwork and display metadata are written back after the input resolves,
+// via UpdateJob and UpdateItem, and every read path returns them.
 func TestJobDisplayMetadataRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	job := domain.Job{
@@ -278,7 +202,7 @@ func TestJobDisplayMetadataRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Display metadata is written back after the input resolves, via UpdateJob.
+	job.ArtworkURL = "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg"
 	job.ArtistName = "Album Artist"
 	job.ArtistURL = "https://music.apple.com/cn/artist/album-artist/1"
 	job.CuratorName = "Curator"
@@ -295,6 +219,9 @@ func TestJobDisplayMetadataRoundTrip(t *testing.T) {
 	}
 	assertMeta := func(where string, got domain.Job) {
 		t.Helper()
+		if got.ArtworkURL != job.ArtworkURL {
+			t.Fatalf("%s artwork_url = %q, want %q", where, got.ArtworkURL, job.ArtworkURL)
+		}
 		if got.ArtistURL != job.ArtistURL {
 			t.Fatalf("%s artist url = %q, want %q", where, got.ArtistURL, job.ArtistURL)
 		}
@@ -337,6 +264,26 @@ func TestJobDisplayMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("FindActiveJobByKey ok=%v err=%v, want the active job", ok, err)
 	}
 	assertMeta("FindActiveJobByKey", active)
+
+	item := domain.JobItem{
+		ID: "item-art", JobID: job.ID, AdamID: "123", Kind: "song", Index: 1,
+		ArtworkURL: "https://is1-ssl.mzstatic.com/image/thumb/Music/track/{w}x{h}bb.jpg",
+		Status:     domain.ItemQueued, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.CreateItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	item.ArtworkURL = "https://is1-ssl.mzstatic.com/image/thumb/Music/track-refreshed/{w}x{h}bb.jpg"
+	if err := store.UpdateItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.ListItems(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ArtworkURL != item.ArtworkURL {
+		t.Fatalf("item artwork_url = %+v, want %q", items, item.ArtworkURL)
+	}
 }
 
 // TestCreateJobEnforcesActiveKeyUniqueness exercises idx_runs_active_key
@@ -345,11 +292,7 @@ func TestJobDisplayMetadataRoundTrip(t *testing.T) {
 // has to keep rejecting a genuine duplicate no matter what goes into the key,
 // and it has to keep ignoring terminal rows.
 func TestCreateJobEnforcesActiveKeyUniqueness(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
@@ -390,11 +333,7 @@ func TestCreateJobEnforcesActiveKeyUniqueness(t *testing.T) {
 }
 
 func TestListRecoverableJobsListsRunningThenQueuedInRunOrder(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	base := time.Now().UTC()
 	jobs := []domain.Job{
@@ -424,11 +363,7 @@ func TestListRecoverableJobsListsRunningThenQueuedInRunOrder(t *testing.T) {
 }
 
 func TestDeleteJobPersistsOverviewTombstone(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobCompleted}
 	if err := store.CreateJob(ctx, job); err != nil {

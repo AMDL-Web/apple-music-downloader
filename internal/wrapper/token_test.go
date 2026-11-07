@@ -106,18 +106,18 @@ func TestMusicTokenTimesOut(t *testing.T) {
 	}))
 	defer srv.Close()
 	defer close(release)
-	c, err := NewClient(config.WrapperConfig{Address: srv.URL, TimeoutSeconds: 1})
+	c, err := NewClient(config.WrapperConfig{Address: srv.URL, TimeoutSeconds: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	start := time.Now()
+	c.timeout = 50 * time.Millisecond
 	_, err = c.MusicToken(context.Background(), "")
 	var timeout *timeoutError
 	if !errors.As(err, &timeout) {
 		t.Fatalf("error %v, want a timeout", err)
 	}
-	if took := time.Since(start); took > 5*time.Second {
-		t.Fatalf("took %s with a 1 s timeout", took)
+	if timeout.after != c.timeout {
+		t.Fatalf("timed out after %v, want the request timeout %v", timeout.after, c.timeout)
 	}
 }

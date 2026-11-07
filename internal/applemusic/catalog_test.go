@@ -2,32 +2,29 @@ package applemusic
 
 import (
 	"context"
-	"io"
-	"log/slog"
+	"fmt"
 	"net/http"
 	"reflect"
-	"strings"
 	"testing"
-	"time"
 
 	"amdl/internal/config"
 )
 
+var enUS = config.CatalogConfig{Language: "en-US"}
+
 func TestSongRequestsAndMapsExtendedAssetURLs(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if got := req.URL.Query().Get("extend"); got != "extendedAssetUrls" {
-			t.Fatalf("extend query = %q, want extendedAssetUrls", got)
-		}
-		body := `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","extendedAssetUrls":{"enhancedHls":"https://example.test/master.m3u8"}},"relationships":{}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+	var extend string
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
+		extend = req.URL.Query().Get("extend")
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","extendedAssetUrls":{"enhancedHls":"https://example.test/master.m3u8"}},"relationships":{}}]}`)
+	})
 
 	song, err := client.Song(context.Background(), "cn", "123")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if extend != "extendedAssetUrls" {
+		t.Fatalf("extend query = %q, want extendedAssetUrls", extend)
 	}
 	if song.EnhancedHLS != "https://example.test/master.m3u8" {
 		t.Fatalf("EnhancedHLS = %q", song.EnhancedHLS)
@@ -35,15 +32,11 @@ func TestSongRequestsAndMapsExtendedAssetURLs(t *testing.T) {
 }
 
 func TestSongMetadataDoesNotFollowAlbumRelationship(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.Path)
-		body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album"},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":10}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album"},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":10}}]}}}]}`)
+	})
 
 	song, err := client.SongMetadata(context.Background(), "cn", "song-1")
 	if err != nil {
@@ -58,23 +51,15 @@ func TestSongMetadataDoesNotFollowAlbumRelationship(t *testing.T) {
 }
 
 func TestSongStillFollowsAlbumRelationshipForFullMetadata(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	serve := routes(map[string]string{
+		"/v1/catalog/cn/songs/song-1":   fixture(t, "catalog/song-1-in-album-1.json"),
+		"/v1/catalog/cn/albums/album-1": fixture(t, "catalog/album-1-two-tracks.json"),
+	})
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.Path)
-		switch req.URL.Path {
-		case "/v1/catalog/cn/songs/song-1":
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","trackNumber":1,"discNumber":1},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":2}}]}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		case "/v1/catalog/cn/albums/album-1":
-			body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":2,"artwork":{"url":"album-art"}},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist","url":"https://music.apple.com/cn/artist/album-artist/artist-1","artwork":{"url":"artist-art"}}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","trackNumber":1,"discNumber":1}},{"id":"song-2","type":"songs","attributes":{"name":"Two","trackNumber":2,"discNumber":1}}]}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		default:
-			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path")), Header: make(http.Header)}, nil
-		}
-	})}
+		return serve(req)
+	})
 
 	song, err := client.Song(context.Background(), "cn", "song-1")
 	if err != nil {
@@ -94,17 +79,13 @@ func TestSongStillFollowsAlbumRelationshipForFullMetadata(t *testing.T) {
 }
 
 func TestAlbumFallsBackToTheExtendedArtistURL(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var extend string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		extend = req.URL.Query().Get("extend")
 		// Included artist without attributes.url — only the extended
 		// album attribute carries the page.
-		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","artistUrl":"https://music.apple.com/cn/artist/album-artist/artist-1","trackCount":1},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist"}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","trackNumber":1,"discNumber":1}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","artistUrl":"https://music.apple.com/cn/artist/album-artist/artist-1","trackCount":1},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist"}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","trackNumber":1,"discNumber":1}}]}}}]}`)
+	})
 
 	album, err := client.Album(context.Background(), "cn", "album-1")
 	if err != nil {
@@ -119,22 +100,15 @@ func TestAlbumFallsBackToTheExtendedArtistURL(t *testing.T) {
 }
 
 func TestAlbumFetchesAllTrackPages(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	serve := routes(map[string]string{
+		"/v1/catalog/cn/albums/album-1":        fixture(t, "catalog/album-paged.json"),
+		"/v1/catalog/cn/albums/album-1/tracks": fixture(t, "catalog/album-paged-tracks-offset-1.json"),
+	})
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.RequestURI())
-		if req.URL.Path == "/v1/catalog/cn/albums/album-1" {
-			body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":3},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist","artwork":{"url":"artist-art"}}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist","albumName":"Album","trackNumber":1,"discNumber":1}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}}],"next":"/v1/catalog/cn/albums/album-1/tracks?offset=1"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		if req.URL.Path == "/v1/catalog/cn/albums/album-1/tracks" {
-			body := `{"data":[{"id":"song-2","type":"songs","attributes":{"name":"Two","artistName":"Artist","albumName":"Album","trackNumber":2,"discNumber":1}},{"id":"video-2","type":"music-videos","attributes":{"name":"Video Two"}},{"id":"song-3","type":"songs","attributes":{"name":"Three","artistName":"Artist","albumName":"Album","trackNumber":3,"discNumber":2}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
+		return serve(req)
+	})
 
 	album, err := client.Album(context.Background(), "cn", "album-1")
 	if err != nil {
@@ -151,96 +125,83 @@ func TestAlbumFetchesAllTrackPages(t *testing.T) {
 	}
 }
 
-// TestAlbumCountsTracksPerDiscOnMultiDiscReleases pins the "track N of M"
-// denominator to the track's own disc. Apple's album trackCount is the whole
-// release — a real 29+19 two-disc album reports 48 — which would tag every
-// track of both discs as N of 48.
-func TestAlbumCountsTracksPerDiscOnMultiDiscReleases(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":3},"relationships":{"tracks":{"data":[` +
-			`{"id":"song-1","type":"songs","attributes":{"name":"One","trackNumber":1,"discNumber":1}},` +
-			`{"id":"song-2","type":"songs","attributes":{"name":"Two","trackNumber":2,"discNumber":1}},` +
-			`{"id":"video-1","type":"music-videos","attributes":{"name":"Video","trackNumber":3,"discNumber":1}},` +
-			`{"id":"song-3","type":"songs","attributes":{"name":"Three","trackNumber":1,"discNumber":2}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	album, err := client.Album(context.Background(), "cn", "album-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The music video is not downloadable and never becomes a track, so it is
-	// excluded from disc 1's total as well.
-	want := []int{2, 2, 1}
-	for i, track := range album.Tracks {
-		if track.TrackCount != want[i] {
-			t.Fatalf("track %s TrackCount = %d, want %d", track.ID, track.TrackCount, want[i])
+// albumWithTracks is an album answer whose track relationship lists tracks,
+// each given as {id, type, trackNumber, discNumber}.
+func albumWithTracks(trackCount int, tracks ...[4]any) string {
+	list := ""
+	for i, track := range tracks {
+		if i > 0 {
+			list += ","
 		}
-		if track.DiscCount != 2 {
-			t.Fatalf("track %s DiscCount = %d, want 2", track.ID, track.DiscCount)
-		}
+		list += fmt.Sprintf(`{"id":%q,"type":%q,"attributes":{"name":"T","trackNumber":%d,"discNumber":%d}}`, track[0], track[1], track[2], track[3])
 	}
+	return fmt.Sprintf(`{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":%d},"relationships":{"tracks":{"data":[%s]}}}]}`, trackCount, list)
 }
 
-// TestAlbumInfersDiscTotalsFromTrackNumbersWhenTracksAreWithheld covers the
-// storefront that omits a song from the relationship. Counting the returned
-// entries would report 2 for a disc whose numbering already reaches 3, so the
-// total comes from Apple's trackNumber instead.
-func TestAlbumInfersDiscTotalsFromTrackNumbersWhenTracksAreWithheld(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		// Disc 1 track 2 and disc 2 track 1 are both missing from the payload.
-		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":5},"relationships":{"tracks":{"data":[` +
-			`{"id":"song-1","type":"songs","attributes":{"name":"One","trackNumber":1,"discNumber":1}},` +
-			`{"id":"song-3","type":"songs","attributes":{"name":"Three","trackNumber":3,"discNumber":1}},` +
-			`{"id":"song-5","type":"songs","attributes":{"name":"Five","trackNumber":2,"discNumber":2}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	album, err := client.Album(context.Background(), "cn", "album-1")
-	if err != nil {
-		t.Fatal(err)
+// TestAlbumTrackCounts pins the "track N of M" denominator.
+func TestAlbumTrackCounts(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           string
+		wantTrackCount []int
+		wantDiscCount  int
+		wantAlbumCount int
+	}{
+		{
+			// Apple's album trackCount is the whole release — a real 29+19
+			// two-disc album reports 48 — which would tag every track of both
+			// discs as N of 48. The music video is not downloadable and never
+			// becomes a track, so it is excluded from disc 1's total as well.
+			name: "multi-disc counts tracks per disc",
+			body: albumWithTracks(3,
+				[4]any{"song-1", "songs", 1, 1}, [4]any{"song-2", "songs", 2, 1},
+				[4]any{"video-1", "music-videos", 3, 1}, [4]any{"song-3", "songs", 1, 2}),
+			wantTrackCount: []int{2, 2, 1},
+			wantDiscCount:  2,
+		},
+		{
+			// [regression] A storefront that withholds songs from the
+			// relationship: counting the returned entries would report 2 for a
+			// disc whose numbering already reaches 3, so the total comes from
+			// Apple's trackNumber. Disc 1 track 2 and disc 2 track 1 are missing.
+			name: "withheld tracks infer disc totals from track numbers",
+			body: albumWithTracks(5,
+				[4]any{"song-1", "songs", 1, 1}, [4]any{"song-3", "songs", 3, 1}, [4]any{"song-5", "songs", 2, 2}),
+			wantTrackCount: []int{3, 3, 2},
+			wantDiscCount:  2,
+		},
+		{
+			// On a one-disc album Apple's count stays authoritative, because it
+			// still reports the full length when a storefront withholds
+			// individual tracks; the record's withheld_count is the difference.
+			name:           "single disc keeps Apple's track count",
+			body:           albumWithTracks(12, [4]any{"song-1", "songs", 1, 1}, [4]any{"song-2", "songs", 2, 1}),
+			wantTrackCount: []int{12, 12},
+			wantDiscCount:  1,
+			wantAlbumCount: 12,
+		},
 	}
-	want := []int{3, 3, 2}
-	for i, track := range album.Tracks {
-		if track.TrackCount != want[i] {
-			t.Fatalf("track %s TrackCount = %d, want %d", track.ID, track.TrackCount, want[i])
-		}
-	}
-}
-
-// TestAlbumKeepsAppleTrackCountOnSingleDiscReleases guards the other side: on a
-// one-disc album Apple's count stays authoritative, because it still reports
-// the full length when a storefront withholds individual tracks.
-func TestAlbumKeepsAppleTrackCountOnSingleDiscReleases(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":12},"relationships":{"tracks":{"data":[` +
-			`{"id":"song-1","type":"songs","attributes":{"name":"One","trackNumber":1,"discNumber":1}},` +
-			`{"id":"song-2","type":"songs","attributes":{"name":"Two","trackNumber":2,"discNumber":1}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	album, err := client.Album(context.Background(), "cn", "album-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The album's own count is the release's, though the list names two: the
-	// record's withheld_count is the difference.
-	if album.TrackCount != 12 {
-		t.Fatalf("album TrackCount = %d, want 12", album.TrackCount)
-	}
-	for _, track := range album.Tracks {
-		if track.TrackCount != 12 {
-			t.Fatalf("track %s TrackCount = %d, want 12", track.ID, track.TrackCount)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newTestClient(t, enUS, func(*http.Request) *http.Response { return jsonResponse(http.StatusOK, tt.body) })
+			album, err := client.Album(context.Background(), "cn", "album-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []int
+			for _, track := range album.Tracks {
+				got = append(got, track.TrackCount)
+				if track.DiscCount != tt.wantDiscCount {
+					t.Errorf("track %s DiscCount = %d, want %d", track.ID, track.DiscCount, tt.wantDiscCount)
+				}
+			}
+			if !reflect.DeepEqual(got, tt.wantTrackCount) {
+				t.Fatalf("TrackCount per track = %v, want %v", got, tt.wantTrackCount)
+			}
+			if tt.wantAlbumCount != 0 && album.TrackCount != tt.wantAlbumCount {
+				t.Fatalf("album TrackCount = %d, want %d", album.TrackCount, tt.wantAlbumCount)
+			}
+		})
 	}
 }
 
@@ -248,13 +209,8 @@ func TestAlbumKeepsAppleTrackCountOnSingleDiscReleases(t *testing.T) {
 // (bgColor/textColor1..4) so a mistyped JSON tag cannot silently drop the
 // colors from every collection.
 func TestAlbumDecodesArtworkColors(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","artwork":{"url":"album-art","bgColor":"1a1a1a","textColor1":"ffffff","textColor2":"eeeeee","textColor3":"cccccc","textColor4":"aaaaaa"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artwork":{"url":"song-art","bgColor":"0b0b0b","textColor1":"f1f1f1"}}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+	body := fixture(t, "catalog/album-artwork-colors.json")
+	client := newTestClient(t, enUS, func(*http.Request) *http.Response { return jsonResponse(http.StatusOK, body) })
 
 	album, err := client.Album(context.Background(), "cn", "album-1")
 	if err != nil {
@@ -274,29 +230,26 @@ func TestAlbumDecodesArtworkColors(t *testing.T) {
 }
 
 func TestArtistAlbumsFetchesIncludedAlbumsAndNextPages(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	var include string
+	serve := routes(map[string]string{
+		"/v1/catalog/cn/artists/artist-1":        fixture(t, "catalog/artist-with-albums.json"),
+		"/v1/catalog/cn/artists/artist-1/albums": fixture(t, "catalog/artist-albums-offset-2.json"),
+	})
+	client := newTestClient(t, config.CatalogConfig{Language: "zh-Hans_CN"}, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.RequestURI())
 		if req.URL.Path == "/v1/catalog/cn/artists/artist-1" {
-			if got := req.URL.Query().Get("include"); got != "albums" {
-				t.Fatalf("include query = %q, want albums", got)
-			}
-			body := `{"data":[{"id":"artist-1","type":"artists","attributes":{"name":"Artist","artwork":{"url":"artist-art"}},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"First","artistName":"Artist","artwork":{"url":"first-art"},"releaseDate":"2024-01-01","trackCount":2}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}},{"id":"album-2","type":"albums","attributes":{"name":"Second","artistName":"Artist","artwork":{"url":"second-art"},"releaseDate":"2024-02-01","trackCount":1}}],"next":"/v1/catalog/cn/artists/artist-1/albums?offset=2"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			include = req.URL.Query().Get("include")
 		}
-		if req.URL.Path == "/v1/catalog/cn/artists/artist-1/albums" {
-			body := `{"data":[{"id":"album-2","type":"albums","attributes":{"name":"Second Duplicate","artistName":"Artist"}},{"id":"album-3","type":"albums","attributes":{"name":"Third","artistName":"Artist","artwork":{"url":"third-art"},"releaseDate":"2024-03-01","trackCount":3}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
+		return serve(req)
+	})
 
 	artist, err := client.ArtistAlbums(context.Background(), "cn", "artist-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if include != "albums" {
+		t.Fatalf("include query = %q, want albums", include)
 	}
 	if artist.ID != "artist-1" || artist.Name != "Artist" || artist.ArtworkURL != "artist-art" {
 		t.Fatalf("artist metadata = %+v, want id/name/artwork from artist payload", artist.Artist)
@@ -314,57 +267,17 @@ func TestArtistAlbumsFetchesIncludedAlbumsAndNextPages(t *testing.T) {
 
 func TestSongMapsHasLyrics(t *testing.T) {
 	tests := []struct {
-		name                string
-		hasLyrics           bool
-		hasTimeSyncedLyrics bool
-		want                bool
+		hasLyrics, hasTimeSyncedLyrics, want bool
 	}{
-		{
-			name:                "both true",
-			hasLyrics:           true,
-			hasTimeSyncedLyrics: true,
-			want:                true,
-		},
-		{
-			name:                "only hasLyrics true",
-			hasLyrics:           true,
-			hasTimeSyncedLyrics: false,
-			want:                true,
-		},
-		{
-			name:                "only hasTimeSyncedLyrics true",
-			hasLyrics:           false,
-			hasTimeSyncedLyrics: true,
-			want:                true,
-		},
-		{
-			name:                "both false",
-			hasLyrics:           false,
-			hasTimeSyncedLyrics: false,
-			want:                false,
-		},
+		{true, true, true},
+		{true, false, true},
+		{false, true, true},
+		{false, false, false},
 	}
-
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-			client.webToken.value = "test-token"
-			client.webToken.until = time.Now().Add(time.Hour)
-
-			var body string
-			if tt.hasLyrics && tt.hasTimeSyncedLyrics {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":true,"hasTimeSyncedLyrics":true},"relationships":{}}]}`
-			} else if tt.hasLyrics {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":true,"hasTimeSyncedLyrics":false},"relationships":{}}]}`
-			} else if tt.hasTimeSyncedLyrics {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":false,"hasTimeSyncedLyrics":true},"relationships":{}}]}`
-			} else {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":false,"hasTimeSyncedLyrics":false},"relationships":{}}]}`
-			}
-
-			client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-			})}
+		t.Run(fmt.Sprintf("hasLyrics=%v,hasTimeSyncedLyrics=%v", tt.hasLyrics, tt.hasTimeSyncedLyrics), func(t *testing.T) {
+			body := fmt.Sprintf(`{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":%v,"hasTimeSyncedLyrics":%v},"relationships":{}}]}`, tt.hasLyrics, tt.hasTimeSyncedLyrics)
+			client := newTestClient(t, enUS, func(*http.Request) *http.Response { return jsonResponse(http.StatusOK, body) })
 
 			song, err := client.Song(context.Background(), "cn", "123")
 			if err != nil {
@@ -374,5 +287,83 @@ func TestSongMapsHasLyrics(t *testing.T) {
 				t.Fatalf("HasLyrics = %v, want %v", song.HasLyrics, tt.want)
 			}
 		})
+	}
+}
+
+func TestAlbumMapsContentRatingAndAppleDigitalMaster(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/us/albums/1": fixture(t, "catalog/album-explicit-adm.json"),
+		"/v1/catalog/us/albums/2": fixture(t, "catalog/album-plain.json"),
+	}))
+	rated, err := client.Album(context.Background(), "us", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rated.ContentRating != "explicit" || !rated.AppleDigitalMaster || !reflect.DeepEqual(rated.AudioTraits, []string{"lossy-stereo"}) {
+		t.Fatalf("album 1 rating/ADM/traits = %q/%v/%v, want explicit/true/[lossy-stereo]", rated.ContentRating, rated.AppleDigitalMaster, rated.AudioTraits)
+	}
+	plain, err := client.Album(context.Background(), "us", "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.ContentRating != "" || plain.AppleDigitalMaster {
+		t.Fatalf("album 2 rating/ADM = %q/%v, want empty/false", plain.ContentRating, plain.AppleDigitalMaster)
+	}
+}
+
+func TestSongMetadataMapsAppleDigitalMaster(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/us/songs/7": `{"data":[{"id":"7","type":"songs","attributes":{"name":"Seven","isAppleDigitalMaster":true,"contentRating":"clean"}}]}`,
+	}))
+	song, err := client.SongMetadata(context.Background(), "us", "7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !song.AppleDigitalMaster || song.ContentRating != "clean" {
+		t.Fatalf("song ADM/rating = %v/%q, want true/clean", song.AppleDigitalMaster, song.ContentRating)
+	}
+}
+
+// The trait lists are amp-api's own, as returned for songs 1635388718 and
+// 617154353 in the cn storefront.
+func TestSongMetadataMapsHiResLosslessTrait(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/cn/songs/hires":    `{"data":[{"id":"hires","type":"songs","attributes":{"name":"TV","audioTraits":["atmos","hi-res-lossless","lossless","lossy-stereo","spatial"]}}]}`,
+		"/v1/catalog/cn/songs/lossless": `{"data":[{"id":"lossless","type":"songs","attributes":{"name":"Give Life Back to Music","audioTraits":["lossless","lossy-stereo"]}}]}`,
+		"/v1/catalog/cn/songs/none":     `{"data":[{"id":"none","type":"songs","attributes":{"name":"No traits"}}]}`,
+	}))
+	for id, want := range map[string]bool{"hires": true, "lossless": false, "none": false} {
+		song, err := client.SongMetadata(context.Background(), "cn", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if song.HiResLossless != want {
+			t.Errorf("song %s HiResLossless = %v, want %v", id, song.HiResLossless, want)
+		}
+	}
+}
+
+func TestArtistMapsPageAndGenres(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/us/artists/9": `{"data":[{"id":"9","type":"artists","attributes":{"name":"Nine","url":"https://music.apple.com/us/artist/nine/9","genreNames":["Hip-Hop/Rap"],"artwork":{"url":"artist-art","bgColor":"101010"}}}]}`,
+	}))
+	artist, err := client.Artist(context.Background(), "us", "9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Artist{
+		ID: "9", Name: "Nine", URL: "https://music.apple.com/us/artist/nine/9", GenreNames: []string{"Hip-Hop/Rap"},
+		ArtworkURL: "artist-art", ArtworkColors: ArtworkColors{BgColor: "101010"},
+	}
+	if !reflect.DeepEqual(artist, want) {
+		t.Fatalf("artist = %+v, want %+v", artist, want)
+	}
+}
+
+func TestStationDownloadableOnlyForTrackFormat(t *testing.T) {
+	for format, want := range map[string]bool{"tracks": true, "stream": false, "": false} {
+		if got := (StationInfo{Format: format}).Downloadable(); got != want {
+			t.Errorf("Downloadable(format %q) = %v, want %v", format, got, want)
+		}
 	}
 }

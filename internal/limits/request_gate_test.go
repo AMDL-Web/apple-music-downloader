@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -18,7 +19,10 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestRequestGateHoldsConcurrencyUntilBodyClose(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, testRequestGateHoldsConcurrencyUntilBodyClose)
+}
+
+func testRequestGateHoldsConcurrencyUntilBodyClose(t *testing.T) {
 	gate := NewRequestGate(1, 1000, 1000)
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -52,7 +56,10 @@ func TestRequestGateHoldsConcurrencyUntilBodyClose(t *testing.T) {
 }
 
 func TestRequestGateRateLimitIsContextAware(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, testRequestGateRateLimitIsContextAware)
+}
+
+func testRequestGateRateLimitIsContextAware(t *testing.T) {
 	gate := NewRequestGate(2, 1, 1)
 	release, err := gate.Acquire(context.Background(), true)
 	if err != nil {
@@ -60,12 +67,17 @@ func TestRequestGateRateLimitIsContextAware(t *testing.T) {
 	}
 	release()
 
+	// The next token is a full second away; canceling after 20 ms must end
+	// the wait right then.
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(20*time.Millisecond, cancel)
-	if _, err := gate.Acquire(ctx, true); !errors.Is(err, context.DeadlineExceeded) {
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("rate-limited Acquire error = %v, want context cancellation", err)
-		}
+	started := time.Now()
+	_, err = gate.Acquire(ctx, true)
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("rate-limited Acquire error = %v, want context cancellation", err)
+	}
+	if elapsed := time.Since(started); elapsed > 20*time.Millisecond {
+		t.Fatalf("canceled Acquire returned after %v, want at most 20ms", elapsed)
 	}
 
 	// Requests marked non-rate-limited share concurrency but bypass the token
@@ -78,7 +90,10 @@ func TestRequestGateRateLimitIsContextAware(t *testing.T) {
 }
 
 func TestRequestGateSharedCooldownAndCancellation(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, testRequestGateSharedCooldownAndCancellation)
+}
+
+func testRequestGateSharedCooldownAndCancellation(t *testing.T) {
 	gate := NewRequestGate(2, 1000, 1000)
 	gate.Penalize(50 * time.Millisecond)
 	started := time.Now()
@@ -87,8 +102,8 @@ func TestRequestGateSharedCooldownAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	release()
-	if elapsed := time.Since(started); elapsed < 40*time.Millisecond {
-		t.Fatalf("Acquire waited %v, want shared cooldown", elapsed)
+	if elapsed := time.Since(started); elapsed != 50*time.Millisecond {
+		t.Fatalf("Acquire waited %v, want the 50ms shared cooldown", elapsed)
 	}
 
 	gate.Penalize(time.Second)
@@ -100,7 +115,10 @@ func TestRequestGateSharedCooldownAndCancellation(t *testing.T) {
 }
 
 func TestRequestGateDoesNotPreconsumeRateTokensBehindConcurrency(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, testRequestGateDoesNotPreconsumeRateTokensBehindConcurrency)
+}
+
+func testRequestGateDoesNotPreconsumeRateTokensBehindConcurrency(t *testing.T) {
 	gate := NewRequestGate(1, 10, 1)
 	first, err := gate.Acquire(context.Background(), false)
 	if err != nil {
@@ -124,13 +142,18 @@ func TestRequestGateDoesNotPreconsumeRateTokensBehindConcurrency(t *testing.T) {
 	first()
 	t1 := <-acquired
 	t2 := <-acquired
-	if spacing := t2.Sub(t1); spacing < 70*time.Millisecond {
-		t.Fatalf("queued starts were only %v apart, want token-bucket pacing", spacing)
+	// 10 requests per second with a burst of 1: exactly 100 ms apart. Had the
+	// queued callers taken their tokens while waiting, both would start at once.
+	if spacing := t2.Sub(t1); spacing != 100*time.Millisecond {
+		t.Fatalf("queued starts were %v apart, want 100ms token-bucket pacing", spacing)
 	}
 }
 
 func TestRequestGateDoWith429RetryClosesAndPenalizes(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, testRequestGateDoWith429RetryClosesAndPenalizes)
+}
+
+func testRequestGateDoWith429RetryClosesAndPenalizes(t *testing.T) {
 	gate := NewRequestGate(1, 1000, 1000)
 	var calls int
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -151,8 +174,8 @@ func TestRequestGateDoWith429RetryClosesAndPenalizes(t *testing.T) {
 	if calls != 2 || resp.StatusCode != http.StatusOK {
 		t.Fatalf("calls/status = %d/%d, want 2/200", calls, resp.StatusCode)
 	}
-	if elapsed := time.Since(started); elapsed < 25*time.Millisecond {
-		t.Fatalf("retry ignored shared cooldown: %v", elapsed)
+	if elapsed := time.Since(started); elapsed != 30*time.Millisecond {
+		t.Fatalf("retry waited %v, want the 30ms shared cooldown", elapsed)
 	}
 }
 
@@ -209,6 +232,10 @@ func cooldownRemaining(g *RequestGate) time.Duration {
 // A huge Retry-After must not freeze every Apple request for its full length:
 // the shared cooldown is capped at 60 s and the clamp is logged.
 func TestRequestGatePenalizeCapsCooldownAndLogs(t *testing.T) {
+	synctest.Test(t, testRequestGatePenalizeCapsCooldownAndLogs)
+}
+
+func testRequestGatePenalizeCapsCooldownAndLogs(t *testing.T) {
 	var logs bytes.Buffer
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
@@ -216,8 +243,8 @@ func TestRequestGatePenalizeCapsCooldownAndLogs(t *testing.T) {
 
 	gate := NewRequestGate(1, 1, 1)
 	gate.Penalize(10 * time.Minute)
-	if remaining := cooldownRemaining(gate); remaining > 60*time.Second || remaining < 59*time.Second {
-		t.Fatalf("cooldown after a 10m penalty = %v, want about 60s", remaining)
+	if remaining := cooldownRemaining(gate); remaining != 60*time.Second {
+		t.Fatalf("cooldown after a 10m penalty = %v, want 60s", remaining)
 	}
 	if !strings.Contains(logs.String(), "clamping") || !strings.Contains(logs.String(), "requested=10m0s") {
 		t.Fatalf("clamp not logged with the requested delay: %q", logs.String())
@@ -226,8 +253,8 @@ func TestRequestGatePenalizeCapsCooldownAndLogs(t *testing.T) {
 	logs.Reset()
 	short := NewRequestGate(1, 1, 1)
 	short.Penalize(2 * time.Second)
-	if remaining := cooldownRemaining(short); remaining > 2*time.Second || remaining < time.Second {
-		t.Fatalf("cooldown after a 2s penalty = %v, want about 2s", remaining)
+	if remaining := cooldownRemaining(short); remaining != 2*time.Second {
+		t.Fatalf("cooldown after a 2s penalty = %v, want 2s", remaining)
 	}
 	if logs.Len() != 0 {
 		t.Fatalf("an in-range penalty must not log: %q", logs.String())

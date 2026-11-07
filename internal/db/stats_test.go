@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,11 +11,7 @@ import (
 )
 
 func TestStats(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	ctx := context.Background()
 	at := func(s string) time.Time {
 		v, err := time.Parse(time.RFC3339, s)
@@ -109,11 +104,7 @@ func TestStats(t *testing.T) {
 }
 
 func TestStatsEmptyStore(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("UTC+9", 9*3600))
 	got, err := store.Stats(context.Background(), now, 3)
 	if err != nil {
@@ -134,11 +125,7 @@ func TestStatsEmptyStore(t *testing.T) {
 }
 
 func TestStatsWindowQueriesUseTypeCreatedIndex(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
+	store := openStore(t)
 	for name, q := range map[string]struct {
 		sql  string
 		args []any

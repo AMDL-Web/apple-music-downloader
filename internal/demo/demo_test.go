@@ -10,6 +10,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/client"
@@ -91,6 +92,10 @@ func TestTheQueueStartsWithEveryKindOfJob(t *testing.T) {
 }
 
 func TestTheFeedCarriesProgressAndTheJobItsTracks(t *testing.T) {
+	synctest.Test(t, testTheFeedCarriesProgressAndTheJobItsTracks)
+}
+
+func testTheFeedCarriesProgressAndTheJobItsTracks(t *testing.T) {
 	b, c, clk := newDemo(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -104,9 +109,8 @@ func TestTheFeedCarriesProgressAndTheJobItsTracks(t *testing.T) {
 			}
 		},
 	})
-	select {
-	case <-live:
-	case <-time.After(5 * time.Second):
+	synctest.Wait()
+	if !received(live) {
 		t.Fatal("the feed never went live")
 	}
 	l, err := c.Downloads(ctx, client.ListQuery{})
@@ -126,14 +130,15 @@ func TestTheFeedCarriesProgressAndTheJobItsTracks(t *testing.T) {
 		followed <- c.FollowJob(ctx, running.ID, client.JobHandlers{Event: func(e domain.Event) { events <- e }})
 	}()
 	// The job stream subscribes once it has read the job.
-	time.Sleep(100 * time.Millisecond)
+	synctest.Wait()
 	run(b, clk, 3*time.Minute)
+	synctest.Wait()
 	select {
 	case err := <-followed:
 		if err != nil {
 			t.Fatalf("follow ended with %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	default:
 		t.Fatal("the job's follow did not end once it finished")
 	}
 	var progress, completed, finished int
@@ -150,20 +155,13 @@ func TestTheFeedCarriesProgressAndTheJobItsTracks(t *testing.T) {
 	if progress == 0 || completed == 0 || finished != 1 {
 		t.Errorf("job events: %d progress, %d completed, %d finished", progress, completed, finished)
 	}
-	// The feed is a stream of its own: its last messages may still be on
-	// their way when the job's follow ends.
+	// The feed is a stream of its own; synctest.Wait above let it deliver
+	// every message.
 	var moved, done bool
-	wait := time.After(5 * time.Second)
-read:
-	for !moved || !done {
-		select {
-		case m := <-msgs:
-			if m.Job != nil && m.Job.ID == running.ID {
-				moved = moved || (m.Job.Progress != nil && *m.Job.Progress > *running.Progress)
-				done = done || m.Job.Status == domain.JobCompleted
-			}
-		case <-wait:
-			break read
+	for len(msgs) > 0 {
+		if m := <-msgs; m.Job != nil && m.Job.ID == running.ID {
+			moved = moved || (m.Job.Progress != nil && *m.Job.Progress > *running.Progress)
+			done = done || m.Job.Status == domain.JobCompleted
 		}
 	}
 	if !moved || !done {
@@ -415,6 +413,10 @@ func mustStarted(t *testing.T, c *client.Client, id string) *time.Time {
 // paused record waits for its resume unless it resets everything, and a
 // removal tells the feed.
 func TestRecordActionsMatchTheBackend(t *testing.T) {
+	synctest.Test(t, testRecordActionsMatchTheBackend)
+}
+
+func testRecordActionsMatchTheBackend(t *testing.T) {
 	b, c, clk := newDemo(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -459,23 +461,28 @@ func TestRecordActionsMatchTheBackend(t *testing.T) {
 			}
 		},
 	})
-	select {
-	case <-live:
-	case <-time.After(5 * time.Second):
+	synctest.Wait()
+	if !received(live) {
 		t.Fatal("the feed never went live")
 	}
 	if err := c.DeleteRecord(ctx, domain.ResourceAlbum, album); err != nil {
 		t.Fatal(err)
 	}
-	wait := time.After(5 * time.Second)
-	for {
-		select {
-		case m := <-msgs:
-			if m.Type == "resource_deleted" && m.ResourceKind == domain.ResourceAlbum && m.ResourceID == album {
-				return
-			}
-		case <-wait:
-			t.Fatal("the feed did not say the record was removed")
+	synctest.Wait()
+	for len(msgs) > 0 {
+		if m := <-msgs; m.Type == "resource_deleted" && m.ResourceKind == domain.ResourceAlbum && m.ResourceID == album {
+			return
 		}
+	}
+	t.Fatal("the feed did not say the record was removed")
+}
+
+// received reports whether c has a value ready, without waiting.
+func received[T any](c <-chan T) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
 	}
 }

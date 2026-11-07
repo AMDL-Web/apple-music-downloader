@@ -97,6 +97,9 @@ type Supervisor struct {
 	fetching context.CancelFunc
 	// stateWritten spaces the state.json writes of download progress.
 	stateWritten time.Time
+	// stateChanged, when set (by tests only), is called under mu after each
+	// state update. It is nil in production.
+	stateChanged func()
 }
 
 // readyTimeout bounds a boot, from QEMU's start to the manager's answer. The
@@ -110,6 +113,9 @@ type Supervisor struct {
 var (
 	readyTimeout = 3 * time.Minute
 	pollEvery    = 2 * time.Second
+	// bootBackoff is the wait after the first failed boot; it doubles with
+	// each failure in a row, up to a minute.
+	bootBackoff = time.Second
 )
 
 // LoginLimit bounds one manager login or two-step verification request. The
@@ -167,6 +173,9 @@ func (s *Supervisor) setState(f func(*State)) {
 		s.st.PID = 0
 	}
 	_ = writeJSON(s.home.path("state.json"), s.st) // readers fall back to "unknown"
+	if s.stateChanged != nil {
+		s.stateChanged()
+	}
 }
 
 // Managed is the state for GET /wrapper/status.
@@ -275,6 +284,8 @@ func (s *Supervisor) fetchPayloadLocked(ctx context.Context) {
 		if time.Since(s.stateWritten) >= time.Second || p.Done == p.Total {
 			s.stateWritten = time.Now()
 			s.setState(func(*State) {})
+		} else if s.stateChanged != nil {
+			s.stateChanged() // the progress changed, unwritten
 		}
 	}
 	go func() {
@@ -306,7 +317,7 @@ func (s *Supervisor) startServingLocked() {
 	if ctx.Err() != nil {
 		return // Run has returned or is about to; nothing would stop this guest
 	}
-	if s.fails > 0 && time.Since(s.failedAt) < min(time.Duration(1<<min(s.fails-1, 6))*time.Second, time.Minute) {
+	if s.fails > 0 && time.Since(s.failedAt) < min(time.Duration(1<<min(s.fails-1, 6))*bootBackoff, time.Minute) {
 		return
 	}
 	s.refreshLocked()

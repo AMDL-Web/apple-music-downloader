@@ -2,34 +2,25 @@ package applemusic
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
 	"reflect"
-	"strings"
 	"testing"
-	"time"
 
 	"amdl/internal/config"
 )
 
+var zhCN = config.CatalogConfig{Language: "zh-Hans_CN"}
+
 func TestPlaylistFetchesAllTrackPages(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	serve := routes(map[string]string{
+		"/v1/catalog/cn/playlists/pl.1":        fixture(t, "catalog/playlist-paged.json"),
+		"/v1/catalog/cn/playlists/pl.1/tracks": fixture(t, "catalog/playlist-paged-tracks-offset-1.json"),
+	})
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.RequestURI())
-		if req.URL.Path == "/v1/catalog/cn/playlists/pl.1" {
-			body := `{"data":[{"id":"pl.1","type":"playlists","attributes":{"name":"Playlist","curatorName":"Curator","artwork":{"url":"playlist-art"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}],"next":"/v1/catalog/cn/playlists/pl.1/tracks?offset=1"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		if req.URL.Path == "/v1/catalog/cn/playlists/pl.1/tracks" {
-			body := `{"data":[{"id":"song-2","type":"songs","attributes":{"name":"Two","artistName":"Artist"}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}},{"id":"song-3","type":"songs","attributes":{"name":"Three","artistName":"Artist"}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
+		return serve(req)
+	})
 
 	playlist, err := client.Playlist(context.Background(), "cn", "pl.1", "")
 	if err != nil {
@@ -44,16 +35,13 @@ func TestPlaylistFetchesAllTrackPages(t *testing.T) {
 }
 
 func TestPlaylistPrivateCoverFallsBackToLibraryArtwork(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	type seen struct{ mediaToken, include string }
 	var requests []seen
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	body := fixture(t, "catalog/playlist-private-with-library.json")
+	client := newTestClient(t, zhCN, func(req *http.Request) *http.Response {
 		requests = append(requests, seen{req.Header.Get("Media-User-Token"), req.URL.Query().Get("include")})
-		body := `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Private","artwork":{"url":""}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]},"library":{"data":[{"id":"p.lib1","type":"library-playlists","attributes":{"name":"Private","artwork":{"url":"https://blob.example/image?sig=abc"}}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, body)
+	})
 
 	playlist, err := client.Playlist(context.Background(), "cn", "pl.u-1", "media-token-xyz")
 	if err != nil {
@@ -74,18 +62,14 @@ func TestPlaylistPrivateCoverFallsBackToLibraryArtwork(t *testing.T) {
 }
 
 func TestPlaylistLibraryArtworkOverridesCatalogMosaic(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var calls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, zhCN, func(req *http.Request) *http.Response {
 		calls++
-		body := `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Shared","artwork":{"url":"catalog-mosaic"}},"relationships":{"tracks":{"data":[]}}}]}`
 		if req.URL.Query().Get("include") == "library" {
-			body = `{"data":[{"id":"pl.u-1","type":"playlists","relationships":{"library":{"data":[{"id":"p.lib1","type":"library-playlists","attributes":{"artwork":{"url":"https://blob.example/correct-cover?X-Amz-Date=20260722T000000Z&X-Amz-Expires=3600"}}}]}}}]}`
+			return jsonResponse(http.StatusOK, `{"data":[{"id":"pl.u-1","type":"playlists","relationships":{"library":{"data":[{"id":"p.lib1","type":"library-playlists","attributes":{"artwork":{"url":"https://blob.example/correct-cover?X-Amz-Date=20260722T000000Z&X-Amz-Expires=3600"}}}]}}}]}`)
 		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Shared","artwork":{"url":"catalog-mosaic"}},"relationships":{"tracks":{"data":[]}}}]}`)
+	})
 
 	playlist, err := client.Playlist(context.Background(), "cn", "pl.u-1", "media-token-xyz")
 	if err != nil {
@@ -100,15 +84,11 @@ func TestPlaylistLibraryArtworkOverridesCatalogMosaic(t *testing.T) {
 }
 
 func TestPlaylistPublicIDWithTokenSkipsEnrichment(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var calls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, zhCN, func(*http.Request) *http.Response {
 		calls++
-		body := `{"data":[{"id":"pl.123","type":"playlists","attributes":{"name":"Editorial","artwork":{"url":""}},"relationships":{"tracks":{"data":[]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"pl.123","type":"playlists","attributes":{"name":"Editorial","artwork":{"url":""}},"relationships":{"tracks":{"data":[]}}}]}`)
+	})
 
 	playlist, err := client.Playlist(context.Background(), "cn", "pl.123", "media-token-xyz")
 	if err != nil {
@@ -123,19 +103,15 @@ func TestPlaylistPublicIDWithTokenSkipsEnrichment(t *testing.T) {
 }
 
 func TestPlaylistLibraryLookupFailureIsNonFatal(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var calls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, zhCN, func(*http.Request) *http.Response {
 		calls++
 		if calls == 2 {
 			// Enrichment request rejected, e.g. an expired media-user-token.
-			return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"403"}]}`)), Header: make(http.Header)}, nil
+			return jsonResponse(http.StatusForbidden, `{"errors":[{"status":"403"}]}`)
 		}
-		body := `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Private","artwork":{"url":"catalog-mosaic"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Private","artwork":{"url":"catalog-mosaic"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]}}}]}`)
+	})
 
 	playlist, err := client.Playlist(context.Background(), "cn", "pl.u-1", "expired-token")
 	if err != nil {
@@ -153,17 +129,13 @@ func TestPlaylistLibraryLookupFailureIsNonFatal(t *testing.T) {
 }
 
 func TestPlaylistWithoutTokenSkipsLibraryInclude(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.webToken.value = "test-token"
-	client.webToken.until = time.Now().Add(time.Hour)
 	var sawMediaToken bool
 	var gotInclude string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, zhCN, func(req *http.Request) *http.Response {
 		sawMediaToken = req.Header.Get("Media-User-Token") != ""
 		gotInclude = req.URL.Query().Get("include")
-		body := `{"data":[{"id":"pl.1","type":"playlists","attributes":{"name":"Editorial","artwork":{"url":"catalog-art"}},"relationships":{"tracks":{"data":[]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"pl.1","type":"playlists","attributes":{"name":"Editorial","artwork":{"url":"catalog-art"}},"relationships":{"tracks":{"data":[]}}}]}`)
+	})
 
 	if _, err := client.Playlist(context.Background(), "cn", "pl.1", ""); err != nil {
 		t.Fatal(err)
