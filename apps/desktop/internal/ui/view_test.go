@@ -25,6 +25,8 @@ type fakeActions struct {
 	wrapperDone func([]mode.Check)
 	// copied is the last text put on the clipboard.
 	copied string
+	// starting is Starting's answer: the app's own backend starts.
+	starting bool
 }
 
 func (f *fakeActions) ApplySettings(s mode.Settings)         { f.applied = &s }
@@ -37,7 +39,7 @@ func (f *fakeActions) CopyText(s string)                 { f.copied = s }
 func (f *fakeActions) ChooseFolder(string, func(string)) {}
 func (f *fakeActions) ShowWindow()                       {}
 func (f *fakeActions) FitPanel(float32)                  {}
-func (f *fakeActions) Starting() bool                    { return false }
+func (f *fakeActions) Starting() bool                    { return f.starting }
 func (f *fakeActions) StartErr() string                  { return f.startErr }
 func (f *fakeActions) Shared() string                    { return "" }
 func (f *fakeActions) Reconnect()                        { f.reconnects++ }

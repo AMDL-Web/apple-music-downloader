@@ -106,6 +106,15 @@ func (a *App) localApplied() bool {
 // an update.
 const guestUpdateReason = "the guest needs an update; its account disk is kept, sign in again after"
 
+// restartsForReplacedGuest tells whether the backend is to start again
+// for a guest that replaced one it could not run: once the settings are
+// applied, while it does not start already, and while it runs no wrapper
+// or one it does not manage. The page keeps its place meanwhile.
+func (a *App) restartsForReplacedGuest(applied bool) bool {
+	w := a.Store.Server.Wrapper
+	return a.Setup.Guest.Replaced && applied && !a.Act.Starting() && (w == nil && a.Store.Server.WrapperErr != "" || w != nil && w.Managed == nil)
+}
+
 // wrapperRow is the guest running under this computer's backend.
 func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 	f := &a.su
@@ -117,9 +126,7 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 	}
 	w := a.Store.Server.Wrapper
 	g := a.Setup.Guest
-	// A guest that replaced one this backend could not run needs the
-	// backend to start again, once; the page keeps its place meanwhile.
-	if g.Replaced && applied && !a.Act.Starting() && (w == nil && a.Store.Server.WrapperErr != "" || w != nil && w.Managed == nil) {
+	if a.restartsForReplacedGuest(applied) {
 		a.Setup.Guest.Replaced = false
 		a.Act.Reconnect()
 	}
