@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"amdl/internal/db"
 	"amdl/internal/domain"
@@ -57,10 +58,57 @@ func newTestManager(t *testing.T) *Manager {
 	return NewManager(store, events.NewHub(), keyedProcessor{}, 1, slog.Default())
 }
 
-// isWaiting reports whether jobID is on m's wait list.
-func isWaiting(m *Manager, jobID string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	_, ok := m.waiting.ids[jobID]
-	return ok
+// waitJob blocks until cond holds. It checks cond again each time the hub
+// wakes jobID's subscribers, which every event of the job, the end of its
+// worker or finalize sequence and the end of its last hook do, so it never
+// polls. The guard only turns a hang into a failure.
+func waitJob(t *testing.T, m *Manager, jobID, what string, cond func() bool) {
+	t.Helper()
+	wake, cancel := m.hub.Subscribe(jobID)
+	defer cancel()
+	guard := time.NewTimer(10 * time.Second)
+	defer guard.Stop()
+	for !cond() {
+		select {
+		case <-wake:
+		case <-guard.C:
+			t.Fatalf("job %s did not %s", jobID, what)
+		}
+	}
+}
+
+// waitQueueDrained waits until the store holds no queued or running job.
+// feed is a SubscribeAll of the manager's hub, which every terminal event
+// wakes.
+func waitQueueDrained(t *testing.T, store *db.Store, feed <-chan struct{}) {
+	t.Helper()
+	guard := time.NewTimer(time.Minute)
+	defer guard.Stop()
+	for {
+		left, err := store.ListRecoverableJobs(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(left) == 0 {
+			return
+		}
+		select {
+		case <-feed:
+		case <-guard.C:
+			t.Fatalf("%d jobs never finished", len(left))
+		}
+	}
+}
+
+// waitTerminal waits until jobID is terminal and its finalize sequence
+// (terminal event, hook dispatch) has ended, and returns the job as stored.
+func waitTerminal(t *testing.T, m *Manager, jobID string) domain.Job {
+	t.Helper()
+	var job domain.Job
+	waitJob(t, m, jobID, "reach a terminal status", func() bool {
+		var err error
+		job, err = m.store.GetJob(context.Background(), jobID)
+		return err == nil && job.Status.IsTerminal() && !m.FinalizeInFlight(jobID)
+	})
+	return job
 }

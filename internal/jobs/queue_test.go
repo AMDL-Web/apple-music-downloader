@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -120,9 +121,10 @@ func TestWorkerFollowsRunOrderAfterMove(t *testing.T) {
 	if _, err := m.Move(ctx, ids["c"], db.Placement{After: ids["d"]}); err != nil {
 		t.Fatal(err)
 	}
+	// Move publishes before it returns, so the wake is already pending.
 	select {
 	case <-feed:
-	case <-time.After(time.Second):
+	default:
 		t.Fatal("a move did not wake overview subscribers")
 	}
 
@@ -249,10 +251,8 @@ func TestBatchSubmitStartsEveryIdleWorker(t *testing.T) {
 	for range 3 {
 		waitEntered(t, p)
 	}
-	select {
-	case input := <-p.entered:
-		t.Fatalf("%s started while three workers were busy", input)
-	case <-time.After(100 * time.Millisecond):
+	if stats := m.QueueStats(); stats.Active != 3 || stats.QueueDepth != 2 {
+		t.Fatalf("QueueStats = %+v, want three jobs running and two waiting", stats)
 	}
 	// The claims run in order under m.mu, but three goroutines then race to
 	// ProcessJob, so only the set is fixed.
@@ -273,7 +273,10 @@ func TestQueueOperationsRace(t *testing.T) {
 	}
 	defer store.Close()
 	p := &queueRaceProcessor{}
-	m := NewManager(store, events.NewHub(), p, 2, slog.Default())
+	hub := events.NewHub()
+	feed, unsubscribe := hub.SubscribeAll()
+	defer unsubscribe()
+	m := NewManager(store, hub, p, 2, slog.Default())
 	m.Start(context.Background())
 	ctx := context.Background()
 
@@ -302,12 +305,13 @@ func TestQueueOperationsRace(t *testing.T) {
 		go func(seed int64) {
 			defer wg.Done()
 			r := rand.New(rand.NewSource(seed))
-			for range 150 {
+			for done := 0; done < 150; {
 				id, ok := pick(r)
 				if !ok {
-					time.Sleep(time.Millisecond)
+					runtime.Gosched()
 					continue
 				}
+				done++
 				switch r.Intn(5) {
 				case 0, 1:
 					anchor, _ := pick(r)
@@ -327,20 +331,7 @@ func TestQueueOperationsRace(t *testing.T) {
 	}
 	wg.Wait()
 
-	deadline := time.Now().Add(20 * time.Second)
-	for {
-		left, err := store.ListRecoverableJobs(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(left) == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d jobs never finished: %+v", len(left), m.QueueStats())
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitQueueDrained(t, store, feed)
 	shutdown(t, m)
 	if p.twice.Load() {
 		t.Fatal("a job ran on two workers at once")

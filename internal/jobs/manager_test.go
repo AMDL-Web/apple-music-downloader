@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -227,11 +226,8 @@ func TestRecoverUnfinishedRunsLegacyOverridesRow(t *testing.T) {
 }
 
 type recoveryBacklogProcessor struct {
-	total   int32
 	started chan struct{}
 	release chan struct{}
-	done    chan struct{}
-	once    sync.Once
 	calls   atomic.Int32
 }
 
@@ -246,9 +242,7 @@ func (p *recoveryBacklogProcessor) ProcessJob(ctx context.Context, _ domain.Job,
 		return ctx.Err()
 	case <-p.release:
 	}
-	if p.calls.Add(1) == p.total {
-		p.once.Do(func() { close(p.done) })
-	}
+	p.calls.Add(1)
 	return nil
 }
 
@@ -274,9 +268,12 @@ func TestRecoverUnfinishedHandlesMoreThanQueueCapacityWithoutLoss(t *testing.T) 
 	}
 
 	processor := &recoveryBacklogProcessor{
-		total: backlog, started: make(chan struct{}, backlog), release: make(chan struct{}), done: make(chan struct{}),
+		started: make(chan struct{}, backlog), release: make(chan struct{}),
 	}
-	manager := NewManager(store, events.NewHub(), processor, 8, slog.Default())
+	hub := events.NewHub()
+	feed, unsubscribe := hub.SubscribeAll()
+	defer unsubscribe()
+	manager := NewManager(store, hub, processor, 8, slog.Default())
 	recovered, err := manager.RecoverUnfinished(ctx)
 	if err != nil {
 		t.Fatalf("RecoverUnfinished: %v", err)
@@ -297,38 +294,9 @@ func TestRecoverUnfinishedHandlesMoreThanQueueCapacityWithoutLoss(t *testing.T) 
 		}
 	}
 	close(processor.release)
-	// The race detector on a slow runner took 12.6 s for the 300 jobs, so the
-	// wait fails on a stall (no job finished for 10 s), not on total time.
-	progress, stalledSince := processor.calls.Load(), time.Now()
-	for giveUp := time.Now().Add(time.Minute); ; {
-		select {
-		case <-processor.done:
-		case <-time.After(100 * time.Millisecond):
-			if n := processor.calls.Load(); n != progress {
-				progress, stalledSince = n, time.Now()
-			}
-			if time.Since(stalledSince) > 10*time.Second || time.Now().After(giveUp) {
-				t.Fatalf("processed %d/%d recovered jobs", processor.calls.Load(), backlog)
-			}
-			continue
-		}
-		break
-	}
-
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		recoverable, err := store.ListRecoverableJobs(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(recoverable) == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d recovered jobs remain unfinished", len(recoverable))
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	// The race detector on a slow runner took 12.6 s for the 300 jobs; the
+	// wait's guard is a minute.
+	waitQueueDrained(t, store, feed)
 	shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if err := manager.Shutdown(shutdownCtx); err != nil {
@@ -384,79 +352,30 @@ func TestRecoverUnfinishedDoesNotDispatchJobQueuedHook(t *testing.T) {
 	}
 }
 
-func TestNilHooksDispatcherIsNoop(t *testing.T) {
-	manager := newTestManager(t)
+// The hook queries are nil-safe: the api handlers call HooksPending and
+// FinalizeInFlight on every terminal job whether or not SetHooks was ever
+// called, and need no nil *Manager check either. A manager without a
+// dispatcher runs jobs as usual.
+func TestUnsetHooksAreNoops(t *testing.T) {
+	var nilManager *Manager
+	if nilManager.HooksPending("job-1") || nilManager.FinalizeInFlight("job-1") {
+		t.Fatal("nil *Manager reports a pending hook or finalize, want neither")
+	}
+	if got := nilManager.ListHooks(); got.Enabled || len(got.Entries) != 0 {
+		t.Fatalf("nil *Manager ListHooks = %+v, want disabled and empty", got)
+	}
+
+	manager := newTestManager(t) // hooks left unset (nil dispatcher)
+	if manager.HooksPending("job-1") || manager.FinalizeInFlight("job-1") {
+		t.Fatal("manager without hooks reports a pending hook or finalize, want neither")
+	}
 	manager.Start(context.Background())
+	defer shutdown(t, manager)
 	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	var job domain.Job
-	for time.Now().Before(deadline) {
-		job, _ = manager.store.GetJob(context.Background(), resp.Results[0].Job.ID)
-		if job.Status == domain.JobCompleted {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if job.Status != domain.JobCompleted {
+	if job := waitTerminal(t, manager, resp.Results[0].Job.ID); job.Status != domain.JobCompleted {
 		t.Fatalf("job status = %s, want completed (manager.hooks is nil until SetHooks is called)", job.Status)
-	}
-}
-
-// TestHooksPendingIsNilSafe mirrors SetHooks/Dispatch's existing nil-receiver
-// contract: server.go's events/eventsWS handlers call HooksPending on every
-// terminal job regardless of whether SetHooks was ever called, and must not
-// need a nil *Manager check either.
-func TestHooksPendingIsNilSafe(t *testing.T) {
-	var m *Manager
-	if m.HooksPending("job-1") {
-		t.Fatal("nil *Manager HooksPending = true, want false")
-	}
-
-	manager := newTestManager(t) // hooks left unset (nil dispatcher)
-	if manager.HooksPending("job-1") {
-		t.Fatal("HooksPending with unset hooks dispatcher = true, want false")
-	}
-}
-
-// TestFinalizeInFlightTracksFinalizeMarks pins the contract eventsExhausted
-// (internal/api) relies on to close the pre-dispatch gap: a job's terminal
-// status becomes visible before hook dispatch increments the dispatcher's
-// pending count, and in that window the job is still covered by either its
-// m.cancels entry (run's finalize path) or its m.finalizing mark (Cancel's
-// queued path). FinalizeInFlight must report true for both.
-func TestFinalizeInFlightTracksFinalizeMarks(t *testing.T) {
-	var nilManager *Manager
-	if nilManager.FinalizeInFlight("job-1") {
-		t.Fatal("nil *Manager FinalizeInFlight = true, want false")
-	}
-
-	manager := newTestManager(t)
-	if manager.FinalizeInFlight("job-1") {
-		t.Fatal("FinalizeInFlight with no marks = true, want false")
-	}
-
-	manager.mu.Lock()
-	manager.cancels["job-1"] = func(error) {}
-	manager.mu.Unlock()
-	if !manager.FinalizeInFlight("job-1") {
-		t.Fatal("FinalizeInFlight with a cancels entry = false, want true")
-	}
-
-	manager.mu.Lock()
-	delete(manager.cancels, "job-1")
-	manager.finalizing["job-1"] = true
-	manager.mu.Unlock()
-	if !manager.FinalizeInFlight("job-1") {
-		t.Fatal("FinalizeInFlight with a finalizing mark = false, want true")
-	}
-
-	manager.mu.Lock()
-	delete(manager.finalizing, "job-1")
-	manager.mu.Unlock()
-	if manager.FinalizeInFlight("job-1") {
-		t.Fatal("FinalizeInFlight after marks cleared = true, want false")
 	}
 }

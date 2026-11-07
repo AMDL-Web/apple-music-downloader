@@ -159,19 +159,9 @@ func TestCancelledJobPreservesProcessorUpdatedTotalItems(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var got domain.Job
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		got, err = store.GetJob(ctx, job.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Status == domain.JobCancelled && got.Error == "cancelled" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if got.Status != domain.JobCancelled {
-		t.Fatalf("status = %s, want %s", got.Status, domain.JobCancelled)
+	got := waitTerminal(t, manager, job.ID)
+	if got.Status != domain.JobCancelled || got.Error != "cancelled" {
+		t.Fatalf("status = %s (%q), want %s", got.Status, got.Error, domain.JobCancelled)
 	}
 	if got.TotalItems != 2 {
 		t.Fatalf("total_items = %d, want 2", got.TotalItems)
@@ -195,19 +185,7 @@ func TestTerminalJobKeepsOverrides(t *testing.T) {
 	}
 	waitOverrides := func(t *testing.T, m *Manager, jobID string) {
 		t.Helper()
-		var job domain.Job
-		deadline := time.Now().Add(2 * time.Second)
-		for {
-			var err error
-			job, err = m.store.GetJob(context.Background(), jobID)
-			if err == nil && job.Status.IsTerminal() && !m.FinalizeInFlight(jobID) {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("job %s never finalized", jobID)
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+		job := waitTerminal(t, m, jobID)
 		if job.Overrides == nil || job.Overrides.CodecAlternative == nil || !*job.Overrides.CodecAlternative {
 			t.Fatalf("overrides after %s = %+v, want codec_alternative kept", job.Status, job.Overrides)
 		}
@@ -286,12 +264,9 @@ func TestJobCompletionDispatchesHook(t *testing.T) {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && atomic.LoadInt32(&calls) == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
-	// Drain the dispatcher before asserting so the hook goroutine has fully
-	// recorded its result and doesn't outlive the test.
+	waitTerminal(t, manager, resp.Results[0].Job.ID)
+	// The finalize sequence has dispatched the hook; draining the dispatcher
+	// waits for the call.
 	dispatcher.Shutdown(context.Background())
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Fatalf("webhook calls = %d, want 1 after job completion", got)
@@ -324,8 +299,7 @@ func TestCancelQueuedJobDispatchesCancelledHookAndNeverRuns(t *testing.T) {
 	hooksCfg := hooks.Config{Enabled: true, Entries: []hooks.Entry{
 		{Name: "on-cancel", Type: "webhook", Events: []string{"job_cancelled"}, URL: server.URL},
 	}}
-	// A processor that fails the test if ProcessJob is ever invoked: a
-	// cancelled-while-queued job must never actually run.
+	// A processor that fails the test if the cancelled job ever runs.
 	processor := &neverRunProcessor{t: t}
 	manager := NewManager(store, events.NewHub(), processor, 1, slog.Default())
 	dispatcher := hooks.NewDispatcher(hooksCfg, manager.Event, slog.Default())
@@ -339,9 +313,13 @@ func TestCancelQueuedJobDispatchesCancelledHookAndNeverRuns(t *testing.T) {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
 	jobID := resp.Results[0].Job.ID
+	processor.forbid = jobID
 
 	if err := manager.Cancel(ctx, jobID); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
+	}
+	if depth := manager.QueueStats().QueueDepth; depth != 0 {
+		t.Fatalf("queue depth after the cancel = %d, want the job off the wait list", depth)
 	}
 
 	got, err := store.GetJob(ctx, jobID)
@@ -352,10 +330,8 @@ func TestCancelQueuedJobDispatchesCancelledHookAndNeverRuns(t *testing.T) {
 		t.Fatalf("status = %s, want cancelled", got.Status)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && atomic.LoadInt32(&calls) == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
+	// Cancel dispatched the hook before it returned; draining the dispatcher
+	// waits for the call.
 	dispatcher.Shutdown(context.Background())
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Fatalf("webhook calls = %d, want exactly 1 for the queued-cancel path", got)
@@ -366,14 +342,16 @@ func TestCancelQueuedJobDispatchesCancelledHookAndNeverRuns(t *testing.T) {
 		t.Fatalf("event = %q, want job_cancelled", lastEvent)
 	}
 
-	// A worker that looks for work afterwards must not resurrect the job into
-	// JobRunning or invoke the processor.
-	if claim, ok, err := manager.claimNext(ctx); err != nil || ok {
-		t.Fatalf("claimNext after the cancel = (%+v, %v, %v), want nothing to claim", claim.job, ok, err)
+	// Workers started afterwards must not resurrect the job into JobRunning
+	// or invoke the processor for it. They take jobs in queue order, so once
+	// a job submitted after it has run, the cancelled one was passed over.
+	manager.Start(ctx)
+	defer shutdown(t, manager)
+	next := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
+	if next.Accepted != 1 {
+		t.Fatalf("submit after the cancel = %+v, want 1 accepted", next)
 	}
-	if isWaiting(manager, jobID) {
-		t.Fatal("the cancelled job is still on the wait list")
-	}
+	waitTerminal(t, manager, next.Results[0].Job.ID)
 	got, err = store.GetJob(ctx, jobID)
 	if err != nil {
 		t.Fatal(err)
@@ -404,6 +382,9 @@ func TestDeleteRefusesActiveAndFinalizingJobs(t *testing.T) {
 	<-processor.started
 
 	// Running: the job sits in m.cancels until finalize completes.
+	if !manager.FinalizeInFlight(jobID) {
+		t.Fatal("FinalizeInFlight(running) = false, want true")
+	}
 	if err := manager.Delete(ctx, jobID); !errors.Is(err, db.ErrJobNotTerminal) {
 		t.Fatalf("Delete(running) error = %v, want ErrJobNotTerminal", err)
 	}
@@ -420,21 +401,11 @@ func TestDeleteRefusesActiveAndFinalizingJobs(t *testing.T) {
 	if err := manager.Cancel(ctx, jobID); err != nil {
 		t.Fatalf("Cancel() error = %v", err)
 	}
-	// Delete keeps refusing until run()'s finalize fully completes and clears
-	// the m.cancels entry, then succeeds exactly on the row it guarded.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		err := manager.Delete(ctx, jobID)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, db.ErrJobNotTerminal) {
-			t.Fatalf("Delete() error = %v", err)
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("Delete() still refused 2s after Cancel")
-		}
-		time.Sleep(10 * time.Millisecond)
+	// Once run()'s finalize fully completes and clears the m.cancels entry,
+	// Delete succeeds exactly on the row it guarded.
+	waitTerminal(t, manager, jobID)
+	if err := manager.Delete(ctx, jobID); err != nil {
+		t.Fatalf("Delete() after the finalize = %v", err)
 	}
 	if _, err := store.GetJob(ctx, jobID); err == nil {
 		t.Fatal("job row still exists after successful Delete")
@@ -517,39 +488,34 @@ func TestCancelRunningJobDispatchesCancelledHookExactlyOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	var got domain.Job
-	for time.Now().Before(deadline) {
-		got, err = store.GetJob(ctx, jobID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Status == domain.JobCancelled {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	got := waitTerminal(t, manager, jobID)
 	if got.Status != domain.JobCancelled {
 		t.Fatalf("status = %s, want cancelled", got.Status)
 	}
 
-	// Give any (incorrect) duplicate dispatch a chance to land before asserting.
-	time.Sleep(200 * time.Millisecond)
+	// The finalize sequence has ended and Cancel has returned, so every
+	// dispatch (a duplicate included) has happened; draining the dispatcher
+	// waits for the calls.
 	dispatcher.Shutdown(context.Background())
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Fatalf("webhook calls = %d, want exactly 1 (no duplicate dispatch between Cancel and run)", got)
 	}
 }
 
-// neverRunProcessor fails the test if ProcessJob is ever called.
-type neverRunProcessor struct{ t *testing.T }
+// neverRunProcessor fails the test if ProcessJob is called for job forbid.
+type neverRunProcessor struct {
+	t      *testing.T
+	forbid string
+}
 
 func (p *neverRunProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
 	return ValidationResult{Type: "station", Storefront: "us", ID: "1"}, nil
 }
 
-func (p *neverRunProcessor) ProcessJob(context.Context, domain.Job, Reporter) error {
-	p.t.Fatal("ProcessJob must not run for a job cancelled while queued")
+func (p *neverRunProcessor) ProcessJob(_ context.Context, job domain.Job, _ Reporter) error {
+	if job.ID == p.forbid {
+		p.t.Error("ProcessJob must not run for a job cancelled while queued")
+	}
 	return nil
 }
 
@@ -619,25 +585,13 @@ func TestCancelRunningJobWinsOverNilProcessorReturn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	var got domain.Job
-	for time.Now().Before(deadline) {
-		got, err = store.GetJob(ctx, jobID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Status == domain.JobCancelled {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	got := waitTerminal(t, manager, jobID)
 	// Even though ProcessJob returned nil, cancellation must win: the job is
 	// cancelled and the hook is job_cancelled, never job_finished.
 	if got.Status != domain.JobCancelled {
 		t.Fatalf("status = %s, want cancelled even though ProcessJob returned nil", got.Status)
 	}
 
-	time.Sleep(200 * time.Millisecond)
 	dispatcher.Shutdown(context.Background())
 	mu.Lock()
 	defer mu.Unlock()
@@ -677,7 +631,8 @@ func TestFinalizeJobSkipsHookWhenPersistenceFails(t *testing.T) {
 	}
 
 	// The hook must not fire when the terminal status could not be persisted.
-	time.Sleep(200 * time.Millisecond)
+	// finalizeJob dispatches synchronously, so draining the dispatcher would
+	// wait for any call it started.
 	dispatcher.Shutdown(context.Background())
 	if got := atomic.LoadInt32(&calls); got != 0 {
 		t.Fatalf("webhook calls = %d, want 0 when persistence failed", got)
@@ -766,20 +721,6 @@ func (p itemsProcessor) ProcessJob(ctx context.Context, job domain.Job, reporter
 	return nil
 }
 
-func waitForTerminal(t *testing.T, store *db.Store, jobID string) domain.Job {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		job, err := store.GetJob(context.Background(), jobID)
-		if err == nil && job.Status.IsTerminal() {
-			return job
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("job %s did not reach a terminal status", jobID)
-	return domain.Job{}
-}
-
 func TestRunDecidesTerminalStatusFromStoreCounters(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -811,7 +752,7 @@ func TestRunDecidesTerminalStatusFromStoreCounters(t *testing.T) {
 			if resp.Accepted != 1 {
 				t.Fatalf("submit = %+v", resp)
 			}
-			got := waitForTerminal(t, store, resp.Results[0].Job.ID)
+			got := waitTerminal(t, manager, resp.Results[0].Job.ID)
 			if got.Status != tc.wantStatus || got.TotalItems != len(tc.statuses) ||
 				got.CompletedItems != tc.completed || got.SkippedItems != tc.skipped || got.FailedItems != tc.failed || got.CancelledItems != 0 {
 				t.Fatalf("job = status %s total %d completed %d skipped %d failed %d cancelled %d, want %s %d %d %d %d 0",
@@ -941,26 +882,8 @@ func TestCancelRacingStartupDispatchesExactlyOneConsistentHook(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Wait for every job to reach a terminal status.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		pending := 0
-		for _, id := range jobIDs {
-			job, err := store.GetJob(context.Background(), id)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !job.Status.IsTerminal() {
-				pending++
-			}
-		}
-		if pending == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d jobs did not reach a terminal status in time", pending)
-		}
-		time.Sleep(20 * time.Millisecond)
+	for _, id := range jobIDs {
+		waitTerminal(t, manager, id)
 	}
 
 	dispatcher.Shutdown(context.Background())
@@ -1029,5 +952,32 @@ func TestRunStampsPoolPriorityFromJobCreationTime(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("job was not processed")
+	}
+}
+
+// Cancel and Delete answer a missing job with ErrJobNotFound. Cancel refuses a
+// job that already completed and succeeds again on a cancelled one.
+func TestCancelAndDeleteOfMissingAndFinishedJobs(t *testing.T) {
+	manager := newTestManager(t)
+	ctx := context.Background()
+	if err := manager.Cancel(ctx, "job_missing"); !errors.Is(err, db.ErrJobNotFound) {
+		t.Fatalf("Cancel(missing) = %v, want ErrJobNotFound", err)
+	}
+	if err := manager.Delete(ctx, "job_missing"); !errors.Is(err, db.ErrJobNotFound) {
+		t.Fatalf("Delete(missing) = %v, want ErrJobNotFound", err)
+	}
+	now := time.Now().UTC()
+	done := domain.Job{ID: "job-done", Input: "station|us|1", Type: "station", CanonicalKey: "station:us:1", Status: domain.JobCompleted, CreatedAt: now, UpdatedAt: now}
+	if err := manager.store.CreateJob(ctx, done); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Cancel(ctx, done.ID); !errors.Is(err, ErrJobNotCancellable) {
+		t.Fatalf("Cancel(completed) = %v, want ErrJobNotCancellable", err)
+	}
+	queued := submitOne(t, manager, "station|us|2")
+	for range 2 {
+		if err := manager.Cancel(ctx, queued); err != nil {
+			t.Fatalf("Cancel(queued, then cancelled) = %v, want nil", err)
+		}
 	}
 }

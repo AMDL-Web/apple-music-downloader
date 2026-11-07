@@ -196,7 +196,7 @@ func TestShutdownInterruptsJobAndRestartResumesIt(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("recovered job did not run")
 	}
-	done := waitForTerminal(t, store, jobID)
+	done := waitTerminal(t, second, jobID)
 	if done.Status != domain.JobCompleted || done.CompletedItems != 1 {
 		t.Fatalf("resumed job = status %s completed %d, want completed with its one item", done.Status, done.CompletedItems)
 	}
@@ -238,11 +238,11 @@ func TestProcessorPanicFailsJobAndWorkerSurvives(t *testing.T) {
 	if resp.Accepted != 2 {
 		t.Fatalf("submit = %+v", resp)
 	}
-	panicked := waitForTerminal(t, store, resp.Results[0].Job.ID)
+	panicked := waitTerminal(t, manager, resp.Results[0].Job.ID)
 	if panicked.Status != domain.JobFailed || !strings.HasPrefix(panicked.Error, "internal error: panic: ") || !strings.Contains(panicked.Error, "index out of range") {
 		t.Fatalf("panicked job = status %s error %q, want failed with an internal error naming the panic", panicked.Status, panicked.Error)
 	}
-	if fine := waitForTerminal(t, store, resp.Results[1].Job.ID); fine.Status != domain.JobCompleted {
+	if fine := waitTerminal(t, manager, resp.Results[1].Job.ID); fine.Status != domain.JobCompleted {
 		t.Fatalf("job after the panic = %s, want completed: the worker must survive", fine.Status)
 	}
 	if err := manager.Retry(ctx, panicked.ID); err != nil {
@@ -470,7 +470,7 @@ func TestStartContextCancelIsNotShutdown(t *testing.T) {
 	if err := manager.Wait(waitCtx); err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("Wait: %v", err)
 	}
-	if got := waitForTerminal(t, store, resp.Results[0].Job.ID); got.Status != domain.JobCancelled {
+	if got := waitTerminal(t, manager, resp.Results[0].Job.ID); got.Status != domain.JobCancelled {
 		t.Fatalf("status = %s, want cancelled", got.Status)
 	}
 }
