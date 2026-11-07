@@ -6,62 +6,66 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
 func TestSemaphoreBoundsConcurrentWork(t *testing.T) {
-	t.Parallel()
-	sem := NewSemaphore(3)
-	var active, peak atomic.Int32
-	var wg sync.WaitGroup
-	for range 24 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			release, err := sem.Acquire(context.Background())
-			if err != nil {
-				t.Errorf("Acquire: %v", err)
-				return
-			}
-			current := active.Add(1)
-			for {
-				old := peak.Load()
-				if current <= old || peak.CompareAndSwap(old, current) {
-					break
+	synctest.Test(t, func(t *testing.T) {
+		start := time.Now()
+		sem := NewSemaphore(3)
+		var active, peak atomic.Int32
+		var wg sync.WaitGroup
+		for range 24 {
+			wg.Go(func() {
+				release, err := sem.Acquire(context.Background())
+				if err != nil {
+					t.Errorf("Acquire: %v", err)
+					return
 				}
-			}
-			time.Sleep(2 * time.Millisecond)
-			active.Add(-1)
-			release()
-			release() // releases are intentionally idempotent
-		}()
-	}
-	wg.Wait()
-	if got := peak.Load(); got != 3 {
-		t.Fatalf("peak concurrency = %d, want 3", got)
-	}
+				current := active.Add(1)
+				for {
+					old := peak.Load()
+					if current <= old || peak.CompareAndSwap(old, current) {
+						break
+					}
+				}
+				time.Sleep(2 * time.Millisecond)
+				active.Add(-1)
+				release()
+				release() // releases are intentionally idempotent
+			})
+		}
+		wg.Wait()
+		if got := peak.Load(); got != 3 {
+			t.Fatalf("peak concurrency = %d, want 3", got)
+		}
+		// 24 workers, 3 at a time, 2 ms each.
+		if elapsed := time.Since(start); elapsed != 16*time.Millisecond {
+			t.Fatalf("24 jobs through 3 permits took %v, want 16ms", elapsed)
+		}
+	})
 }
 
 func TestSemaphoreAcquireCancellationDoesNotLeakPermit(t *testing.T) {
-	t.Parallel()
-	sem := NewSemaphore(1)
-	release, err := sem.Acquire(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	if _, err := sem.Acquire(ctx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("canceled Acquire error = %v, want deadline exceeded", err)
-	}
-	release()
-	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	release, err = sem.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("Acquire after canceled waiter: %v", err)
-	}
-	release()
+	synctest.Test(t, func(t *testing.T) {
+		sem := NewSemaphore(1)
+		release, err := sem.Acquire(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		if _, err := sem.Acquire(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("canceled Acquire error = %v, want deadline exceeded", err)
+		}
+		release()
+		release, err = sem.Acquire(context.Background())
+		if err != nil {
+			t.Fatalf("Acquire after canceled waiter: %v", err)
+		}
+		release()
+	})
 }
 
 func TestSemaphoreRejectsPreCanceledContext(t *testing.T) {
@@ -79,12 +83,11 @@ func TestSemaphoreRejectsPreCanceledContext(t *testing.T) {
 	release()
 }
 
-// acquireInBackground enqueues an Acquire on a full semaphore and returns a
-// channel that receives its release func once granted. It waits until the
-// queue has grown to wantQueued so callers can build deterministic grant
-// orders by enqueueing one waiter at a time.
-func acquireInBackground(t *testing.T, sem *Semaphore, ctx context.Context, wantQueued int) <-chan func() {
-	t.Helper()
+// acquireInBackground enqueues an Acquire on a full semaphore and waits until
+// it is blocked in the queue, so callers build deterministic arrival orders by
+// enqueueing one waiter at a time. It must run inside a synctest bubble. The
+// returned channel receives the release func once the permit is granted.
+func acquireInBackground(sem *Semaphore, ctx context.Context) <-chan func() {
 	granted := make(chan func(), 1)
 	go func() {
 		release, err := sem.Acquire(ctx)
@@ -93,161 +96,113 @@ func acquireInBackground(t *testing.T, sem *Semaphore, ctx context.Context, want
 		}
 		granted <- release
 	}()
-	deadline := time.Now().Add(time.Second)
-	for {
-		sem.mu.Lock()
-		queued := sem.waiters.Len()
-		sem.mu.Unlock()
-		if queued >= wantQueued {
-			return granted
+	synctest.Wait()
+	return granted
+}
+
+// releaseAndExpect releases the held permit and requires that exactly want,
+// and none of others, was granted. It returns want's release func.
+func releaseAndExpect(t *testing.T, release func(), name string, want <-chan func(), others ...<-chan func()) func() {
+	t.Helper()
+	release()
+	synctest.Wait()
+	for _, other := range others {
+		select {
+		case <-other:
+			t.Fatalf("%s: another waiter was granted instead of or alongside it", name)
+		default:
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("background Acquire never queued (queue = %d, want %d)", queued, wantQueued)
-		}
-		time.Sleep(time.Millisecond)
+	}
+	select {
+	case next := <-want:
+		return next
+	default:
+		t.Fatalf("%s was not granted", name)
+		return nil
 	}
 }
 
 func TestSemaphoreGrantsContendedPermitsByPriority(t *testing.T) {
-	t.Parallel()
-	sem := NewSemaphore(1)
-	release, err := sem.Acquire(WithPriority(context.Background(), 1))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Enqueue in reverse priority order: a later job first, then an earlier
-	// job, then an untagged interactive call. Grants must come back in rank
-	// order (interactive, earlier job, later job), not arrival order.
-	laterJob := acquireInBackground(t, sem, WithPriority(context.Background(), 30), 1)
-	earlierJob := acquireInBackground(t, sem, WithPriority(context.Background(), 20), 2)
-	interactive := acquireInBackground(t, sem, context.Background(), 3)
-
-	expectGrant := func(name string, granted <-chan func(), others ...<-chan func()) func() {
-		t.Helper()
-		select {
-		case release := <-granted:
-			for _, other := range others {
-				select {
-				case <-other:
-					t.Fatalf("%s: a lower-ranked waiter was granted concurrently", name)
-				default:
-				}
-			}
-			return release
-		case <-time.After(time.Second):
-			t.Fatalf("%s was not granted", name)
-			return nil
+	synctest.Test(t, func(t *testing.T) {
+		sem := NewSemaphore(1)
+		release, err := sem.Acquire(WithPriority(context.Background(), 1))
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
 
-	release()
-	release = expectGrant("interactive", interactive, earlierJob, laterJob)
-	release()
-	release = expectGrant("earlier job", earlierJob, laterJob)
-	release()
-	release = expectGrant("later job", laterJob)
-	release()
+		// Enqueue in reverse priority order: a later job first, then an earlier
+		// job, then an untagged interactive call. Grants must come back in rank
+		// order (interactive, earlier job, later job), not arrival order.
+		laterJob := acquireInBackground(sem, WithPriority(context.Background(), 30))
+		earlierJob := acquireInBackground(sem, WithPriority(context.Background(), 20))
+		interactive := acquireInBackground(sem, context.Background())
+
+		release = releaseAndExpect(t, release, "interactive", interactive, earlierJob, laterJob)
+		release = releaseAndExpect(t, release, "earlier job", earlierJob, laterJob)
+		release = releaseAndExpect(t, release, "later job", laterJob)
+		release()
+	})
 }
 
 func TestSemaphoreKeepsFIFOWithinEqualPriority(t *testing.T) {
-	t.Parallel()
-	sem := NewSemaphore(1)
-	ctx := WithPriority(context.Background(), 7)
-	release, err := sem.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first := acquireInBackground(t, sem, ctx, 1)
-	second := acquireInBackground(t, sem, ctx, 2)
+	synctest.Test(t, func(t *testing.T) {
+		sem := NewSemaphore(1)
+		ctx := WithPriority(context.Background(), 7)
+		release, err := sem.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first := acquireInBackground(sem, ctx)
+		second := acquireInBackground(sem, ctx)
 
-	release()
-	select {
-	case release = <-first:
-	case <-time.After(time.Second):
-		t.Fatal("first equal-priority waiter was not granted")
-	}
-	select {
-	case <-second:
-		t.Fatal("second equal-priority waiter overtook the first")
-	default:
-	}
-	release()
-	select {
-	case release = <-second:
+		release = releaseAndExpect(t, release, "first equal-priority waiter", first, second)
+		release = releaseAndExpect(t, release, "second equal-priority waiter", second)
 		release()
-	case <-time.After(time.Second):
-		t.Fatal("second equal-priority waiter was not granted")
-	}
+	})
 }
 
 func TestSemaphoreUsesSubpriorityWithinPrimaryPriority(t *testing.T) {
-	t.Parallel()
-	sem := NewSemaphore(1)
-	release, err := sem.Acquire(WithPriority(context.Background(), 1))
-	if err != nil {
-		t.Fatal(err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		sem := NewSemaphore(1)
+		release, err := sem.Acquire(WithPriority(context.Background(), 1))
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	jobCtx := WithPriority(context.Background(), 7)
-	laterTrack := acquireInBackground(t, sem, WithSubpriority(jobCtx, 9), 1)
-	earlierTrack := acquireInBackground(t, sem, WithSubpriority(jobCtx, 2), 2)
+		jobCtx := WithPriority(context.Background(), 7)
+		laterTrack := acquireInBackground(sem, WithSubpriority(jobCtx, 9))
+		earlierTrack := acquireInBackground(sem, WithSubpriority(jobCtx, 2))
 
-	release()
-	select {
-	case release = <-earlierTrack:
-	case <-laterTrack:
-		t.Fatal("later track overtook an earlier track in the same job")
-	case <-time.After(time.Second):
-		t.Fatal("earlier track was not granted")
-	}
-	release()
-	select {
-	case release = <-laterTrack:
+		release = releaseAndExpect(t, release, "earlier track", earlierTrack, laterTrack)
+		release = releaseAndExpect(t, release, "later track", laterTrack)
 		release()
-	case <-time.After(time.Second):
-		t.Fatal("later track was not granted after earlier track released")
-	}
+	})
 }
 
 func TestSemaphorePriorityCancellationDoesNotLeakPermit(t *testing.T) {
-	t.Parallel()
-	sem := NewSemaphore(1)
-	release, err := sem.Acquire(WithPriority(context.Background(), 1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// A high-priority waiter cancels while queued; the pending low-priority
-	// waiter must still receive the permit on release.
-	cancelCtx, cancel := context.WithCancel(WithPriority(context.Background(), 2))
-	canceled := acquireInBackground(t, sem, cancelCtx, 1)
-	lowPriority := acquireInBackground(t, sem, WithPriority(context.Background(), 9), 2)
-	cancel()
-	deadline := time.Now().Add(time.Second)
-	for {
-		sem.mu.Lock()
-		queued := sem.waiters.Len()
-		sem.mu.Unlock()
-		if queued == 1 {
-			break
+	synctest.Test(t, func(t *testing.T) {
+		sem := NewSemaphore(1)
+		release, err := sem.Acquire(WithPriority(context.Background(), 1))
+		if err != nil {
+			t.Fatal(err)
 		}
-		if time.Now().After(deadline) {
-			t.Fatal("canceled waiter was not removed from the queue")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	release()
-	select {
-	case release = <-lowPriority:
+		// A high-priority waiter cancels while queued; the pending low-priority
+		// waiter must still receive the permit on release.
+		cancelCtx, cancel := context.WithCancel(WithPriority(context.Background(), 2))
+		canceled := acquireInBackground(sem, cancelCtx)
+		lowPriority := acquireInBackground(sem, WithPriority(context.Background(), 9))
+		cancel()
+		synctest.Wait()
+
+		release = releaseAndExpect(t, release, "low-priority waiter", lowPriority, canceled)
 		release()
-	case <-time.After(time.Second):
-		t.Fatal("low-priority waiter starved after cancellation")
-	}
-	select {
-	case <-canceled:
-		t.Fatal("canceled waiter received a permit")
-	default:
-	}
+		synctest.Wait()
+		select {
+		case <-canceled:
+			t.Fatal("canceled waiter received a permit")
+		default:
+		}
+	})
 }
 
 func TestPriorityFromContext(t *testing.T) {
