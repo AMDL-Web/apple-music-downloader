@@ -8,11 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
-
-	"amdl/internal/db"
 )
 
 // newRunEnv prepares a config directory with a seeded config.yaml that points
@@ -39,6 +36,9 @@ func newRunEnv(t *testing.T, hooksYAML string) Options {
 	return files
 }
 
+// amdl serve's start, clean stop, restart on the files it left and startup
+// errors are end-to-end scripts: apps/amdl/testdata/script/serve*.txtar.
+
 func TestConsoleURL(t *testing.T) {
 	for addr, want := range map[string]string{
 		"127.0.0.1:52011": "http://127.0.0.1:52011/console/",
@@ -52,61 +52,6 @@ func TestConsoleURL(t *testing.T) {
 			t.Errorf("consoleURL(%s) = %s, want %s", addr, got, want)
 		}
 	}
-}
-
-func TestRunReturnsStartupErrors(t *testing.T) {
-	t.Run("config that does not load", func(t *testing.T) {
-		files := newRunEnv(t, "")
-		if err := os.WriteFile(files.ConfigPath, []byte("nope: 1\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := Run(context.Background(), files); err == nil || !strings.Contains(err.Error(), "load config") {
-			t.Fatalf("Run() = %v, want a load config error", err)
-		}
-	})
-	t.Run("invalid webhook url names the hook", func(t *testing.T) {
-		files := newRunEnv(t, "enabled: true\nentries:\n  - name: refresh\n    type: webhook\n    events: [job_finished]\n    url: media-server.local/refresh\n")
-		err := Run(context.Background(), files)
-		if err == nil || !strings.Contains(err.Error(), `hooks.entries["refresh"]`) || !Logged(err) {
-			t.Fatalf("Run() = %v, want a logged hooks config error naming the entry", err)
-		}
-	})
-	t.Run("listen address in use", func(t *testing.T) {
-		files := newRunEnv(t, "")
-		busy, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer busy.Close()
-		setListen(t, files.ConfigPath, busy.Addr().String())
-		if err := Run(context.Background(), files); err == nil || !strings.Contains(err.Error(), "listen on") {
-			t.Fatalf("Run() = %v, want a listen error", err)
-		}
-	})
-}
-
-// A full start in simulate mode stops cleanly when its context ends, and the
-// database it closed opens again.
-func TestRunStopsCleanlyWhenItsContextEnds(t *testing.T) {
-	files := newRunEnv(t, "")
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- Run(ctx, files) }()
-	time.Sleep(200 * time.Millisecond)
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("Run() = %v, want nil after a clean shutdown", err)
-		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("run did not return after its context ended")
-	}
-	store, err := db.Open(filepath.Join(filepath.Dir(filepath.Dir(files.ConfigPath)), "db", "amdl.db"))
-	if err != nil {
-		t.Fatalf("reopen database: %v", err)
-	}
-	_ = store.Close()
 }
 
 // startRun runs Run on a listener it opens on a free loopback port, with
