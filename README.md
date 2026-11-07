@@ -349,7 +349,8 @@ script tests.
 | --- | --- |
 | `make verify` | The quick gate before a commit: gofmt check, vet, staticcheck, Go tests, Node script tests |
 | `make check` | The CI gate: gofmt check, build, vet, staticcheck, tests, race detector, `govulncheck`, Node script tests |
-| `make test`, `make race` | Every Go test (unit, integration, the `amdl` end-to-end scripts), without or with the race detector |
+| `make test` | Every Go test: unit, integration, the `amdl` end-to-end scripts |
+| `make race` | The Go tests under the race detector, but for the desktop ui and golden packages (single-threaded rendering) |
 | `make test-short` | The Go tests without the slow integration ones |
 | `make cover` | The Go tests with coverage counted across packages (`build/cover/`) and a summary; CI shows the summary on the run page |
 | `make console-e2e` | The web console's browser tests (Playwright; see [apps/console/e2e](apps/console/e2e/README.md)) |

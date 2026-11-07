@@ -94,8 +94,18 @@ cover: ## Run the Go tests with coverage across packages and print a summary
 		&& { [ -z "$$GITHUB_STEP_SUMMARY" ] || echo "$$summary" >> "$$GITHUB_STEP_SUMMARY"; } \
 		|| echo "cover: no coverage summary" >&2
 
-race: ## Run the Go tests under the race detector
-	$(GO) test -race ./...
+# The race detector leaves out the desktop ui and golden packages: their code
+# runs on the one UI thread, so the detector finds little there, while it
+# slows their frame-by-frame rendering about tenfold (most of the race job's
+# time). The desktop's concurrent code, store and artwork, is still checked.
+# A list that comes out empty fails, because an empty list would make
+# `go test` run the current directory.
+RACE_SKIP = ^amdl/apps/desktop/internal/(ui|golden)$$
+
+race: ## Run the Go tests under the race detector (all but the desktop ui and golden packages)
+	@pkgs="$$($(GO) list ./... | grep -Ev '$(RACE_SKIP)')" && test -n "$$pkgs" || { echo "race: no packages" >&2; exit 1; }; \
+	echo "$(GO) test -race <every package but the desktop ui and golden>"; \
+	$(GO) test -race $$pkgs
 
 lint: ## Run staticcheck (checks in staticcheck.conf)
 	$(GO) run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
