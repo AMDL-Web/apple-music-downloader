@@ -288,7 +288,7 @@ func TestItemsKeepTheirBoxesWhicheverIsChosen(t *testing.T) {
 				}
 			}
 			return tt, choose
-		}, []string{"Home", "Queue", "Settings"}, []string{fmt.Sprint("screen ", ScreenHome), fmt.Sprint("screen ", ScreenSettings), fmt.Sprint("screen ", ScreenQueue)}},
+		}, []string{"Home", "Queue", "Connection settings"}, []string{fmt.Sprint("screen ", ScreenHome), fmt.Sprint("screen ", ScreenSettings), fmt.Sprint("screen ", ScreenQueue)}},
 		{"settings nav", func(t *testing.T) (*ui.Tester, map[string]func()) {
 			_, tt, _ := hooksApp(t)
 			choose := map[string]func(){}

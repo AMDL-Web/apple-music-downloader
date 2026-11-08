@@ -15,9 +15,9 @@ import (
 )
 
 // sidebar is the window's left column (Pulse, MyGo 云音乐): the traffic
-// lights and the sidebar button over its top, the sections with colored
-// tiles and live readings, and at its foot the job downloading now over
-// the connection. It is w wide as it slides open or closed; its content keeps its
+// lights and the sidebar button over its top, the sections with bare
+// icons and live readings, and at its foot the job downloading now over
+// the connection, which opens Settings. It is w wide as it slides open or closed; its content keeps its
 // width meanwhile, clipped, so nothing in it reflows.
 //
 // Where the window shows its material (vib), the sidebar paints no ground
@@ -40,14 +40,11 @@ func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool, w float32) {
 			// (sidebarToggle), which drags the window.
 			ui.Box(c).Height(controlsBand(c.TitleBar())).Margin(0, -10, -6, -10).DragWindow()
 			ui.Column(c).Gap(2).Children(func() {
-				a.navItem(c, k, ScreenHome, icHome, k.TileHome, "Home", "", ui.Color{})
-				a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(store.TabActive)), ui.Color{})
+				a.navItem(c, k, ScreenHome, icHome, "Home", "")
+				a.navItem(c, k, ScreenQueue, icQueue, "Queue", countText(a.Store.Count(store.TabActive)))
 				if a.Store.AppleLibraryOn() {
-					a.navItem(c, k, ScreenLibrary, icShelf, k.TileLibrary, "Library", "", ui.Color{})
+					a.navItem(c, k, ScreenLibrary, icShelf, "Library", "")
 				}
-				ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Muted).Padding(8, 10, 4, 10)
-				reading, col := a.systemReading(k)
-				a.navItem(c, k, ScreenSettings, icSettings, k.TileSettings, "Settings", reading, col)
 			})
 			ui.Spacer(c)
 			ui.Column(c).Children(func() {
@@ -163,24 +160,9 @@ func countText(n int) string {
 	return fmt.Sprint(n)
 }
 
-func (a *App) serverHeading() string {
-	if a.Settings.Mode == mode.Standalone {
-		return "This computer"
-	}
-	return "Server"
-}
-
-// systemReading is the Settings item's live value: Check while the
-// server's health check fails, else nothing; the connection card below
-// says whether it answers.
-func (a *App) systemReading(k *Tokens) (string, ui.Color) {
-	if h := a.Store.Server.Health; a.Store.Conn.Phase == client.Live && h != nil && h.Status != "ok" {
-		return "Check", k.Warn
-	}
-	return "", ui.Color{}
-}
-
-func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, tile ui.Color, name, reading string, readingColor ui.Color) {
+// navItem is a section of the sidebar: its icon bare, as Settings' own
+// navigation draws them, and its reading.
+func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, name, reading string) {
 	on := a.navScreen() == s
 	item := ui.ButtonBase(c.Key(name)).Height(30).PaddingX(10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label(name)
 	// Under the pointer a row takes the faint wash, selected the stronger
@@ -194,17 +176,16 @@ func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, tile ui.Co
 		a.Go(s)
 	}
 	item.Cursor(ui.CursorPointer).Children(func() {
-		ui.Box(c).Size(22, 22).Radius(radiusInner).Background(tile).Center().Children(func() {
-			ui.Icon(c, ic).FontSize(13).TextColor(ui.RGB(255, 255, 255))
+		col := k.Muted
+		if on {
+			col = k.Fg
+		}
+		ui.Box(c).Size(22, 22).Center().Children(func() {
+			ui.Icon(c, ic).FontSize(14).TextColor(col)
 		})
 		ui.Text(c, name).FontSize(13).TextColor(k.Fg).Grow(1).SingleLine()
 		if reading != "" {
-			col := k.Muted
-			w := 500
-			if readingColor.A != 0 {
-				col, w = readingColor, 600
-			}
-			mono(c, reading, 11).FontWeight(w).TextColor(col)
+			mono(c, reading, 11).FontWeight(500).TextColor(k.Muted)
 		}
 	})
 }
@@ -253,6 +234,8 @@ func (a *App) serverState(k *Tokens) serverStatus {
 		st.word, st.tone = "Connecting…", toneWait
 	case slices.ContainsFunc(a.Store.Server.Accounts, func(acc client.Account) bool { return acc.NeedsLogin }):
 		st.word, st.tone = "Account needs login", toneWait
+	case a.Store.Server.Health != nil && a.Store.Server.Health.Status != "ok":
+		st.word, st.tone = "Check", toneWait
 	}
 	st.fg, st.soft = k.OK, k.OKSoft
 	switch st.tone {
@@ -265,12 +248,17 @@ func (a *App) serverState(k *Tokens) serverStatus {
 }
 
 // serverCard says where downloads run and whether that place answers; it
-// opens the connection's settings.
+// opens Settings at the connection, and shows selected while Settings is
+// up, as the sidebar's way there.
 func (a *App) serverCard(c *ui.Context, k *Tokens) {
 	st := a.serverState(k)
 	card := ui.ButtonBase(c.Key("server")).Padding(9, 10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).
 		Label("Connection settings")
-	card.Background(sideFill(card, k, k.Wash, k.Track))
+	rest := k.Wash
+	if a.navScreen() == ScreenSettings {
+		rest = k.Track
+	}
+	card.Background(sideFill(card, k, rest, k.Track))
 	if card.Clicked() {
 		a.GoSettings("connection")
 	}

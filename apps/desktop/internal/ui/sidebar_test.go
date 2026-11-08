@@ -25,7 +25,7 @@ func TestTheConnectionCardStaysAtTheFootAsADownloadStarts(t *testing.T) {
 		}
 		return r
 	}
-	card, settings := find("Connection settings"), find("Settings")
+	card, queue := find("Connection settings"), find("Queue")
 	now := time.Now()
 	a.Store.ApplySnapshot(client.DownloadList{
 		StatusCounts: domain.JobStatusCounts{Running: 1, Total: 1},
@@ -37,8 +37,8 @@ func TestTheConnectionCardStaysAtTheFootAsADownloadStarts(t *testing.T) {
 	if got := find("Connection settings"); got != card {
 		t.Errorf("the connection card moved from %v to %v", card, got)
 	}
-	if got := find("Settings"); got != settings {
-		t.Errorf("the sections moved from %v to %v", settings, got)
+	if got := find("Queue"); got != queue {
+		t.Errorf("the sections moved from %v to %v", queue, got)
 	}
 	if nowCard := find("Downloading now"); nowCard.Y+nowCard.H+nowGap != card.Y {
 		t.Errorf("the now card at %v does not sit right over the connection card at %v", nowCard, card)
