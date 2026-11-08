@@ -233,6 +233,12 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	a.flightCopies(c, k)
 }
 
+// placeCover places the album page's cover as this frame of a flight has
+// it (flyPage), before its picture is built (widgets.Cover's Place).
+func (a *App) placeCover(el ui.Element) widgets.Placement {
+	return a.flyPage(el, partCover, "", radiusCover)
+}
+
 // pageHead is the album screen's head: the record's names once read, else
 // what its run holds; the run's cover, which stays while the album is read
 // under another address of the same picture. Its kicker is the type alone;
@@ -259,7 +265,7 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	h.cover = func(size float32) ui.Element {
 		tone, dim, shadow, jump := a.flyCover()
 		return widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: tone, Dim: dim, Jump: jump,
-			Shadow: shadow, Video: video}.Show(c).Label("Artwork")
+			Shadow: shadow, Video: video, Place: a.placeCover}.Show(c).Label("Artwork")
 	}
 	// What the download made of it, once known, stands for what the album
 	// offers.

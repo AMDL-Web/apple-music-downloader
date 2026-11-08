@@ -84,13 +84,13 @@ type heroSpec struct {
 // label, title and artists at the cover's top and the page's band at its
 // bottom, the column as tall as the cover whatever the title
 // (heroLayout.titleSize). The cover flies in from what the page opened
-// from (flyPage), the label swaps with its match (flyLabel), the title and
-// artists morph (flyText), and the quality tag as one box (flyTags); the
-// band rises in.
+// from (flyPage, as the cover places itself), the label swaps with its
+// match (flyLabel), the title and artists morph (flyText), and the quality
+// tag as one box (flyTags); the band rises in.
 func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec) {
 	hc := h.colors
 	ui.Row(c).Padding(l.top, heroPad, heroBottom, heroPad).Gap(l.gap).AlignItems(ui.Start).Children(func() {
-		a.flyPage(h.cover(l.cover), partCover, "", radiusCover)
+		h.cover(l.cover)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).MinHeight(l.cover).Gap(12).Justify(ui.SpaceBetween).Children(func() {
 			ui.Column(c).Gap(12).Children(func() {
 				a.flyLabel(label(c, k, h.kicker).TextColor(hc.label), h.kicker, hc.label)

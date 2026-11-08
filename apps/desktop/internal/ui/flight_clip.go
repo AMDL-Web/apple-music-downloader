@@ -53,19 +53,15 @@ func (f *flight) flightClip(box ui.Rect) (top, bottom float32) {
 	return max(0, view.Y-box.Y), max(0, box.Y+box.H-(view.Y+view.H))
 }
 
-// clipCover cuts el, the page's cover, as the match it flies to or from
-// is cut (flightClip), by how far it is from it: all of it at the match,
-// none at its own place, scaled with the cover, s its scale this frame.
-func (f *flight) clipCover(el ui.Element, src ui.Rect, t, s float32) {
-	if s <= 0 {
-		return
-	}
+// clipCover is the effect that cuts the page's cover's picture as the
+// match it flies to or from is cut (flightClip), by how far it is from it:
+// all of it at the match, none at its own place; nil when it cuts nothing.
+func (f *flight) clipCover(src ui.Rect, t float32) ui.Effect {
 	top, bottom := f.flightClip(src)
-	k := (1 - t) / s
-	top, bottom = top*k, bottom*k
+	top, bottom = top*(1-t), bottom*(1-t)
 	if top <= 0 && bottom <= 0 {
-		return
+		return nil
 	}
 	v := coverClip.NewValues().Float(coverClipTop, top).Float(coverClipBottom, bottom)
-	el.Effect(coverClip.Effect(shader.Options{Values: v, MaxSampleOffset: ui.Point{X: coverClipMargin, Y: coverClipMargin}}))
+	return coverClip.Effect(shader.Options{Values: v, MaxSampleOffset: ui.Point{X: coverClipMargin, Y: coverClipMargin}})
 }

@@ -28,6 +28,20 @@ type Cover struct {
 	// in once its first frame is there, and out, still playing, once Video
 	// is unset. The still stays underneath as its poster.
 	Video *ui.VideoPlayer
+	// Place, when set, makes the cover a slot of Size in its layout, in
+	// which its picture shows where Place puts it, as a flight does the
+	// album page's cover (face).
+	Place func(slot ui.Element) Placement
+}
+
+// Placement is where a placed cover's picture shows (Cover's Place): X and
+// Y DIPs from its slot's top left corner, at Scale of the slot's size and
+// with corners of Radius, drawn by Effect when that is set. The picture is
+// laid out there rather than moved and scaled, which would make it a
+// transformed drawing (face).
+type Placement struct {
+	X, Y, Scale, Radius float32
+	Effect              ui.Effect
 }
 
 // The still and the motion cover change places over coverSwap. The one
@@ -44,9 +58,31 @@ const (
 
 // Show builds the cover.
 func (cv Cover) Show(c *ui.Context) ui.Element {
-	box := ui.Box(c).Size(cv.Size, cv.Size).Radius(cv.Radius).Clip().Background(cv.Placeholder)
+	if cv.Place == nil {
+		return cv.face(c, cv.Size, cv.Radius)
+	}
+	slot := ui.Box(c).Size(cv.Size, cv.Size)
+	p := cv.Place(slot)
+	slot.Children(func() {
+		face := cv.face(c, cv.Size*p.Scale, p.Radius).Absolute().Left(p.X).Top(p.Y)
+		if p.Effect != nil {
+			face.Effect(p.Effect)
+		}
+	})
+	return slot
+}
+
+// face builds the cover's picture, size DIPs a side with corners of radius,
+// as Show places it. It takes no clip it does not need: a clip around a
+// transformed drawing, or under a transform, is a mask MyGo's GPU renderer
+// rasterizes on the CPU and uploads again in every frame that changes it,
+// which at a window's size costs more than all the rest of a frame. Its
+// stills round their own corners, as its ground does; only a video, which
+// draws square, takes the clip.
+func (cv Cover) face(c *ui.Context, size, radius float32) ui.Element {
+	box := ui.Box(c).Size(size, size).Radius(radius).Background(cv.Placeholder)
 	if k := min(max(cv.Shadow, 0), 1); k > 0 {
-		box.Shadow(0, k*cv.Size/8, k*cv.Size/3, 0, ui.RGBA(0, 0, 0, 0.45*k))
+		box.Shadow(0, k*size/8, k*size/3, 0, ui.RGBA(0, 0, 0, 0.45*k))
 	}
 	video := box.AnimateWith("video", map[bool]float32{true: 1, false: 0}[cv.Video != nil], coverSwap, ui.EaseInOut)
 	// The player that showed last, which a fade out shows.
@@ -57,7 +93,13 @@ func (cv Cover) Show(c *ui.Context) ui.Element {
 	case video < 0.001:
 		*player = nil
 	}
-	box.InsetShadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.06))
+	// A hairline as wide at any size as the cover at its own would draw it
+	// scaled to this one.
+	ring := float32(1)
+	if cv.Size > 0 {
+		ring = size / cv.Size
+	}
+	box.InsetShadow(0, 0, 0, ring, ui.RGBA(255, 255, 255, 0.06))
 	color := min(max(cv.Color, 0), 1)
 	shown := color
 	if cv.Jump {
@@ -71,29 +113,34 @@ func (cv Cover) Show(c *ui.Context) ui.Element {
 	if *player != nil && video > 0.001 && video < 0.999 {
 		still, moving = video, 1-video
 	}
+	round := radius
+	if *player != nil {
+		box.Clip()
+		round = 0
+	}
 	box.Children(func() {
 		if cv.Image != nil && shown < 0.999 {
-			gray := cv.away(ui.Image(c, cv.Image).Fill().Fit(ui.Cover).Grayscale().Absolute().Top(0).Left(0), still)
+			gray := away(ui.Image(c, cv.Image).Fill().Fit(ui.Cover).Radius(round).Grayscale().Absolute().Top(0).Left(0), size, still)
 			if cv.Dim > 0 {
 				gray.Opacity(1 - cv.Dim*(1-shown))
 			}
 		}
 		if cv.Image != nil && shown > 0.001 {
-			cv.away(ui.Image(c, cv.Image).Fill().Fit(ui.Cover).Opacity(shown).Absolute().Top(0).Left(0), still)
+			away(ui.Image(c, cv.Image).Fill().Fit(ui.Cover).Radius(round).Opacity(shown).Absolute().Top(0).Left(0), size, still)
 		}
 		if *player != nil {
-			cv.away(ui.Video(c, *player).Fill().Fit(ui.Cover).Opacity(video).Absolute().Top(0).Left(0), moving)
+			away(ui.Video(c, *player).Fill().Fit(ui.Cover).Opacity(video).Absolute().Top(0).Left(0), size, moving)
 		}
 	})
 	return box
 }
 
-// away blurs and grows el, a picture of the cover, by how far it is from
-// showing alone, 0 to 1, as the swap has it (coverSwap).
-func (cv Cover) away(el ui.Element, by float32) ui.Element {
+// away blurs and grows el, a picture of a cover size DIPs a side, by how
+// far it is from showing alone, 0 to 1, as the swap has it (coverSwap).
+func away(el ui.Element, size, by float32) ui.Element {
 	if by <= 0 {
 		return el
 	}
 	g := 1 + coverSwapGrow*by
-	return el.Blur(coverSwapBlur*cv.Size*by).Scale(g, g)
+	return el.Blur(coverSwapBlur*size*by).Scale(g, g)
 }

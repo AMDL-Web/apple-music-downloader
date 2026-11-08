@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+
+	"amdl/apps/desktop/internal/widgets"
 )
 
 // An album page opened from a cover other than the queue hero's (a search
@@ -157,16 +159,14 @@ func (a *App) growDim(c *ui.Context) {
 // the page grows: on q from src's box to its own place on the page, which
 // is where the frame before laid it out less how far the surface had
 // carried it (ridePrev); this frame lays it out where the surface carries
-// it now (ride).
-func (f *flight) growCover(el ui.Element, src flightSrc, dst ui.Rect, size float32) {
+// it now (ride). Like flyPage, it returns where the cover's picture shows,
+// laid out there rather than moved and scaled: under the surface's rounded
+// clip, a transformed picture would make MyGo mask that clip on the CPU in
+// every frame (widgets.Cover's face).
+func (f *flight) growCover(src flightSrc, dst ui.Rect, size float32) widgets.Placement {
 	at := ui.Rect{X: dst.X - f.ridePrev.X, Y: dst.Y - f.ridePrev.Y, W: dst.W, H: dst.H}
 	f.cover = at
 	t := f.lead()
-	s := lerp(src.box.W, dst.W, t) / dst.W
-	el.TransformOrigin(0, 0).Scale(s, s).
-		Translate(lerp(src.box.X, at.X, t)-(at.X+f.ride.X), lerp(src.box.Y, at.Y, t)-(at.Y+f.ride.Y))
-	if s > 0 {
-		el.Radius(lerp(src.size, size, t) / s)
-		f.clipCover(el, src.box, t, s)
-	}
+	return widgets.Placement{X: lerp(src.box.X, at.X, t) - (at.X + f.ride.X), Y: lerp(src.box.Y, at.Y, t) - (at.Y + f.ride.Y),
+		Scale: lerp(src.box.W, dst.W, t) / dst.W, Radius: lerp(src.size, size, t), Effect: f.clipCover(src.box, t)}
 }

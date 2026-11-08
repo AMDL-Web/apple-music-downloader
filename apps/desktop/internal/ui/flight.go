@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"amdl/apps/desktop/internal/widgets"
 )
 
 // The album page comes in over the screen it was opened from and goes back
@@ -417,11 +419,14 @@ func (f *flight) lead() float32 { return f.q }
 // has it: from where its match under the page shows, scaled from the
 // match's size (a text's font size, a cover's side) to its own, which is
 // size, and a cover's corners from the match's radius; or, with no match,
-// fading in as it rises.
-func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32) {
+// fading in as it rises. A cover is not scaled: it returns where its
+// picture shows in this frame (widgets.Cover's Place), in place but while
+// it flies.
+func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32) widgets.Placement {
 	f := &a.fly
+	rest := widgets.Placement{Scale: 1, Radius: size}
 	if !f.moving {
-		return
+		return rest
 	}
 	dst, src := el.LayoutBounds(), f.src[part]
 	if dst.W > 0 {
@@ -438,14 +443,13 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	if p == unpaired {
 		if part == partCover {
 			a.flyRiseCover(el)
-			return
+			return rest
 		}
 		a.flyRise(el)
-		return
+		return rest
 	}
 	if part == partCover && f.growing() {
-		f.growCover(el, src, dst, size)
-		return
+		return f.growCover(src, dst, size)
 	}
 	t := f.travel()
 	if part == partCover {
@@ -459,14 +463,15 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	case partTitle, partArtist:
 		s = lerp(src.size/size, 1, t)
 	}
-	el.TransformOrigin(0, 0).Scale(s, s).Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y)
-	if part == partCover && s > 0 {
-		el.Radius(lerp(src.size, size, t) / s)
-		f.clipCover(el, src.box, t, s)
-	}
 	if p == crosses {
 		f.fade(el, unit((f.q-f.partsFrom())/0.45))
 	}
+	if part == partCover {
+		return widgets.Placement{X: lerp(src.box.X, dst.X, t) - dst.X, Y: lerp(src.box.Y, dst.Y, t) - dst.Y, Scale: s,
+			Radius: lerp(src.size, size, t), Effect: f.clipCover(src.box, t)}
+	}
+	el.TransformOrigin(0, 0).Scale(s, s).Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y)
+	return rest
 }
 
 // flyCover is the album page's cover's tone, dim and shadow in this frame
