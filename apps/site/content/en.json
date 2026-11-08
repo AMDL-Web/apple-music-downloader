@@ -202,7 +202,7 @@
         },
         {
           "title": "Get a wrapper",
-          "text": "This downloads upstream's wrapper guest and checks it against a pinned hash; on Linux x86_64 it runs the wrapper natively, elsewhere it needs QEMU, which it offers to install. Already run a wrapper on a NAS or server? Skip this step."
+          "text": "This downloads the wrapper guest AMDL-Web publishes and checks it against a pinned hash; on Linux x86_64 it runs the wrapper natively, elsewhere it needs QEMU, which it offers to install. Already run a wrapper on a NAS or server? Skip this step."
         },
         {
           "title": "Run the backend",

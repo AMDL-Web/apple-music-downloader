@@ -202,7 +202,7 @@
         },
         {
           "title": "准备 wrapper",
-          "text": "这条命令会下载上游的 wrapper 虚拟机，并按固定的哈希校验；Linux x86_64 上 wrapper 原生运行，其他系统需要 QEMU，没装会提示你安装。已经在 NAS 或服务器上跑着 wrapper 的话，跳过这一步。"
+          "text": "这条命令会下载 AMDL-Web 发布的 wrapper 虚拟机，并按固定的哈希校验；Linux x86_64 上 wrapper 原生运行，其他系统需要 QEMU，没装会提示你安装。已经在 NAS 或服务器上跑着 wrapper 的话，跳过这一步。"
         },
         {
           "title": "运行后端",
