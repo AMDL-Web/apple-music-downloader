@@ -7,7 +7,8 @@
     } catch {}
   };
 
-  // Light, dark or the system's: every switch on the page shows the choice.
+  // Light, dark or the system's: both theme switches (header and menu) show
+  // the choice.
   const switches = [...document.querySelectorAll('[data-theme-set]')];
   const showTheme = () => {
     const current = root.getAttribute('data-theme') || 'system';
@@ -27,7 +28,7 @@
       showTheme();
     });
   }
-  // Arrow keys move along a radio group, as they do in a native one.
+  // Arrow keys move within the radio group that has focus, as in a native one.
   for (const group of document.querySelectorAll('[role="radiogroup"]')) {
     const items = [...group.querySelectorAll('[role="radio"]')];
     group.addEventListener('keydown', (event) => {
@@ -75,49 +76,36 @@
       tab.addEventListener('click', () => select(tab));
       tab.addEventListener('keydown', (event) => {
         const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 1, ArrowUp: -1 }[event.key];
-        if (!step) return;
+        const to = { Home: 0, End: tabs.length - 1 }[event.key];
+        if (!step && to === undefined) return;
         event.preventDefault();
-        select(tabs[(i + step + tabs.length) % tabs.length], true);
+        select(tabs[to ?? (i + step + tabs.length) % tabs.length], true);
       });
     });
+    // The stage arrows in each panel select the previous or next tab,
+    // wrapping, and move focus to it.
+    const widget = list.closest('.tabs');
+    for (const arrow of widget.querySelectorAll('.stage-arrow')) {
+      arrow.addEventListener('click', () => {
+        const at = tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true');
+        const step = arrow.classList.contains('prev') ? -1 : 1;
+        select(tabs[(at + step + tabs.length) % tabs.length], true);
+      });
+    }
   }
 
-  // The products' screens (mocks.mjs), each with at most one control.
-  // Desktop queue: Pause stops the running album, and Resume starts it again.
-  for (const button of document.querySelectorAll('[data-pause]')) {
-    const frame = button.closest('.dk');
-    button.setAttribute('aria-pressed', 'false');
-    button.addEventListener('click', () => {
-      const paused = frame.classList.toggle('dk-paused');
-      const label = button.textContent;
-      button.textContent = button.dataset.alt;
-      button.dataset.alt = label;
-      button.setAttribute('aria-pressed', String(paused));
+  // The Sections menu: Escape closes it and returns focus to its button; a
+  // link or a click elsewhere closes it too.
+  for (const menu of document.querySelectorAll('details.sections')) {
+    const summary = menu.querySelector('summary');
+    menu.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !menu.open) return;
+      menu.open = false;
+      summary.focus();
     });
-  }
-
-  // Console search: a song's download button puts it in the queue, and its
-  // row says so, as the real page does.
-  for (const button of document.querySelectorAll('[data-dl]')) {
-    button.addEventListener('click', () => {
-      if (button.classList.contains('is-done')) return;
-      button.classList.add('is-done');
-      button.closest('li').classList.add('is-q');
-      button.setAttribute('aria-label', button.dataset.done);
-      button.setAttribute('aria-disabled', 'true');
-    });
-  }
-
-  // Console hooks: Run hooks switches them on and off, and the head says so.
-  for (const sw of document.querySelectorAll('[data-switch]')) {
-    const pill = sw.closest('.cn-hooks').querySelector('[data-pill]');
-    const word = pill.querySelector('span');
-    const off = word.textContent;
-    sw.addEventListener('click', () => {
-      const on = sw.getAttribute('aria-checked') !== 'true';
-      sw.setAttribute('aria-checked', String(on));
-      pill.classList.toggle('is-on', on);
-      word.textContent = on ? pill.dataset.on : off;
+    for (const link of menu.querySelectorAll('a[href^="#"]')) link.addEventListener('click', () => (menu.open = false));
+    document.addEventListener('click', (event) => {
+      if (menu.open && !menu.contains(event.target)) menu.open = false;
     });
   }
 })();
