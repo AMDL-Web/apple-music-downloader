@@ -23,6 +23,10 @@ import (
 // growLand is the q at which a page going back into its cover has landed.
 const growLand = 0.002
 
+// growFold is the q by which a page going back has folded its surface into
+// the flying cover, which then goes on alone to land.
+const growFold = 0.3
+
 // growsFrom reports whether a page opened from from grows out of its cover.
 func growsFrom(from string) bool { return from != "" && !strings.HasPrefix(from, "hero:") }
 
@@ -53,7 +57,8 @@ func smoothstep(a, b, x float32) float32 {
 // where the flying cover is. The flying cover goes on q from the cover the
 // page opened from (the last box it was seen at) to the page's (the last
 // place it was laid out); the surface goes on q from the part of the cover
-// clicked its list shows to the whole column.
+// clicked its list shows to the whole column. Going back it folds sooner,
+// into the flying cover by growFold, so the cover lands without it.
 func (f *flight) growBox(main ui.Rect) (box ui.Rect, radius float32, page ui.Rect) {
 	full := ui.Rect{W: main.W, H: main.H}
 	if !f.growing() {
@@ -82,8 +87,20 @@ func (f *flight) growBox(main ui.Rect) (box ui.Rect, radius float32, page ui.Rec
 	shown := from
 	shown.X, shown.Y = shown.X-main.X, shown.Y-main.Y+f.growClipTop
 	shown.H = max(0, shown.H-f.growClipTop-f.growClipBottom)
-	box = ui.Rect{X: lerp(shown.X, 0, q), Y: lerp(shown.Y, 0, q), W: lerp(shown.W, full.W, q), H: lerp(shown.H, full.H, q)}
-	return box, lerp(f.growRadius, 0, unit(q)), page
+	open, radius := q, lerp(f.growRadius, 0, unit(q))
+	if f.out {
+		// The flying cover, cut as far as it still is, and the surface on
+		// what is left of q above growFold.
+		shown = cover
+		if cut := 1 - unit(q); cut > 0 {
+			shown.Y += f.growClipTop * cut
+			shown.H = max(0, shown.H-(f.growClipTop+f.growClipBottom)*cut)
+		}
+		open = unit((q - growFold) / (1 - growFold))
+		radius = lerp(lerp(f.growRadius, f.growToRadius, unit(q)), 0, open)
+	}
+	box = ui.Rect{X: lerp(shown.X, 0, open), Y: lerp(shown.Y, 0, open), W: lerp(shown.W, full.W, open), H: lerp(shown.H, full.H, open)}
+	return box, radius, page
 }
 
 // growSurface builds the album page as the surface it grows on: over the

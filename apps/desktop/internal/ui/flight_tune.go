@@ -39,7 +39,7 @@ type tuneFilmRun struct {
 }
 
 // tuneDefaults are the values the maintainer chose in the app.
-var tuneDefaults = motionTune{In: 300, Out: 320, Bounce: 0.05, Blur: 8, Dim: 0.38, Text: 0.38, Slow: 1}
+var tuneDefaults = motionTune{In: 300, Out: 380, Bounce: 0.05, Blur: 8, Dim: 0.38, Text: 0.47, Slow: 1}
 
 func tunePath() string {
 	dir, err := os.UserConfigDir()
