@@ -128,7 +128,9 @@ const API_LINES = [
   "$ curl -X POST http://nas.local:18080/api/v1/downloads \\",
   "    -H 'Content-Type: application/json' \\",
   `    -d '{"urls":["https://music.apple.com/us/album/glass-weather/920001"]}'`,
-  '$ curl -N http://nas.local:18080/api/v1/downloads/events',
+  '{"accepted":1,"rejected":0,"results":[{"status":"accepted","job":{"id":"job_7f3a…",…}}]}',
+  '',
+  '$ curl -N http://nas.local:18080/api/v1/downloads/{job_id}/events',
 ];
 
 // Loopback and LAN addresses: the pages must not show one.

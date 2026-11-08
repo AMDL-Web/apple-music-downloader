@@ -378,7 +378,7 @@ export function cliSession(label) {
     `<span class="tl"><span class="dim">{</span><span class="k">"type"</span><span class="dim">:</span><span class="s">"job_snapshot"</span><span class="dim">,</span><span class="k">"job"</span><span class="dim">:{</span><span class="k">"status"</span><span class="dim">:</span><span class="s">"completed"</span><span class="dim">,…}}</span></span>`,
     p('amdl jobs list --status failed --fields id,title,status'),
     o('{'),
-    `<span class="tl"><span class="k">  "jobs"</span><span class="dim">: [</span></span>`,
+    `<span class="tl"><span class="k">  "downloads"</span><span class="dim">: [</span></span>`,
     `<span class="tl"><span class="dim">    { </span><span class="k">"id"</span><span class="dim">: </span><span class="s">"job_4d1e…"</span><span class="dim">, </span><span class="k">"title"</span><span class="dim">: </span><span class="s">"Low Tide Signals"</span><span class="dim">, </span><span class="k">"status"</span><span class="dim">: </span><span class="s">"failed"</span><span class="dim"> }</span></span>`,
     o('  ], …'),
     o('}'),

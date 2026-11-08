@@ -75,7 +75,7 @@
       ],
       [
         "功能",
-        "搜索、专辑页、队列、资料库、你的 Apple Music 资料库、账号和 hook。把链接拖进窗口就能下载。"
+        "搜索、专辑页、队列、资料库、你的 Apple Music 资料库、账号和 hook。把链接拖进窗口就能下载。；设置 › 连接里可以更新、停止或卸载它自己跑的 wrapper"
       ],
       [
         "状态",
@@ -98,11 +98,11 @@
     "index": "02",
     "kicker": "网页控制台",
     "title": "服务器自带的页面，浏览器打开就能用。",
-    "lead": "`amdl serve` 把控制台和 API 放在同一个端口上。把它跑在 NAS、Docker 主机或者桌子底下那台机器上，局域网里的手机和电脑都能打开，那边什么都不用装。",
+    "lead": "`amdl serve` 把控制台和 API 放在同一个端口上。跑在 NAS 或 Docker 主机上，局域网里的手机、笔记本打开浏览器就能用，不用另装任何东西；跑在自己电脑上时，它只监听本机回环地址。",
     "facts": [
       [
         "启动",
-        "`amdl serve`、`amdl service install` 或 Docker 镜像，然后打开 `http://<主机>:18080/`"
+        "`amdl serve`（默认只在本机的 18080 端口，可用 `server.listen` 改），`amdl service install`（地址用 `amdl service status` 查看），或 Docker 镜像（端口 18080）"
       ],
       [
         "页面",
@@ -110,7 +110,7 @@
       ],
       [
         "设置",
-        "用两步验证登录 Apple Music，每个配置项都能改，有保存栏和重启按钮，还有 hook 编辑器"
+        "用两步验证登录 Apple Music；改配置有保存栏和重启按钮（少数几项只能改文件）；还有 hook 编辑器"
       ],
       [
         "适配",
@@ -165,7 +165,7 @@
       "facts": [
         [
           "命令",
-          "`search`、`download`、`jobs`、`library`、`apple-library`、`accounts`、`hooks`、`config`、`wrapper`、`logs`、`system`"
+          "`search`、`download`、`jobs`、`library`、`apple-library`、`accounts`、`hooks`、`config`、`wrapper`、`logs`、`system` 等。连哪台服务器由 `--server`、`AMDL_URL` 或 `amdl context add` 存下的上下文决定"
         ],
         [
           "安全",
@@ -210,12 +210,12 @@
     },
     "api": {
       "title": "HTTP API",
-      "text": "REST 和 Server-Sent Events 都在 `/api/v1` 下，和控制台同一个端口。OpenAPI 3.1 规范就在仓库里，所有错误格式一致，事件流断开后能接着上次的位置继续。",
+      "text": "REST 和 Server-Sent Events 都在 `/api/v1` 下，和控制台同一个端口。OpenAPI 3.1 规范就在仓库里，所有错误格式一致，事件流断开后能接着上次的位置继续。响应不带 CORS 头：控制台是 API 唯一的浏览器客户端。",
       "doc": "API 参考"
     },
     "hooks": {
       "title": "Hook",
-      "text": "任务入队、完成、失败或取消时，调用一个 webhook 或者运行一条命令。预设模板填好了 ntfy、Bark、Telegram 通知，以及 Plex、Jellyfin、Emby 的资料库刷新；会自动重试的失败，通知要等到不再重试时才发。",
+      "text": "任务入队、完成、失败或取消时，调用一个 webhook 或者运行一条命令。预设模板填好了 ntfy、Bark、Telegram 通知，以及 Plex、Jellyfin、Emby 的资料库刷新；会自动重试的失败，通知要等到不再重试时才发。「测试」会用示例数据发一次；请求体是套在数据上的 Go 模板；命令类 hook 只能在文件里改。",
       "label": "控制台的 Settings › Hooks：运行 hook 的总开关，以及用来新建 hook 的预设",
       "doc": "自动化说明"
     }
@@ -231,12 +231,12 @@
     },
     "records": {
       "term": "记录",
-      "text": "每张专辑和歌单都按曲目、按音质记录。失败的曲目会在之后的运行里重试，先等 30 分钟，再等 2 小时，直到放弃。可以暂停、继续、重新下载、加一种音质另存一份，或者检查硬盘上有哪些文件不见了。",
+      "text": "每张专辑和歌单都按曲目、按音质记录。失败的曲目会在之后的运行里重试，先等 30 分钟，再等 2 小时，直到放弃。可以暂停、继续、重新下载（也可以只重下歌词或封面）、加一种音质另存一份，或者检查硬盘上有哪些文件不见了：要是一半以上都找不到，检查会自己停下，免得没挂载的共享盘把整个资料库都标成丢失。",
       "label": "一条记录里的十二首曲目：十首已下载，一首等待重试，一首文件丢失"
     },
     "library": {
       "term": "同一个资料库",
-      "text": "单曲、专辑和艺人共用一棵文件夹树，按模板排列；歌单和电台各有自己的文件夹。已经放在对应位置的文件会直接收录，不会重新下载。"
+      "text": "单曲、专辑和艺人共用一棵文件夹树，按模板排列；歌单和电台各有自己的文件夹。已经放在对应位置的文件会直接收录，不会重新下载，除非打开了 `download.overwrite_existing`。"
     },
     "accounts": {
       "term": "账号",
@@ -244,7 +244,7 @@
     },
     "wrapper": {
       "term": "wrapper",
-      "text": "你的 Apple 登录状态留在 wrapper 里，不在 amdl 里。可以用 wrapper-manager v2（最多十个账号）或单个 wrapper-lite，也可以让 `amdl wrapper install` 帮你运行一个：Linux x86_64 上原生运行，macOS、Windows 和 arm64 上跑在 QEMU 虚拟机里。放在网关后面的 wrapper 可以设 `wrapper.token`，还有现成的 Cloudflare 模板。"
+      "text": "amdl 自己不持有 Apple 账号，登录状态留在 wrapper 里。可以用 wrapper-manager v2（最多十个账号）或单个 wrapper-lite，也可以让 `amdl wrapper install` 在本机跑一个：Linux x86_64 上有用户命名空间就原生运行，其他平台跑在 QEMU 虚拟机里（Apple Silicon 上是纯软件模拟，Windows on ARM 不支持），另有 `update`、`start`、`stop`、`logs`、`uninstall` 管理它。放在网关后面的 wrapper 用 `wrapper.token` 鉴权（`amdl wrapper keygen` 生成），仓库里有 Cloudflare 模板；中国大陆屏蔽了 `workers.dev`，请绑定自己的域名。"
     },
     "lyrics": {
       "term": "歌词与封面",
@@ -252,7 +252,7 @@
     },
     "sync": {
       "term": "资料库同步",
-      "text": "在手机上把一首歌加进 Apple Music 资料库，家里就会下载它所在的整张专辑：amdl 每 15 分钟检查一次你开启了同步的账号。它还能浏览你 Apple Music 资料库的一份本地副本。"
+      "text": "在手机上把一首歌加进 Apple Music 资料库，家里就会下载它所在的整张专辑：amdl 每 15 分钟检查一次你开启了同步的账号。同步默认关闭，开启时从资料库的现状算起，不会把以前的都补下一遍。它还能浏览你 Apple Music 资料库的本地副本，没有目录链接的歌单则逐首下载。"
     }
   },
   "more": {
@@ -266,6 +266,9 @@
           "单曲、专辑、歌单（包括分享出来的 `pl.u-` 歌单）、艺人和电台，来自 music.apple.com 和 classical.music.apple.com",
           "一次最多 100 个链接；`amdl download -` 从 stdin 读取",
           "下载之前可以先预览、查看能下的音质",
+          "电台是滚动的列表：下载的是 Apple 当下给出的曲目，不是固定曲目表",
+          "带 `?i=` 的专辑链接只下载那一首（`catalog.album_track_url_mode` 可以改成整张专辑）；艺人链接会加入所有专辑，也可以只要专辑、不要单曲",
+          "用 `--storefront` 搜索其他地区的曲库",
           "不支持：MV，以及 Apple Music 1 这样的直播电台"
         ]
       },
@@ -274,16 +277,19 @@
         "items": [
           "拖动、在终端界面里按 shift+↑↓，或者用 `amdl jobs move` 调整顺序；“立即下载”可以插队",
           "默认同时跑三个任务、十六路并行传输，都可以调整",
-          "重启后任务接着跑，中断的传输会续传"
+          "重启后任务接着跑，中断的传输会续传",
+          "加入失败的条目会一直挂在待处理里，直到你重试或删除"
         ]
       },
       {
         "title": "你的文件",
         "items": [
+          "二进制安装时文件存到 `~/Music/AMDL`（Windows 是 `%UserProfile%\\Music\\AMDL`），Docker 存到 `./data/downloads`",
           "解密后的完整曲目不会落盘：样本直接送进 ffmpeg",
           "每首曲目下载完都做完整性检查",
           "重新下载时，新文件完整写好才替换旧文件",
-          "遵守 Apple 的限流，Apple 要求时会暂停一会儿"
+          "遵守 Apple 的限流，Apple 要求时会暂停一会儿",
+          "改了语言或路径模板，或者 Apple 改了专辑名，旧路径下的文件就会算作缺失"
         ]
       },
       {
@@ -292,7 +298,9 @@
           "`amdl service install` 让后端登录后自动启动：LaunchAgent、systemd 用户单元或任务计划程序",
           "模拟模式不需要 wrapper 和 ffmpeg 就能跑完整个流程，方便先试试",
           "设置改完立即生效；少数需要重启的，在控制台里一键重启",
-          "最近的日志，在控制台里实时看，或者用 `amdl logs tail`"
+          "最近的日志，在控制台里实时看，或者用 `amdl logs tail`",
+          "下载统计在概览页，或者用 `amdl system stats`",
+          "升级就是再跑一遍安装脚本，新版本起不来会自动换回旧的；卸载用 `amdl service uninstall` 和 `amdl wrapper uninstall --purge`"
         ]
       },
       {
@@ -313,14 +321,25 @@
         "title": "从 1.x 升级",
         "items": [
           "第一次启动时数据库自动迁移；先备份，迁移后 1.x 就读不了了",
-          "镜像、wrapper 和路径设置都变了：[升级指南]({blob}/docs/upgrading-to-2.0.md)里有完整清单"
+          "镜像、wrapper 和路径设置都变了：[升级指南]({blob}/docs/upgrading-to-2.0.md)里有完整清单",
+          "1.x 存在 `songs/`、`albums/`、`artists/` 下的文件不会被移动，也不会被认出来，再要一次就会重新下载",
+          "1.x 里排队或正在跑的任务会变成暂停的待加入条目；环境变量也不再能设置配置项"
         ]
       },
       {
         "title": "语言",
         "items": [
           "各个应用的界面是英文；曲名、流派和歌词翻译跟随 `catalog.language`",
+          "`catalog.language` 默认是简体中文（`zh-Hans_CN`）：请在第一次下载前定好，之后再改，新下载的文件名就会跟着变",
           "本站和 README 有英文和简体中文两版"
+        ]
+      },
+      {
+        "title": "注意事项",
+        "items": [
+          "电台、资料库同步、浏览 Apple Music 资料库和私有歌单封面，都需要 wrapper 提供各账号的 media-user-token，AMDL-Web 的 fork 提供了",
+          "wrapper-lite 不校验 Apple 的 TLS 证书",
+          "控制台会播放 Apple 的动态专辑封面；`catalog.motion_artwork_enabled` 可以关掉这项查询"
         ]
       }
     ]
@@ -329,7 +348,7 @@
     "index": "07",
     "kicker": "安装",
     "title": "几分钟就能跑起来。",
-    "lead": "你需要 Apple Music 订阅，和一个 wrapper：保管你 Apple Music 登录状态的服务。wrapper 可以跑在一台 Linux 机器上，也可以交给 amdl 在你自己电脑上运行：Linux x86_64 上原生运行，其他系统在 QEMU 虚拟机里。",
+    "lead": "你需要一个 Apple Music 订阅，以及一个 wrapper：保管你 Apple Music 登录状态的服务。wrapper 可以跑在一台 Linux 机器上，也可以让 amdl 在你自己的电脑上跑：Linux x86_64 上原生运行，其他系统跑在 QEMU 虚拟机里（Windows on ARM 除外）。",
     "tabs": {
       "binary": "二进制",
       "docker": "Docker"
@@ -346,7 +365,7 @@
         },
         {
           "title": "准备 wrapper",
-          "text": "这条命令会下载 AMDL-Web 发布的 wrapper 虚拟机，并按固定的哈希校验；Linux x86_64 上 wrapper 原生运行，其他系统需要 QEMU，没装会提示你安装。已经在 NAS 或服务器上跑着 wrapper 的话，跳过这一步。"
+          "text": "它会下载 AMDL-Web 发布的 wrapper 镜像，并按固定的哈希校验。在 `unshare -Ur true` 能成功的 Linux x86_64 上原生运行；其他平台需要 QEMU，macOS 和 Windows 上它会提出替你安装，Linux 上则打印安装用的包管理命令。NAS 或服务器上已经有 wrapper 了？跳过这一步。"
         },
         {
           "title": "运行后端",
@@ -366,7 +385,7 @@
         },
         {
           "title": "一起启动",
-          "text": "Compose 会从 v2 分支构建 wrapper-manager，所以主机要能上网。"
+          "text": "Compose 会从 AMDL-Web 维护的 wrapper fork 的 `amdl` 分支构建 wrapper-manager，所以主机需要能联网。"
         },
         {
           "title": "连上 wrapper，然后登录",
@@ -380,7 +399,7 @@
       "link": "wrapper 部署说明"
     },
     "more": "两种方式的全部选项，见[安装指南]({blob}/docs/install.md)和[部署指南]({blob}/docs/deployment.md)。从 1.x 升级的话，先读[升级到 2.0]({blob}/docs/upgrading-to-2.0.md)。",
-    "prerelease": "2.0.0 正式发布之前，脚本和 `latest` 镜像指向的仍是旧版本：给脚本加上 2.0 候选版本的标签，用 `--version`（Windows 上是 `-Version`），Compose 文件里也把 `latest` 换成这个标签。Homebrew 和 Scoop 从 2.0.1 开始提供。"
+    "prerelease": "2.0.0 正式发布之前，脚本和 `latest` 镜像指向的仍是旧版本：给脚本加上 2.0 候选版本的标签，用 `--version`（Windows 上是 `-Version`），Compose 文件里也把 `latest` 换成这个标签。Homebrew 和 Scoop 从 2.0.1 开始提供。rc.1 到 rc.7 写下的数据库打不开，把它移走后会从空库开始。"
   },
   "notice": "AMDL 需要你自己的 Apple Music 订阅，仅供个人使用：每个安装只服务一个人。它依赖 Apple 未公开的网页播放器接口，接口随时可能变化。",
   "footer": {
