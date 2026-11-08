@@ -1,0 +1,15 @@
+{
+  "name": "amdl-console-e2e",
+  "private": true,
+  "description": "Browser tests of the web console (Playwright) over the in-memory demo backend.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:docker": "./docker.sh",
+    "test:update": "./docker.sh --update-snapshots"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.0"
+  }
+}

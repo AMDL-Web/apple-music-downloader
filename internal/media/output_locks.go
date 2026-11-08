@@ -23,10 +23,6 @@ type outputLockEntry struct {
 
 var processOutputLocks outputLockTable
 
-func (t *outputLockTable) acquire(path string) (func(), error) {
-	return t.acquireContext(context.Background(), path)
-}
-
 // acquireContext is cancellation-aware so a cancelled job waiting behind a
 // writer of the same output does not remain stuck until that writer finishes.
 func (t *outputLockTable) acquireContext(ctx context.Context, path string) (func(), error) {
@@ -86,8 +82,9 @@ func canonicalOutputPath(path string) (string, error) {
 	abs = filepath.Clean(abs)
 	// Resolve directory aliases, but deliberately do not follow a symlink at
 	// the final filename. Finalization replaces that directory entry; following
-	// it would make the lock key change as soon as force cleanup removed the
-	// symlink, allowing another writer to bypass the existing waiter queue.
+	// it would make the lock key change as soon as a replacing commit swapped
+	// the symlink for a file, allowing another writer to bypass the existing
+	// waiter queue.
 	name := filepath.Base(abs)
 	current := filepath.Dir(abs)
 	var missing []string
@@ -110,3 +107,41 @@ func canonicalOutputPath(path string) (string, error) {
 		current = parent
 	}
 }
+
+// outputLease holds the process-wide lock on one codec attempt's output path.
+// Once the concrete path is known it is kept through the existence/force
+// check, retries, sidecar writes and the final commit, so one job's forced
+// replacement or cleanup never touches another job's in-flight or newly
+// committed output.
+type outputLease struct {
+	key    string
+	unlock func()
+}
+
+// acquire takes the lock for path, keeping a lock already held on the same
+// canonical path and releasing one held on a different path.
+func (l *outputLease) acquire(ctx context.Context, path string) error {
+	key, err := canonicalOutputPath(path)
+	if err != nil {
+		return fmt.Errorf("canonicalize output path: %w", err)
+	}
+	if l.unlock != nil && key == l.key {
+		return nil
+	}
+	l.release()
+	unlock, err := processOutputLocks.acquireContext(ctx, path)
+	if err != nil {
+		return err
+	}
+	l.key, l.unlock = key, unlock
+	return nil
+}
+
+func (l *outputLease) release() {
+	if l.unlock != nil {
+		l.unlock()
+		l.unlock, l.key = nil, ""
+	}
+}
+
+func (l *outputLease) held() bool { return l.unlock != nil }

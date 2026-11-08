@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// tempArtifactPrefixes are the basename prefixes of the scratch files and
-// directories the downloader creates under Download.TempDir: legacy encrypted
-// downloads (raw-), streamed decrypt output (dec-), flattened/tagged staging
-// files (flat-), and ffmpeg working dirs (fix-, check-). Resumable encrypted
-// downloads use the separate resume- prefix and intentionally survive startup
-// cleanup so RecoverUnfinished can continue them.
+// tempArtifactPrefixes are the basename prefixes of scratch files and
+// directories under Download.TempDir: the flattened/tagged staging files the
+// pipeline creates (flat-), and leftovers of earlier builds (raw- encrypted
+// downloads, dec- decrypt output, fix- and check- ffmpeg working dirs).
+// Resumable encrypted downloads use the separate resume- prefix and
+// intentionally survive startup cleanup so RecoverUnfinished can continue them.
 var tempArtifactPrefixes = []string{"raw-", "dec-", "flat-", "fix-", "check-"}
 
 // CleanupStaleTemp removes leftover downloader scratch files and directories
@@ -56,4 +56,39 @@ func hasTempArtifactPrefix(name string) bool {
 		}
 	}
 	return false
+}
+
+// CleanupStaleResume removes the resume checkpoint folders under dir whose
+// owner is not in owners: a record deleted, or a one-off run gone, while the
+// server was down. Owners are what resumeOwner returns (the record's
+// "<kind>:<id>", or a station run's id). Removal errors are logged.
+func CleanupStaleResume(dir string, owners []string, logger *slog.Logger) {
+	if dir == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	live := make(map[string]bool, len(owners))
+	for _, owner := range owners {
+		live[filepath.Base(resumeOwnerDir(dir, owner))] = true
+	}
+	removed := 0
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), resumeOwnerPrefix) || live[entry.Name()] {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		if err := os.RemoveAll(path); err != nil {
+			if logger != nil {
+				logger.Warn("remove stale resume checkpoints", "path", path, "error", err)
+			}
+			continue
+		}
+		removed++
+	}
+	if removed > 0 && logger != nil {
+		logger.Info("cleaned resume checkpoints nothing resumes", "dir", dir, "count", removed)
+	}
 }

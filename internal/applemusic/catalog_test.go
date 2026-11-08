@@ -2,248 +2,41 @@ package applemusic
 
 import (
 	"context"
-	"io"
-	"log/slog"
+	"fmt"
 	"net/http"
 	"reflect"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"amdl/internal/config"
 )
 
-// Most catalog tests predate the startup request-pool settings and construct
-// only the fields relevant to the behavior under test. Give those fixtures a
-// fast gate explicitly; production still treats configured values <=0 as 1.
-func newTestCatalogClient(cfg config.CatalogConfig, logger *slog.Logger) *CatalogClient {
-	if cfg.MaxParallelRequests <= 0 {
-		cfg.MaxParallelRequests = 64
-	}
-	if cfg.RequestsPerSecond <= 0 {
-		cfg.RequestsPerSecond = 64
-	}
-	if cfg.RequestBurst <= 0 {
-		cfg.RequestBurst = 64
-	}
-	return NewCatalogClient(cfg, logger)
-}
-
-func TestFormatArtworkURL(t *testing.T) {
-	raw := "https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"
-	got := formatArtworkURL(raw, "jpg", "1400x1400")
-	want := "https://is1-ssl.mzstatic.com/image/thumb/foo/1400x1400bb.jpg"
-	if got != want {
-		t.Fatalf("formatArtworkURL() = %q, want %q", got, want)
-	}
-}
-
-type closeTrackingBody struct {
-	io.Reader
-	closed bool
-}
-
-func (b *closeTrackingBody) Close() error {
-	b.closed = true
-	return nil
-}
-
-func TestAppleRequestRetries429OnceAndClosesFirstBody(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{
-		MaxParallelRequests: 2, RequestsPerSecond: 1000, RequestBurst: 1000,
-	}, slog.Default())
-	firstBody := &closeTrackingBody{Reader: strings.NewReader("limited")}
-	calls := 0
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		calls++
-		if calls == 1 {
-			return &http.Response{StatusCode: http.StatusTooManyRequests, Status: "429 Too Many Requests", Header: make(http.Header), Body: firstBody}, nil
-		}
-		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}, nil
-	})}
-	client.retryDelay = func(http.Header) time.Duration { return 30 * time.Millisecond }
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.music.apple.com/test", nil)
-	started := time.Now()
-	resp, err := client.doAppleRequest(context.Background(), req, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if calls != 2 {
-		t.Fatalf("calls = %d, want exactly one retry", calls)
-	}
-	if !firstBody.closed {
-		t.Fatal("first 429 body was not closed before retry")
-	}
-	if elapsed := time.Since(started); elapsed < 20*time.Millisecond {
-		t.Fatalf("retry began after %v, want shared cooldown delay", elapsed)
-	}
-}
-
-func TestAppleRequestReturnsSecond429(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{
-		MaxParallelRequests: 2, RequestsPerSecond: 1000, RequestBurst: 1000,
-	}, slog.Default())
-	calls := 0
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		calls++
-		return &http.Response{StatusCode: http.StatusTooManyRequests, Status: "429 Too Many Requests", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("limited"))}, nil
-	})}
-	client.retryDelay = func(http.Header) time.Duration { return 0 }
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.music.apple.com/test", nil)
-	resp, err := client.doAppleRequest(context.Background(), req, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusTooManyRequests || calls != 2 {
-		t.Fatalf("status=%d calls=%d, want second 429 returned after 2 calls", resp.StatusCode, calls)
-	}
-}
-
-func TestAppleRequestRateAppliesOnlyToAuthenticatedAPI(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{
-		MaxParallelRequests: 2, RequestsPerSecond: 1, RequestBurst: 1,
-	}, slog.Default())
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}, nil
-	})}
-	req, _ := http.NewRequest(http.MethodGet, "https://api.music.apple.com/first", nil)
-	resp, err := client.doAppleRequest(context.Background(), req, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	req, _ = http.NewRequestWithContext(ctx, http.MethodGet, "https://is1-ssl.mzstatic.com/cover", nil)
-	resp, err = client.doAppleRequest(ctx, req, false)
-	if err != nil {
-		t.Fatalf("non-authenticated Apple request was incorrectly rate limited: %v", err)
-	}
-	resp.Body.Close()
-
-	ctx, cancel = context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	req, _ = http.NewRequestWithContext(ctx, http.MethodGet, "https://api.music.apple.com/second", nil)
-	if _, err := client.doAppleRequest(ctx, req, true); err == nil {
-		t.Fatal("second authenticated request bypassed the exhausted rate bucket")
-	}
-}
-
-func TestRetryAfterParsing(t *testing.T) {
-	if got := defaultRetryDelay(http.Header{"Retry-After": []string{"3"}}); got != 3*time.Second {
-		t.Fatalf("delta Retry-After = %v, want 3s", got)
-	}
-	future := time.Now().Add(2 * time.Second).UTC().Format(http.TimeFormat)
-	got := defaultRetryDelay(http.Header{"Retry-After": []string{future}})
-	if got < 500*time.Millisecond || got > 2*time.Second {
-		t.Fatalf("date Retry-After = %v, want remaining duration", got)
-	}
-	got = defaultRetryDelay(make(http.Header))
-	if got < time.Second || got >= 1250*time.Millisecond {
-		t.Fatalf("missing Retry-After fallback = %v, want [1s, 1.25s)", got)
-	}
-}
-
-func TestReadLimitedRejectsOversizedUpstreamResponse(t *testing.T) {
-	if _, err := readLimited(strings.NewReader("12345"), 4); err == nil {
-		t.Fatal("readLimited accepted an upstream response larger than its limit")
-	}
-}
-
-func TestFormatArtworkURLPNG(t *testing.T) {
-	raw := "https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"
-	got := formatArtworkURL(raw, "png", "600x600")
-	want := "https://is1-ssl.mzstatic.com/image/thumb/foo/600x600bb.png"
-	if got != want {
-		t.Fatalf("formatArtworkURL() = %q, want %q", got, want)
-	}
-}
-
-func TestCoverSizeFallbacks(t *testing.T) {
-	got := coverSizeFallbacks("5000x5000")
-	if len(got) < 2 || got[0] != "5000x5000" {
-		t.Fatalf("coverSizeFallbacks() = %#v", got)
-	}
-}
-
-func TestFetchCoverFallsBackToSmallerSize(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{}, slog.Default())
-	raw := "https://is1-ssl.mzstatic.com/image/thumb/foo/{w}x{h}bb.jpg"
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if strings.Contains(req.URL.String(), "5000x5000") {
-			return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
-		}
-		if strings.Contains(req.URL.String(), "1400x1400") {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("cover-bytes")), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
-	})}
-
-	data, err := client.FetchCover(context.Background(), []string{raw}, "jpg", "5000x5000")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "cover-bytes" {
-		t.Fatalf("FetchCover() = %q", data)
-	}
-}
-
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+var enUS = config.CatalogConfig{Language: "en-US"}
 
 func TestSongRequestsAndMapsExtendedAssetURLs(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if got := req.URL.Query().Get("extend"); got != "extendedAssetUrls" {
-			t.Fatalf("extend query = %q, want extendedAssetUrls", got)
-		}
-		body := `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","extendedAssetUrls":{"enhancedHls":"https://example.test/master.m3u8"}},"relationships":{}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+	var extend string
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
+		extend = req.URL.Query().Get("extend")
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","extendedAssetUrls":{"enhancedHls":"https://example.test/master.m3u8"}},"relationships":{}}]}`)
+	})
 
 	song, err := client.Song(context.Background(), "cn", "123")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if extend != "extendedAssetUrls" {
+		t.Fatalf("extend query = %q, want extendedAssetUrls", extend)
 	}
 	if song.EnhancedHLS != "https://example.test/master.m3u8" {
 		t.Fatalf("EnhancedHLS = %q", song.EnhancedHLS)
 	}
 }
 
-func TestCatalogRequestErrorClassificationAndRetryAfter(t *testing.T) {
-	if !(catalogRequestError{statusCode: http.StatusNotFound}).NonRetryable() {
-		t.Fatal("404 should be non-retryable")
-	}
-	if (catalogRequestError{statusCode: http.StatusTooManyRequests}).NonRetryable() {
-		t.Fatal("429 should remain retryable")
-	}
-	now := time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC)
-	if got := parseRetryAfter("3", now); got != 3*time.Second {
-		t.Fatalf("delta Retry-After=%s, want 3s", got)
-	}
-	if got := parseRetryAfter(now.Add(5*time.Second).Format(http.TimeFormat), now); got != 5*time.Second {
-		t.Fatalf("date Retry-After=%s, want 5s", got)
-	}
-}
-
 func TestSongMetadataDoesNotFollowAlbumRelationship(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.Path)
-		body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album"},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":10}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album"},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":10}}]}}}]}`)
+	})
 
 	song, err := client.SongMetadata(context.Background(), "cn", "song-1")
 	if err != nil {
@@ -258,23 +51,15 @@ func TestSongMetadataDoesNotFollowAlbumRelationship(t *testing.T) {
 }
 
 func TestSongStillFollowsAlbumRelationshipForFullMetadata(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	serve := routes(map[string]string{
+		"/v1/catalog/cn/songs/song-1":   fixture(t, "catalog/song-1-in-album-1.json"),
+		"/v1/catalog/cn/albums/album-1": fixture(t, "catalog/album-1-two-tracks.json"),
+	})
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.Path)
-		switch req.URL.Path {
-		case "/v1/catalog/cn/songs/song-1":
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","trackNumber":1,"discNumber":1},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":2}}]}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		case "/v1/catalog/cn/albums/album-1":
-			body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":2,"artwork":{"url":"album-art"}},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist","url":"https://music.apple.com/cn/artist/album-artist/artist-1","artwork":{"url":"artist-art"}}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","trackNumber":1,"discNumber":1}},{"id":"song-2","type":"songs","attributes":{"name":"Two","trackNumber":2,"discNumber":1}}]}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		default:
-			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path")), Header: make(http.Header)}, nil
-		}
-	})}
+		return serve(req)
+	})
 
 	song, err := client.Song(context.Background(), "cn", "song-1")
 	if err != nil {
@@ -294,17 +79,13 @@ func TestSongStillFollowsAlbumRelationshipForFullMetadata(t *testing.T) {
 }
 
 func TestAlbumFallsBackToTheExtendedArtistURL(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
 	var extend string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		extend = req.URL.Query().Get("extend")
 		// Included artist without attributes.url — only the extended
 		// album attribute carries the page.
-		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","artistUrl":"https://music.apple.com/cn/artist/album-artist/artist-1","trackCount":1},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist"}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","trackNumber":1,"discNumber":1}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+		return jsonResponse(http.StatusOK, `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","artistUrl":"https://music.apple.com/cn/artist/album-artist/artist-1","trackCount":1},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist"}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","trackNumber":1,"discNumber":1}}]}}}]}`)
+	})
 
 	album, err := client.Album(context.Background(), "cn", "album-1")
 	if err != nil {
@@ -319,22 +100,15 @@ func TestAlbumFallsBackToTheExtendedArtistURL(t *testing.T) {
 }
 
 func TestAlbumFetchesAllTrackPages(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	serve := routes(map[string]string{
+		"/v1/catalog/cn/albums/album-1":        fixture(t, "catalog/album-paged.json"),
+		"/v1/catalog/cn/albums/album-1/tracks": fixture(t, "catalog/album-paged-tracks-offset-1.json"),
+	})
+	client := newTestClient(t, enUS, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.RequestURI())
-		if req.URL.Path == "/v1/catalog/cn/albums/album-1" {
-			body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":3},"relationships":{"artists":{"data":[{"id":"artist-1","attributes":{"name":"Album Artist","artwork":{"url":"artist-art"}}}]},"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist","albumName":"Album","trackNumber":1,"discNumber":1}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}}],"next":"/v1/catalog/cn/albums/album-1/tracks?offset=1"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		if req.URL.Path == "/v1/catalog/cn/albums/album-1/tracks" {
-			body := `{"data":[{"id":"song-2","type":"songs","attributes":{"name":"Two","artistName":"Artist","albumName":"Album","trackNumber":2,"discNumber":1}},{"id":"video-2","type":"music-videos","attributes":{"name":"Video Two"}},{"id":"song-3","type":"songs","attributes":{"name":"Three","artistName":"Artist","albumName":"Album","trackNumber":3,"discNumber":2}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
+		return serve(req)
+	})
 
 	album, err := client.Album(context.Background(), "cn", "album-1")
 	if err != nil {
@@ -351,17 +125,92 @@ func TestAlbumFetchesAllTrackPages(t *testing.T) {
 	}
 }
 
+// albumWithTracks is an album answer whose track relationship lists tracks,
+// each given as {id, type, trackNumber, discNumber}.
+func albumWithTracks(trackCount int, tracks ...[4]any) string {
+	list := ""
+	for i, track := range tracks {
+		if i > 0 {
+			list += ","
+		}
+		list += fmt.Sprintf(`{"id":%q,"type":%q,"attributes":{"name":"T","trackNumber":%d,"discNumber":%d}}`, track[0], track[1], track[2], track[3])
+	}
+	return fmt.Sprintf(`{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":%d},"relationships":{"tracks":{"data":[%s]}}}]}`, trackCount, list)
+}
+
+// TestAlbumTrackCounts pins the "track N of M" denominator.
+func TestAlbumTrackCounts(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           string
+		wantTrackCount []int
+		wantDiscCount  int
+		wantAlbumCount int
+	}{
+		{
+			// Apple's album trackCount is the whole release — a real 29+19
+			// two-disc album reports 48 — which would tag every track of both
+			// discs as N of 48. The music video is not downloadable and never
+			// becomes a track, so it is excluded from disc 1's total as well.
+			name: "multi-disc counts tracks per disc",
+			body: albumWithTracks(3,
+				[4]any{"song-1", "songs", 1, 1}, [4]any{"song-2", "songs", 2, 1},
+				[4]any{"video-1", "music-videos", 3, 1}, [4]any{"song-3", "songs", 1, 2}),
+			wantTrackCount: []int{2, 2, 1},
+			wantDiscCount:  2,
+		},
+		{
+			// [regression] A storefront that withholds songs from the
+			// relationship: counting the returned entries would report 2 for a
+			// disc whose numbering already reaches 3, so the total comes from
+			// Apple's trackNumber. Disc 1 track 2 and disc 2 track 1 are missing.
+			name: "withheld tracks infer disc totals from track numbers",
+			body: albumWithTracks(5,
+				[4]any{"song-1", "songs", 1, 1}, [4]any{"song-3", "songs", 3, 1}, [4]any{"song-5", "songs", 2, 2}),
+			wantTrackCount: []int{3, 3, 2},
+			wantDiscCount:  2,
+		},
+		{
+			// On a one-disc album Apple's count stays authoritative, because it
+			// still reports the full length when a storefront withholds
+			// individual tracks; the record's withheld_count is the difference.
+			name:           "single disc keeps Apple's track count",
+			body:           albumWithTracks(12, [4]any{"song-1", "songs", 1, 1}, [4]any{"song-2", "songs", 2, 1}),
+			wantTrackCount: []int{12, 12},
+			wantDiscCount:  1,
+			wantAlbumCount: 12,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newTestClient(t, enUS, func(*http.Request) *http.Response { return jsonResponse(http.StatusOK, tt.body) })
+			album, err := client.Album(context.Background(), "cn", "album-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []int
+			for _, track := range album.Tracks {
+				got = append(got, track.TrackCount)
+				if track.DiscCount != tt.wantDiscCount {
+					t.Errorf("track %s DiscCount = %d, want %d", track.ID, track.DiscCount, tt.wantDiscCount)
+				}
+			}
+			if !reflect.DeepEqual(got, tt.wantTrackCount) {
+				t.Fatalf("TrackCount per track = %v, want %v", got, tt.wantTrackCount)
+			}
+			if tt.wantAlbumCount != 0 && album.TrackCount != tt.wantAlbumCount {
+				t.Fatalf("album TrackCount = %d, want %d", album.TrackCount, tt.wantAlbumCount)
+			}
+		})
+	}
+}
+
 // TestAlbumDecodesArtworkColors pins the wire keys of the artwork palette
 // (bgColor/textColor1..4) so a mistyped JSON tag cannot silently drop the
 // colors from every collection.
 func TestAlbumDecodesArtworkColors(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","artwork":{"url":"album-art","bgColor":"1a1a1a","textColor1":"ffffff","textColor2":"eeeeee","textColor3":"cccccc","textColor4":"aaaaaa"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artwork":{"url":"song-art","bgColor":"0b0b0b","textColor1":"f1f1f1"}}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
+	body := fixture(t, "catalog/album-artwork-colors.json")
+	client := newTestClient(t, enUS, func(*http.Request) *http.Response { return jsonResponse(http.StatusOK, body) })
 
 	album, err := client.Album(context.Background(), "cn", "album-1")
 	if err != nil {
@@ -380,264 +229,27 @@ func TestAlbumDecodesArtworkColors(t *testing.T) {
 	}
 }
 
-func TestPlaylistFetchesAllTrackPages(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		paths = append(paths, req.URL.RequestURI())
-		if req.URL.Path == "/v1/catalog/cn/playlists/pl.1" {
-			body := `{"data":[{"id":"pl.1","type":"playlists","attributes":{"name":"Playlist","curatorName":"Curator","artwork":{"url":"playlist-art"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}],"next":"/v1/catalog/cn/playlists/pl.1/tracks?offset=1"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		if req.URL.Path == "/v1/catalog/cn/playlists/pl.1/tracks" {
-			body := `{"data":[{"id":"song-2","type":"songs","attributes":{"name":"Two","artistName":"Artist"}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}},{"id":"song-3","type":"songs","attributes":{"name":"Three","artistName":"Artist"}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
-
-	playlist, err := client.Playlist(context.Background(), "cn", "pl.1", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := trackIDs(playlist.Tracks), []string{"song-1", "song-2", "song-3"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("track IDs = %#v, want %#v", got, want)
-	}
-	if len(paths) != 2 || paths[1] != "/v1/catalog/cn/playlists/pl.1/tracks?offset=1" {
-		t.Fatalf("request paths = %#v", paths)
-	}
-}
-
-func TestPlaylistPrivateCoverFallsBackToLibraryArtwork(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	type seen struct{ mediaToken, include string }
-	var requests []seen
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		requests = append(requests, seen{req.Header.Get("Media-User-Token"), req.URL.Query().Get("include")})
-		body := `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Private","artwork":{"url":""}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]},"library":{"data":[{"id":"p.lib1","type":"library-playlists","attributes":{"name":"Private","artwork":{"url":"https://blob.example/image?sig=abc"}}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	playlist, err := client.Playlist(context.Background(), "cn", "pl.u-1", "media-token-xyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(requests) != 2 {
-		t.Fatalf("requests = %d, want 2 (plain fetch + library enrichment)", len(requests))
-	}
-	if requests[0].mediaToken != "" || requests[0].include != "" {
-		t.Fatalf("plain fetch leaked auth: %+v", requests[0])
-	}
-	if requests[1].mediaToken != "media-token-xyz" || requests[1].include != "library" {
-		t.Fatalf("enrichment request = %+v, want token + include=library", requests[1])
-	}
-	if playlist.ArtworkURL != "https://blob.example/image?sig=abc" {
-		t.Fatalf("ArtworkURL = %q, want library artwork", playlist.ArtworkURL)
-	}
-}
-
-func TestPlaylistLibraryArtworkOverridesCatalogMosaic(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	var calls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		calls++
-		body := `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Shared","artwork":{"url":"catalog-mosaic"}},"relationships":{"tracks":{"data":[]}}}]}`
-		if req.URL.Query().Get("include") == "library" {
-			body = `{"data":[{"id":"pl.u-1","type":"playlists","relationships":{"library":{"data":[{"id":"p.lib1","type":"library-playlists","attributes":{"artwork":{"url":"https://blob.example/correct-cover?X-Amz-Date=20260722T000000Z&X-Amz-Expires=3600"}}}]}}}]}`
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	playlist, err := client.Playlist(context.Background(), "cn", "pl.u-1", "media-token-xyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if playlist.ArtworkURL != "https://blob.example/correct-cover?X-Amz-Date=20260722T000000Z&X-Amz-Expires=3600" {
-		t.Fatalf("ArtworkURL = %q, want library artwork to override catalog mosaic", playlist.ArtworkURL)
-	}
-	if calls != 2 {
-		t.Fatalf("calls = %d, want 2 (catalog plus library enrichment)", calls)
-	}
-}
-
-func TestPlaylistPublicIDWithTokenSkipsEnrichment(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	var calls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		calls++
-		body := `{"data":[{"id":"pl.123","type":"playlists","attributes":{"name":"Editorial","artwork":{"url":""}},"relationships":{"tracks":{"data":[]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	playlist, err := client.Playlist(context.Background(), "cn", "pl.123", "media-token-xyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if calls != 1 {
-		t.Fatalf("calls = %d, want 1 (non-private ids never trigger enrichment)", calls)
-	}
-	if playlist.ArtworkURL != "" {
-		t.Fatalf("ArtworkURL = %q, want empty", playlist.ArtworkURL)
-	}
-}
-
-func TestPlaylistLibraryLookupFailureIsNonFatal(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	var calls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		calls++
-		if calls == 2 {
-			// Enrichment request rejected, e.g. an expired media-user-token.
-			return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"403"}]}`)), Header: make(http.Header)}, nil
-		}
-		body := `{"data":[{"id":"pl.u-1","type":"playlists","attributes":{"name":"Private","artwork":{"url":"catalog-mosaic"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	playlist, err := client.Playlist(context.Background(), "cn", "pl.u-1", "expired-token")
-	if err != nil {
-		t.Fatalf("playlist resolve must survive a failed artwork enrichment, got %v", err)
-	}
-	if calls != 2 {
-		t.Fatalf("calls = %d, want 2", calls)
-	}
-	if playlist.ArtworkURL != "catalog-mosaic" {
-		t.Fatalf("ArtworkURL = %q, want catalog fallback after failed enrichment", playlist.ArtworkURL)
-	}
-	if len(playlist.Tracks) != 1 {
-		t.Fatalf("tracks = %d, want 1", len(playlist.Tracks))
-	}
-}
-
-func TestPlaylistWithoutTokenSkipsLibraryInclude(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	var sawMediaToken bool
-	var gotInclude string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		sawMediaToken = req.Header.Get("Media-User-Token") != ""
-		gotInclude = req.URL.Query().Get("include")
-		body := `{"data":[{"id":"pl.1","type":"playlists","attributes":{"name":"Editorial","artwork":{"url":"catalog-art"}},"relationships":{"tracks":{"data":[]}}}]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-	})}
-
-	if _, err := client.Playlist(context.Background(), "cn", "pl.1", ""); err != nil {
-		t.Fatal(err)
-	}
-	if sawMediaToken || gotInclude != "" {
-		t.Fatalf("tokenless playlist request leaked auth: header=%v include=%q", sawMediaToken, gotInclude)
-	}
-}
-
-func TestStationTracksResolvesTracksFormat(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	var gotMediaToken string
-	var nextTracksMethod string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		switch req.URL.Path {
-		case "/v1/catalog/us/stations/ra.1":
-			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","isLive":false,"artwork":{"url":"station-art"},"playParams":{"format":"tracks"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		case "/v1/me/stations/next-tracks/ra.1":
-			gotMediaToken = req.Header.Get("Media-User-Token")
-			nextTracksMethod = req.Method
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}},{"id":"song-2","type":"songs","attributes":{"name":"Two","artistName":"Artist"}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
-
-	station, err := client.StationTracks(context.Background(), "us", "ra.1", "media-token-xyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if station.Type != TypeStation || station.Name != "My Station" || station.ArtworkURL != "station-art" {
-		t.Fatalf("station = %+v", station)
-	}
-	if got, want := trackIDs(station.Tracks), []string{"song-1", "song-2"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("track IDs = %#v, want %#v", got, want)
-	}
-	if gotMediaToken != "media-token-xyz" {
-		t.Fatalf("Media-User-Token header = %q", gotMediaToken)
-	}
-	if nextTracksMethod != http.MethodPost {
-		t.Fatalf("next-tracks method = %q, want POST", nextTracksMethod)
-	}
-}
-
-func TestStationTracksRejectsLiveStream(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/us/stations/ra.live" {
-			body := `{"data":[{"id":"ra.live","type":"stations","attributes":{"name":"Apple Music 1","isLive":true,"playParams":{"format":"stream"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		t.Fatalf("unexpected request to %s (live station must not hit next-tracks)", req.URL.RequestURI())
-		return nil, nil
-	})}
-
-	if _, err := client.StationTracks(context.Background(), "us", "ra.live", "media-token-xyz"); err == nil {
-		t.Fatal("expected live station to be rejected")
-	}
-}
-
-func TestStationTracksRequiresMediaUserToken(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/us/stations/ra.1" {
-			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","playParams":{"format":"tracks"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		t.Fatalf("unexpected request to %s (missing token must not hit next-tracks)", req.URL.RequestURI())
-		return nil, nil
-	})}
-
-	if _, err := client.StationTracks(context.Background(), "us", "ra.1", "  "); err == nil {
-		t.Fatal("expected missing media_user_token to be rejected")
-	}
-}
-
 func TestArtistAlbumsFetchesIncludedAlbumsAndNextPages(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
 	var paths []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	var include string
+	serve := routes(map[string]string{
+		"/v1/catalog/cn/artists/artist-1":        fixture(t, "catalog/artist-with-albums.json"),
+		"/v1/catalog/cn/artists/artist-1/albums": fixture(t, "catalog/artist-albums-offset-2.json"),
+	})
+	client := newTestClient(t, config.CatalogConfig{Language: "zh-Hans_CN"}, func(req *http.Request) *http.Response {
 		paths = append(paths, req.URL.RequestURI())
 		if req.URL.Path == "/v1/catalog/cn/artists/artist-1" {
-			if got := req.URL.Query().Get("include"); got != "albums" {
-				t.Fatalf("include query = %q, want albums", got)
-			}
-			body := `{"data":[{"id":"artist-1","type":"artists","attributes":{"name":"Artist","artwork":{"url":"artist-art"}},"relationships":{"albums":{"data":[{"id":"album-1","type":"albums","attributes":{"name":"First","artistName":"Artist","artwork":{"url":"first-art"},"releaseDate":"2024-01-01","trackCount":2}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}},{"id":"album-2","type":"albums","attributes":{"name":"Second","artistName":"Artist","artwork":{"url":"second-art"},"releaseDate":"2024-02-01","trackCount":1}}],"next":"/v1/catalog/cn/artists/artist-1/albums?offset=2"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			include = req.URL.Query().Get("include")
 		}
-		if req.URL.Path == "/v1/catalog/cn/artists/artist-1/albums" {
-			body := `{"data":[{"id":"album-2","type":"albums","attributes":{"name":"Second Duplicate","artistName":"Artist"}},{"id":"album-3","type":"albums","attributes":{"name":"Third","artistName":"Artist","artwork":{"url":"third-art"},"releaseDate":"2024-03-01","trackCount":3}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected path: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
+		return serve(req)
+	})
 
 	artist, err := client.ArtistAlbums(context.Background(), "cn", "artist-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if include != "albums" {
+		t.Fatalf("include query = %q, want albums", include)
 	}
 	if artist.ID != "artist-1" || artist.Name != "Artist" || artist.ArtworkURL != "artist-art" {
 		t.Fatalf("artist metadata = %+v, want id/name/artwork from artist payload", artist.Artist)
@@ -653,444 +265,19 @@ func TestArtistAlbumsFetchesIncludedAlbumsAndNextPages(t *testing.T) {
 	}
 }
 
-func trackIDs(tracks []Song) []string {
-	out := make([]string, 0, len(tracks))
-	for _, track := range tracks {
-		out = append(out, track.ID)
-	}
-	return out
-}
-
-func albumIDs(albums []Collection) []string {
-	out := make([]string, 0, len(albums))
-	for _, album := range albums {
-		out = append(out, album.ID)
-	}
-	return out
-}
-
-func TestCacheUntilIsHalfLife(t *testing.T) {
-	now := time.Unix(1_700_000_000, 0)
-	tests := []struct {
-		name string
-		ttl  time.Duration
-	}{
-		{"signed 24h internal ttl", internalDeveloperTokenTTL},
-		{"legacy 12h default", 12 * time.Hour},
-		{"legacy custom 6h", 6 * time.Hour},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cacheUntil(now, tt.ttl)
-			want := now.Add(tt.ttl / 2)
-			if !got.Equal(want) {
-				t.Fatalf("cacheUntil(%v, %v) = %v, want %v", now, tt.ttl, got, want)
-			}
-		})
-	}
-}
-
-func TestInitDeveloperTokenCachesForHalfTheSignedLifetime(t *testing.T) {
-	path, _ := writeP8Key(t)
-	cfg := config.CatalogConfig{
-		AppleMusicPrivateKeyPath: path,
-		AppleMusicKeyID:          "KID1234567",
-		AppleMusicTeamID:         "TEAM123456",
-	}
-	client := newTestCatalogClient(cfg, slog.Default())
-
-	before := time.Now()
-	if err := client.InitDeveloperToken(); err != nil {
-		t.Fatalf("InitDeveloperToken: %v", err)
-	}
-	after := time.Now()
-
-	minUntil := before.Add(internalDeveloperTokenTTL / 2)
-	maxUntil := after.Add(internalDeveloperTokenTTL / 2)
-	if client.tokenUntil.Before(minUntil) || client.tokenUntil.After(maxUntil) {
-		t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v, not exp-5m)", client.tokenUntil, minUntil, maxUntil, internalDeveloperTokenTTL)
-	}
-}
-
-func TestTokenRefreshUsesHalfLifeForBothModes(t *testing.T) {
-	t.Run("signed", func(t *testing.T) {
-		path, _ := writeP8Key(t)
-		cfg := config.CatalogConfig{
-			AppleMusicPrivateKeyPath: path,
-			AppleMusicKeyID:          "KID1234567",
-			AppleMusicTeamID:         "TEAM123456",
-		}
-		client := newTestCatalogClient(cfg, slog.Default())
-		client.signer, _ = newDeveloperTokenSigner(path, "KID1234567", "TEAM123456")
-		// Force a refresh by expiring the cached token.
-		client.token = "stale"
-		client.tokenUntil = time.Now().Add(-time.Minute)
-
-		before := time.Now()
-		if _, err := client.Token(context.Background()); err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-		after := time.Now()
-
-		minUntil := before.Add(internalDeveloperTokenTTL / 2)
-		maxUntil := after.Add(internalDeveloperTokenTTL / 2)
-		if client.tokenUntil.Before(minUntil) || client.tokenUntil.After(maxUntil) {
-			t.Fatalf("tokenUntil = %v, want within [%v, %v]", client.tokenUntil, minUntil, maxUntil)
-		}
-	})
-
-	t.Run("legacy", func(t *testing.T) {
-		client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
-		client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() == "https://music.apple.com" {
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-			}
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		})}
-
-		before := time.Now()
-		if _, err := client.Token(context.Background()); err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-		after := time.Now()
-
-		wantTTL := client.cfg.TokenTTL()
-		minUntil := before.Add(wantTTL / 2)
-		maxUntil := after.Add(wantTTL / 2)
-		if client.tokenUntil.Before(minUntil) || client.tokenUntil.After(maxUntil) {
-			t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v)", client.tokenUntil, minUntil, maxUntil, wantTTL)
-		}
-	})
-}
-
-func TestProactiveTokenRefresh(t *testing.T) {
-	newScrapingClient := func(calls *int32) *CatalogClient {
-		client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
-		client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			switch req.URL.String() {
-			case "https://music.apple.com":
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-			case "https://music.apple.com/assets/index~abc123.js":
-				atomic.AddInt32(calls, 1)
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.fresh-signature"`)), Header: make(http.Header)}, nil
-			default:
-				return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected")), Header: make(http.Header)}, nil
-			}
-		})}
-		return client
-	}
-
-	t.Run("renews a legacy token near expiry", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		client.token = "stale"
-		client.tokenUntil = time.Now().Add(tokenRefreshLead / 2) // inside the lead window
-
-		client.refreshExpiringWebTokens(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 1 {
-			t.Fatalf("scrape calls = %d, want 1", got)
-		}
-		if client.token == "stale" || client.token == "" {
-			t.Fatalf("token = %q, want a freshly scraped value", client.token)
-		}
-		if !client.tokenUntil.After(time.Now().Add(tokenRefreshLead)) {
-			t.Fatalf("tokenUntil = %v, want pushed well past the lead window", client.tokenUntil)
-		}
-	})
-
-	t.Run("renews a web token near expiry", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		client.webToken = "stale"
-		client.webTokenUntil = time.Now().Add(tokenRefreshLead / 2)
-
-		client.refreshExpiringWebTokens(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 1 {
-			t.Fatalf("scrape calls = %d, want 1", got)
-		}
-		if client.webToken == "stale" || client.webToken == "" {
-			t.Fatalf("webToken = %q, want a freshly scraped value", client.webToken)
-		}
-	})
-
-	t.Run("leaves a token that is not near expiry", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		client.token, client.tokenUntil = "still-good", time.Now().Add(time.Hour)
-		client.webToken, client.webTokenUntil = "still-good", time.Now().Add(time.Hour)
-
-		client.refreshExpiringWebTokens(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 0 {
-			t.Fatalf("scrape calls = %d, want 0 (nothing near expiry)", got)
-		}
-	})
-
-	t.Run("never scrapes an empty cache", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		// token and webToken left empty: nothing has been fetched yet, so the
-		// proactive loop must not scrape Apple on its own.
-
-		client.refreshExpiringWebTokens(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 0 {
-			t.Fatalf("scrape calls = %d, want 0 (empty cache must not trigger a scrape)", got)
-		}
-	})
-}
-
-func TestConcurrentTokenCacheMissScrapesOnce(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
-	var mu sync.Mutex
-	homeCalls, jsCalls := 0, 0
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		switch req.URL.String() {
-		case "https://music.apple.com":
-			homeCalls++
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-		case "https://music.apple.com/assets/index~abc123.js":
-			jsCalls++
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		default:
-			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected")), Header: make(http.Header)}, nil
-		}
-	})}
-
-	const callers = 20
-	start := make(chan struct{})
-	errCh := make(chan error, callers)
-	var wg sync.WaitGroup
-	for range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-start
-			_, err := client.Token(context.Background())
-			errCh <- err
-		}()
-	}
-	close(start)
-	wg.Wait()
-	close(errCh)
-	for err := range errCh {
-		if err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if homeCalls != 1 || jsCalls != 1 {
-		t.Fatalf("token scrape calls = home %d, js %d; want one each", homeCalls, jsCalls)
-	}
-}
-
-func TestEnhancedHLSViaWebTokenRetriesOnce401ThenSucceeds(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US", TokenCacheTTLHours: 12}, slog.Default())
-	client.webToken = "stale-web-token"
-	client.webTokenUntil = time.Now().Add(time.Hour)
-
-	var catalogCalls int
-	var authHeaders []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		switch req.URL.Host {
-		case "amp-api.music.apple.com":
-			catalogCalls++
-			authHeaders = append(authHeaders, req.Header.Get("Authorization"))
-			if catalogCalls == 1 {
-				return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"401"}]}`)), Header: make(http.Header)}, nil
-			}
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"extendedAssetUrls":{"enhancedHls":"https://example.test/master.m3u8"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		case "music.apple.com":
-			if req.URL.Path == "/" || req.URL.Path == "" {
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-			}
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		default:
-			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected")), Header: make(http.Header)}, nil
-		}
-	})}
-
-	master, err := client.EnhancedHLSViaWebToken(context.Background(), "cn", "song-1")
-	if err != nil {
-		t.Fatalf("EnhancedHLSViaWebToken: %v", err)
-	}
-	if master != "https://example.test/master.m3u8" {
-		t.Fatalf("master = %q", master)
-	}
-	if catalogCalls != 2 || len(authHeaders) != 2 || authHeaders[0] != "Bearer stale-web-token" || authHeaders[0] == authHeaders[1] {
-		t.Fatalf("calls=%d auth=%#v, want stale token then one refreshed retry", catalogCalls, authHeaders)
-	}
-}
-
-func TestGetWithUserTokenRetriesOnce401ThenSucceeds(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "stale-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-
-	var catalogCalls int
-	var authHeaders []string
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/cn/songs/song-1" {
-			catalogCalls++
-			authHeaders = append(authHeaders, req.Header.Get("Authorization"))
-			if catalogCalls == 1 {
-				return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"401"}]}`)), Header: make(http.Header)}, nil
-			}
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album"},"relationships":{}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		if req.URL.String() == "https://music.apple.com" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-		}
-		if req.URL.String() == "https://music.apple.com/assets/index~abc123.js" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected: " + req.URL.String())), Header: make(http.Header)}, nil
-	})}
-
-	song, err := client.SongMetadata(context.Background(), "cn", "song-1")
-	if err != nil {
-		t.Fatalf("expected success after 401 retry, got %v", err)
-	}
-	if song.ID != "song-1" {
-		t.Fatalf("song = %+v", song)
-	}
-	if catalogCalls != 2 {
-		t.Fatalf("catalog calls = %d, want 2 (401 then retry)", catalogCalls)
-	}
-	if len(authHeaders) != 2 || authHeaders[0] != "Bearer stale-token" || authHeaders[0] == authHeaders[1] {
-		t.Fatalf("auth headers = %#v, want stale token then a different re-minted token", authHeaders)
-	}
-}
-
-func TestGetWithUserTokenReturnsErrorAfterSingleRetryOn401Twice(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "stale-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-
-	var catalogCalls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v1/catalog/cn/songs/song-1" {
-			catalogCalls++
-			return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"401"}]}`)), Header: make(http.Header)}, nil
-		}
-		if req.URL.String() == "https://music.apple.com" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-		}
-		if req.URL.String() == "https://music.apple.com/assets/index~abc123.js" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected: " + req.URL.String())), Header: make(http.Header)}, nil
-	})}
-
-	_, err := client.SongMetadata(context.Background(), "cn", "song-1")
-	if err == nil {
-		t.Fatal("expected error after repeated 401")
-	}
-	if catalogCalls != 2 {
-		t.Fatalf("catalog calls = %d, want 2 (one retry, no infinite loop)", catalogCalls)
-	}
-}
-
-func TestStationNextTracksRetriesOnce401ThenSucceeds(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "stale-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
-
-	var nextTracksCalls int
-	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		switch req.URL.Path {
-		case "/v1/catalog/us/stations/ra.1":
-			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","isLive":false,"artwork":{"url":"station-art"},"playParams":{"format":"tracks"}}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		case "/v1/me/stations/next-tracks/ra.1":
-			nextTracksCalls++
-			if nextTracksCalls == 1 {
-				return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"errors":[{"status":"401"}]}`)), Header: make(http.Header)}, nil
-			}
-			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}}]}`
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-		}
-		if req.URL.String() == "https://music.apple.com" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-		}
-		if req.URL.String() == "https://music.apple.com/assets/index~abc123.js" {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("unexpected: " + req.URL.RequestURI())), Header: make(http.Header)}, nil
-	})}
-
-	station, err := client.StationTracks(context.Background(), "us", "ra.1", "media-token-xyz")
-	if err != nil {
-		t.Fatalf("expected success after 401 retry, got %v", err)
-	}
-	if got, want := trackIDs(station.Tracks), []string{"song-1"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("track IDs = %#v, want %#v", got, want)
-	}
-	if nextTracksCalls != 2 {
-		t.Fatalf("next-tracks calls = %d, want 2 (401 then retry)", nextTracksCalls)
-	}
-}
-
 func TestSongMapsHasLyrics(t *testing.T) {
 	tests := []struct {
-		name                string
-		hasLyrics           bool
-		hasTimeSyncedLyrics bool
-		want                bool
+		hasLyrics, hasTimeSyncedLyrics, want bool
 	}{
-		{
-			name:                "both true",
-			hasLyrics:           true,
-			hasTimeSyncedLyrics: true,
-			want:                true,
-		},
-		{
-			name:                "only hasLyrics true",
-			hasLyrics:           true,
-			hasTimeSyncedLyrics: false,
-			want:                true,
-		},
-		{
-			name:                "only hasTimeSyncedLyrics true",
-			hasLyrics:           false,
-			hasTimeSyncedLyrics: true,
-			want:                true,
-		},
-		{
-			name:                "both false",
-			hasLyrics:           false,
-			hasTimeSyncedLyrics: false,
-			want:                false,
-		},
+		{true, true, true},
+		{true, false, true},
+		{false, true, true},
+		{false, false, false},
 	}
-
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-			client.token = "test-token"
-			client.tokenUntil = time.Now().Add(time.Hour)
-
-			var body string
-			if tt.hasLyrics && tt.hasTimeSyncedLyrics {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":true,"hasTimeSyncedLyrics":true},"relationships":{}}]}`
-			} else if tt.hasLyrics {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":true,"hasTimeSyncedLyrics":false},"relationships":{}}]}`
-			} else if tt.hasTimeSyncedLyrics {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":false,"hasTimeSyncedLyrics":true},"relationships":{}}]}`
-			} else {
-				body = `{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":false,"hasTimeSyncedLyrics":false},"relationships":{}}]}`
-			}
-
-			client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
-			})}
+		t.Run(fmt.Sprintf("hasLyrics=%v,hasTimeSyncedLyrics=%v", tt.hasLyrics, tt.hasTimeSyncedLyrics), func(t *testing.T) {
+			body := fmt.Sprintf(`{"data":[{"id":"123","type":"songs","attributes":{"name":"Song","artistName":"Artist","albumName":"Album","hasLyrics":%v,"hasTimeSyncedLyrics":%v},"relationships":{}}]}`, tt.hasLyrics, tt.hasTimeSyncedLyrics)
+			client := newTestClient(t, enUS, func(*http.Request) *http.Response { return jsonResponse(http.StatusOK, body) })
 
 			song, err := client.Song(context.Background(), "cn", "123")
 			if err != nil {
@@ -1100,5 +287,83 @@ func TestSongMapsHasLyrics(t *testing.T) {
 				t.Fatalf("HasLyrics = %v, want %v", song.HasLyrics, tt.want)
 			}
 		})
+	}
+}
+
+func TestAlbumMapsContentRatingAndAppleDigitalMaster(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/us/albums/1": fixture(t, "catalog/album-explicit-adm.json"),
+		"/v1/catalog/us/albums/2": fixture(t, "catalog/album-plain.json"),
+	}))
+	rated, err := client.Album(context.Background(), "us", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rated.ContentRating != "explicit" || !rated.AppleDigitalMaster || !reflect.DeepEqual(rated.AudioTraits, []string{"lossy-stereo"}) {
+		t.Fatalf("album 1 rating/ADM/traits = %q/%v/%v, want explicit/true/[lossy-stereo]", rated.ContentRating, rated.AppleDigitalMaster, rated.AudioTraits)
+	}
+	plain, err := client.Album(context.Background(), "us", "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.ContentRating != "" || plain.AppleDigitalMaster {
+		t.Fatalf("album 2 rating/ADM = %q/%v, want empty/false", plain.ContentRating, plain.AppleDigitalMaster)
+	}
+}
+
+func TestSongMetadataMapsAppleDigitalMaster(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/us/songs/7": `{"data":[{"id":"7","type":"songs","attributes":{"name":"Seven","isAppleDigitalMaster":true,"contentRating":"clean"}}]}`,
+	}))
+	song, err := client.SongMetadata(context.Background(), "us", "7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !song.AppleDigitalMaster || song.ContentRating != "clean" {
+		t.Fatalf("song ADM/rating = %v/%q, want true/clean", song.AppleDigitalMaster, song.ContentRating)
+	}
+}
+
+// The trait lists are amp-api's own, as returned for songs 1635388718 and
+// 617154353 in the cn storefront.
+func TestSongMetadataMapsHiResLosslessTrait(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/cn/songs/hires":    `{"data":[{"id":"hires","type":"songs","attributes":{"name":"TV","audioTraits":["atmos","hi-res-lossless","lossless","lossy-stereo","spatial"]}}]}`,
+		"/v1/catalog/cn/songs/lossless": `{"data":[{"id":"lossless","type":"songs","attributes":{"name":"Give Life Back to Music","audioTraits":["lossless","lossy-stereo"]}}]}`,
+		"/v1/catalog/cn/songs/none":     `{"data":[{"id":"none","type":"songs","attributes":{"name":"No traits"}}]}`,
+	}))
+	for id, want := range map[string]bool{"hires": true, "lossless": false, "none": false} {
+		song, err := client.SongMetadata(context.Background(), "cn", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if song.HiResLossless != want {
+			t.Errorf("song %s HiResLossless = %v, want %v", id, song.HiResLossless, want)
+		}
+	}
+}
+
+func TestArtistMapsPageAndGenres(t *testing.T) {
+	client := newTestClient(t, enUS, routes(map[string]string{
+		"/v1/catalog/us/artists/9": `{"data":[{"id":"9","type":"artists","attributes":{"name":"Nine","url":"https://music.apple.com/us/artist/nine/9","genreNames":["Hip-Hop/Rap"],"artwork":{"url":"artist-art","bgColor":"101010"}}}]}`,
+	}))
+	artist, err := client.Artist(context.Background(), "us", "9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Artist{
+		ID: "9", Name: "Nine", URL: "https://music.apple.com/us/artist/nine/9", GenreNames: []string{"Hip-Hop/Rap"},
+		ArtworkURL: "artist-art", ArtworkColors: ArtworkColors{BgColor: "101010"},
+	}
+	if !reflect.DeepEqual(artist, want) {
+		t.Fatalf("artist = %+v, want %+v", artist, want)
+	}
+}
+
+func TestStationDownloadableOnlyForTrackFormat(t *testing.T) {
+	for format, want := range map[string]bool{"tracks": true, "stream": false, "": false} {
+		if got := (StationInfo{Format: format}).Downloadable(); got != want {
+			t.Errorf("Downloadable(format %q) = %v, want %v", format, got, want)
+		}
 	}
 }

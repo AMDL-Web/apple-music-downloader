@@ -2,122 +2,102 @@ package api
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"amdl/internal/config"
-	"amdl/internal/db"
-	"amdl/internal/domain"
-	"amdl/internal/events"
-	"amdl/internal/hooks"
-	"amdl/internal/jobs"
 	"amdl/internal/logging"
 )
 
-func TestGetConfigReturnsOnlyMutableFields(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
+// GET /config answers every runtime key of the default config (restart keys
+// included) and none of the file-only sections (server, database, tools),
+// with persisted false: an in-memory store writes nothing back. The golden
+// body pins every key and default; a changed default shows up in its diff.
+func TestGetConfigReturnsEditableFields(t *testing.T) {
+	server := newServer(t, Deps{Config: config.NewStore(config.Default())})
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/config", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	var resp struct {
-		Config    map[string]json.RawMessage `json:"config"`
-		Persisted bool                       `json:"persisted"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Persisted {
-		t.Fatal("persisted = true, runtime config is never written back to disk")
-	}
-	for _, section := range []string{"catalog", "download", "logging", "simulate"} {
-		if _, ok := resp.Config[section]; !ok {
-			t.Fatalf("config missing mutable section %q: %s", section, recorder.Body.String())
-		}
-	}
-	for _, section := range []string{"server", "database", "wrapper", "tools"} {
-		if _, ok := resp.Config[section]; ok {
-			t.Fatalf("config exposes startup-bound section %q: %s", section, recorder.Body.String())
-		}
-	}
-	var download map[string]any
-	if err := json.Unmarshal(resp.Config["download"], &download); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"max_running_jobs", "max_parallel_downloads", "max_parallel_decrypts", "max_parallel_wrapper_requests"} {
-		if _, ok := download[key]; ok {
-			t.Fatalf("download section exposes startup-bound %s", key)
-		}
-	}
-	if download["cover_format"] != "jpg" {
-		t.Fatalf("download.cover_format = %v, want jpg", download["cover_format"])
-	}
-	if download["memory_mode"] != config.MemoryModeLow {
-		t.Fatalf("download.memory_mode = %v, want low", download["memory_mode"])
-	}
-	var catalog map[string]any
-	if err := json.Unmarshal(resp.Config["catalog"], &catalog); err != nil {
-		t.Fatal(err)
-	}
-	if len(catalog) != 4 || catalog["album_track_url_mode"] != "song" || catalog["media_user_token"] != "" ||
-		catalog["signed_mode_hls_source"] != "wrapper" || catalog["motion_artwork_enabled"] != true {
-		t.Fatalf("catalog section = %v, want album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled", catalog)
-	}
-	var logging map[string]any
-	if err := json.Unmarshal(resp.Config["logging"], &logging); err != nil {
-		t.Fatal(err)
-	}
-	if len(logging) != 2 || logging["level"] != "info" || logging["access_log"] != false {
-		t.Fatalf("logging section = %v, want only level/access_log", logging)
-	}
+	assertGolden(t, "config_default", recorder.Body.Bytes())
 }
 
 func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	store := config.NewStore(config.Default())
-	server := &Server{cfg: store}
+	server := newServer(t, Deps{Config: store})
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
-		`{"download":{"embed_lyrics":false,"cover_format":"png","memory_mode":"high"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"signed_mode_hls_source":"web_token"}}`)
+		`{"download":{"embed_lyrics":false,"cover_format":"png"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"album_track_url_mode":"album"}}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	// The response echoes the mutable view only, never startup-bound sections.
-	if strings.Contains(recorder.Body.String(), `"server"`) || strings.Contains(recorder.Body.String(), `"max_running_jobs"`) || strings.Contains(recorder.Body.String(), `"max_parallel_downloads"`) || strings.Contains(recorder.Body.String(), `"max_parallel_decrypts"`) || strings.Contains(recorder.Body.String(), `"max_parallel_requests"`) {
-		t.Fatalf("update response leaks startup-bound fields: %s", recorder.Body.String())
+	// The response echoes the editable view only, never the file-only keys.
+	if strings.Contains(recorder.Body.String(), `"server"`) || strings.Contains(recorder.Body.String(), `"ffmpeg"`) {
+		t.Fatalf("update response leaks file-only fields: %s", recorder.Body.String())
 	}
 
 	got := store.Get()
-	if got.Download.EmbedLyrics || got.Download.CoverFormat != "png" || got.Download.MemoryMode != config.MemoryModeHigh || !got.Simulate.Enabled {
+	if got.Download.EmbedLyrics || got.Download.CoverFormat != "png" || !got.Simulate.Enabled {
 		t.Fatalf("update not applied to store: %+v %+v", got.Download, got.Simulate)
 	}
-	if got.Catalog.SignedModeHLSSource != "web_token" {
-		t.Fatalf("catalog.signed_mode_hls_source not applied to store: %+v", got.Catalog)
+	if got.Catalog.AlbumTrackURLMode != "album" {
+		t.Fatalf("catalog.album_track_url_mode not applied to store: %+v", got.Catalog)
 	}
 	// Merge semantics: fields absent from the body keep their current values.
 	base := config.Default()
-	if got.Download.SongPathFormat != base.Download.SongPathFormat || got.Server.Listen != base.Server.Listen {
+	if got.Download.LibraryPathFormat != base.Download.LibraryPathFormat || got.Server.Listen != base.Server.Listen {
 		t.Fatalf("omitted fields changed: %+v", got)
 	}
 }
 
-func TestUpdateConfigAcceptsAndDropsLegacyMediaUserTokenPriority(t *testing.T) {
-	store := config.NewStore(config.Default())
-	server := &Server{cfg: store}
-	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
-		`{"catalog":{"media_user_token":"configured-token","media_user_token_priority":"request"}}`)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+func TestConfigResponsesHideTheWrapperToken(t *testing.T) {
+	const token = "wrapper-static-token-9f3c"
+	cfg := config.Default()
+	cfg.Wrapper.Token = token
+	store := config.NewStore(cfg)
+	routes := newServer(t, Deps{Config: store}).Routes()
+	tokenIn := func(body string) string {
+		t.Helper()
+		var resp struct {
+			Config struct {
+				Wrapper struct {
+					Token string `json:"token"`
+				} `json:"wrapper"`
+			} `json:"config"`
+		}
+		if err := json.Unmarshal([]byte(body), &resp); err != nil {
+			t.Fatalf("decode %s: %v", body, err)
+		}
+		if strings.Contains(body, "static-token") || strings.Contains(body, "9f3c") {
+			t.Fatalf("response carries the token: %s", body)
+		}
+		return resp.Config.Wrapper.Token
 	}
-	if strings.Contains(recorder.Body.String(), "media_user_token_priority") {
-		t.Fatalf("deprecated priority was echoed in runtime config: %s", recorder.Body.String())
+	if got := tokenIn(requestJSON(t, routes, http.MethodGet, "/api/v1/config", "").Body.String()); got != "..." {
+		t.Fatalf("GET wrapper.token = %q, want ...", got)
 	}
-	got := store.Get()
-	if got.Catalog.MediaUserToken != "configured-token" || got.Catalog.LegacyMediaUserTokenPriority != "" {
-		t.Fatalf("normalized catalog config = %+v", got.Catalog)
+	put := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":"..."}}`)
+	if put.Code != http.StatusOK || tokenIn(put.Body.String()) != "..." || store.Get().Wrapper.Token != token {
+		t.Fatalf("writing back the hidden form: %d %s", put.Code, put.Body.String())
+	}
+	if bad := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":"two words"}}`); bad.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("a token with a space: %d %s", bad.Code, bad.Body.String())
+	}
+	set := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":"next-token"}}`)
+	if set.Code != http.StatusOK || store.Get().Wrapper.Token != "next-token" || len(set.Body.String()) == 0 {
+		t.Fatalf("setting a token: %d %s", set.Code, set.Body.String())
+	}
+	if pending := store.PendingRestart(store.Saved()); len(pending) != 0 {
+		t.Fatalf("wrapper.token waits for a restart: %v", pending)
+	}
+	cleared := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":""}}`)
+	if cleared.Code != http.StatusOK || tokenIn(cleared.Body.String()) != "" || store.Get().Wrapper.Token != "" {
+		t.Fatalf("clearing the token: %d %s", cleared.Code, cleared.Body.String())
 	}
 }
 
@@ -128,9 +108,8 @@ func TestUpdateConfigAppliesLoggingLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = system.Close() })
 	store := config.NewStore(cfg)
-	server := NewServer(store, nil, nil, nil, nil, nil, nil, system.Logger, system)
+	server := newServer(t, Deps{Config: store, Logger: system.Logger, Logging: system})
 
 	system.Logger.Debug("before-level-change")
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"logging":{"level":"debug","access_log":false}}`)
@@ -147,58 +126,101 @@ func TestUpdateConfigAppliesLoggingLevel(t *testing.T) {
 	}
 }
 
-func TestGetConfigReloadsManualFileEdits(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	base := config.Default()
-	if err := config.Save(path, base); err != nil {
+// writeConfigFile writes cfg as the config file at path, the way a user's
+// editor would leave it.
+func writeConfigFile(t *testing.T, path string, cfg config.Config) {
+	t.Helper()
+	raw, err := yaml.Marshal(cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
-	server := &Server{cfg: config.NewFileStore(base, path)}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReloadConfigAppliesManualFileEdits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	base := config.Default()
+	writeConfigFile(t, path, base)
+	server := newServer(t, Deps{Config: config.NewFileStore(base, path)})
 
 	// Edit the file behind the running store, as a user would with an editor.
 	edited := base
 	edited.Download.CoverFormat = "png"
-	edited.Catalog.SignedModeHLSSource = "web_token"
-	if err := config.Save(path, edited); err != nil {
-		t.Fatal(err)
-	}
+	edited.Catalog.AlbumTrackURLMode = "album"
+	writeConfigFile(t, path, edited)
+
+	// GET is a pure read of the snapshot: it does not pick the edit up.
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/config", "")
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"cover_format":"jpg"`) {
+		t.Fatalf("GET before reload = %d %s, want the old snapshot (cover_format jpg)", recorder.Code, recorder.Body.String())
+	}
+
+	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/config/reload", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	if !strings.Contains(recorder.Body.String(), `"cover_format":"png"`) {
-		t.Fatalf("GET did not pick up the manual file edit: %s", recorder.Body.String())
-	}
-	if !strings.Contains(recorder.Body.String(), `"signed_mode_hls_source":"web_token"`) {
-		t.Fatalf("GET did not pick up the manual signed_mode_hls_source edit: %s", recorder.Body.String())
+	if !strings.Contains(recorder.Body.String(), `"cover_format":"png"`) || !strings.Contains(recorder.Body.String(), `"album_track_url_mode":"album"`) {
+		t.Fatalf("reload did not pick up the manual file edit: %s", recorder.Body.String())
 	}
 	if strings.Contains(recorder.Body.String(), "reload_error") {
 		t.Fatalf("unexpected reload_error: %s", recorder.Body.String())
 	}
-	if got := server.cfg.Get(); got.Download.CoverFormat != "png" || got.Catalog.SignedModeHLSSource != "web_token" {
+	if got := server.cfg.Get(); got.Download.CoverFormat != "png" || got.Catalog.AlbumTrackURLMode != "album" {
 		t.Fatalf("store snapshot not refreshed: %+v", got.Catalog)
 	}
 
-	// A broken file (edit in progress) must not break GET: the last good
-	// snapshot is served and reload_error reports the problem.
-	if err := os.WriteFile(path, []byte("download: ["), 0o644); err != nil {
+	// A broken file (an edit in progress) keeps the last good snapshot; the
+	// reload still answers 200 and reload_error says why.
+	if err := os.WriteFile(path, []byte("download: ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/config", "")
+	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/config/reload", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	if !strings.Contains(recorder.Body.String(), "reload_error") {
-		t.Fatalf("missing reload_error for broken file: %s", recorder.Body.String())
+	var resp struct {
+		ReloadError string `json:"reload_error"`
+		Config      struct {
+			Download struct {
+				CoverFormat string `json:"cover_format"`
+			} `json:"download"`
+		} `json:"config"`
 	}
-	if !strings.Contains(recorder.Body.String(), `"cover_format":"png"`) {
-		t.Fatalf("broken file must keep serving the last good snapshot: %s", recorder.Body.String())
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.ReloadError == "" || resp.Config.Download.CoverFormat != "png" {
+		t.Fatalf("reload of a broken file = %s, want reload_error and the last good snapshot", recorder.Body.String())
+	}
+}
+
+// PUT re-reads the file before applying the patch. When a hand edit left the
+// file invalid, that is the file's fault, not the request's and not the
+// server's: 422 invalid_config, and neither the file nor the snapshot changes.
+func TestUpdateConfigWithInvalidFileIsInvalidConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	writeConfigFile(t, path, config.Default())
+	server := newServer(t, Deps{Config: config.NewFileStore(config.Default(), path)})
+	broken := []byte("download: [")
+	if err := os.WriteFile(path, broken, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"download":{"cover_format":"png"}}`)
+	assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "invalid_config")
+	if got := server.cfg.Get().Download.CoverFormat; got != "jpg" {
+		t.Fatalf("snapshot cover_format = %q, want jpg unchanged", got)
+	}
+	if raw, err := os.ReadFile(path); err != nil || string(raw) != string(broken) {
+		t.Fatalf("config file = %q, %v; want the hand edit left alone", raw, err)
 	}
 }
 
 func TestUpdateConfigPersistsToBackingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	server := &Server{cfg: config.NewFileStore(config.Default(), path)}
+	server := newServer(t, Deps{Config: config.NewFileStore(config.Default(), path)})
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"download":{"cover_format":"png"}}`)
 	if recorder.Code != http.StatusOK {
@@ -222,33 +244,45 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 		name   string
 		body   string
 		status int
+		code   ErrorCode
 		want   string
 	}{
-		{name: "unknown field", body: `{"download":{"nope":true}}`, status: http.StatusBadRequest, want: "unknown field"},
-		{name: "malformed json", body: `{`, status: http.StatusBadRequest, want: ""},
-		{name: "validation failure", body: `{"download":{"cover_format":"gif"}}`, status: http.StatusUnprocessableEntity, want: "cover_format"},
-		{name: "removed tracks limit", body: `{"download":{"max_parallel_tracks":5}}`, status: http.StatusBadRequest, want: "max_parallel_tracks"},
-		{name: "removed metadata limit", body: `{"download":{"max_parallel_metadata_requests":32}}`, status: http.StatusBadRequest, want: "max_parallel_metadata_requests"},
-		{name: "removed media limit", body: `{"download":{"max_parallel_media_downloads":32}}`, status: http.StatusBadRequest, want: "max_parallel_media_downloads"},
-		{name: "locked wrapper pool", body: `{"download":{"max_parallel_wrapper_requests":8}}`, status: http.StatusUnprocessableEntity, want: "download.max_parallel_wrapper_requests"},
-		{name: "invalid memory mode", body: `{"download":{"memory_mode":"auto"}}`, status: http.StatusUnprocessableEntity, want: "memory_mode"},
-		{name: "locked field", body: `{"server":{"listen":"0.0.0.0:1"}}`, status: http.StatusUnprocessableEntity, want: "server.listen"},
-		{name: "locked worker count", body: `{"download":{"max_running_jobs":99}}`, status: http.StatusUnprocessableEntity, want: "download.max_running_jobs"},
-		{name: "locked download pool", body: `{"download":{"max_parallel_downloads":8}}`, status: http.StatusUnprocessableEntity, want: "download.max_parallel_downloads"},
-		{name: "locked decrypt pool", body: `{"download":{"max_parallel_decrypts":8}}`, status: http.StatusUnprocessableEntity, want: "download.max_parallel_decrypts"},
-		{name: "locked catalog concurrency", body: `{"catalog":{"max_parallel_requests":8}}`, status: http.StatusUnprocessableEntity, want: "catalog.max_parallel_requests"},
-		{name: "locked catalog rate", body: `{"catalog":{"requests_per_second":8}}`, status: http.StatusUnprocessableEntity, want: "catalog.requests_per_second"},
-		{name: "locked catalog burst", body: `{"catalog":{"request_burst":8}}`, status: http.StatusUnprocessableEntity, want: "catalog.request_burst"},
-		{name: "locked logging output", body: `{"logging":{"format":"json"}}`, status: http.StatusUnprocessableEntity, want: "logging.format"},
+		{name: "unknown field", body: `{"download":{"nope":true}}`, status: http.StatusBadRequest, code: "invalid_request", want: "unknown field"},
+		{name: "malformed json", body: `{`, status: http.StatusBadRequest, code: "invalid_json", want: ""},
+		{name: "validation failure", body: `{"download":{"cover_format":"gif"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "cover_format"},
+		{name: "removed tracks limit", body: `{"download":{"max_parallel_tracks":5}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_tracks"},
+		{name: "removed metadata limit", body: `{"download":{"max_parallel_metadata_requests":32}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_metadata_requests"},
+		{name: "removed media limit", body: `{"download":{"max_parallel_media_downloads":32}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_media_downloads"},
+		{name: "removed wrapper pool", body: `{"download":{"max_parallel_wrapper_requests":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_wrapper_requests"},
+		{name: "removed memory mode", body: `{"download":{"memory_mode":"high"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "memory_mode"},
+		{name: "malformed cover size", body: `{"download":{"cover_size":"big"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "download.cover_size"},
+		{name: "locked field", body: `{"server":{"listen":"0.0.0.0:1"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "server.listen"},
+		{name: "worker count over its limit", body: `{"download":{"max_running_jobs":99}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "max_running_jobs"},
+		{name: "locked database", body: `{"database":{"path":"/elsewhere.db"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "database.path"},
+		{name: "locked ffmpeg", body: `{"tools":{"ffmpeg":"/opt/ffmpeg"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "tools.ffmpeg"},
+		{name: "wrapper address without a scheme", body: `{"wrapper":{"address":"wrapper:12340"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "wrapper.address"},
+		{name: "removed decrypt pool", body: `{"download":{"max_parallel_decrypts":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_decrypts"},
+		{name: "removed catalog rate", body: `{"catalog":{"requests_per_second":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "requests_per_second"},
+		{name: "removed logging format", body: `{"logging":{"format":"json"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "format"},
+		{name: "no log output left", body: `{"logging":{"console":false,"buffer_size":0}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "logging"},
+		{name: "list given a string", body: `{"download":{"quality_priority":"bogus"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.quality_priority must be a list, got a string"},
+		{name: "number given a string", body: `{"download":{"max_attempts":"abc"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.max_attempts must be a whole number, got a string"},
+		// Removed path formats and retired keys are refused by name, so a
+		// client still sending one learns it at once instead of having it
+		// dropped.
+		{name: "removed song path format", body: `{"download":{"song_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "song_path_format"},
+		{name: "removed album path format", body: `{"download":{"album_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "album_path_format"},
+		{name: "removed artist path format", body: `{"download":{"artist_path_format":"x/{SongName}"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "artist_path_format"},
+		{name: "retired media user token", body: `{"catalog":{"media_user_token":"configured-token"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "media_user_token"},
+		{name: "retired wrapper data dir", body: `{"wrapper":{"data_dir":"/wrapper"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "data_dir"},
+		{name: "retired token priority", body: `{"catalog":{"media_user_token_priority":"request"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "media_user_token_priority"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := config.NewStore(config.Default())
-			server := &Server{cfg: store}
+			server := newServer(t, Deps{Config: store})
 			recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", tc.body)
-			if recorder.Code != tc.status {
-				t.Fatalf("status = %d, want %d (body %s)", recorder.Code, tc.status, recorder.Body.String())
-			}
+			assertErrorCode(t, recorder, tc.status, tc.code)
 			if tc.want != "" && !strings.Contains(recorder.Body.String(), tc.want) {
 				t.Fatalf("error body %q does not mention %q", recorder.Body.String(), tc.want)
 			}
@@ -256,197 +290,5 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 				t.Fatalf("rejected update leaked into the store: %+v", got)
 			}
 		})
-	}
-}
-
-func TestUpdateConfigRejectsEnvPinnedFields(t *testing.T) {
-	t.Setenv("AMDL_DOWNLOAD_COVER_FORMAT", "jpg")
-	store := config.NewStore(config.Default())
-	server := &Server{cfg: store}
-	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"download":{"cover_format":"png"}}`)
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422 (body %s)", recorder.Code, recorder.Body.String())
-	}
-	if body := recorder.Body.String(); !strings.Contains(body, "AMDL_DOWNLOAD_COVER_FORMAT") || !strings.Contains(body, "pinned by environment") {
-		t.Fatalf("error body %q must name the pinning variable", body)
-	}
-	if store.Get().Download.CoverFormat != "jpg" {
-		t.Fatalf("rejected update leaked into the store: %+v", store.Get().Download)
-	}
-	// Leaving a pinned field at its current value is still accepted.
-	recorder = requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"download":{"cover_format":"jpg","embed_cover":false}}`)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body %s)", recorder.Code, recorder.Body.String())
-	}
-	if got := store.Get().Download; got.EmbedCover || got.CoverFormat != "jpg" {
-		t.Fatalf("update alongside unchanged pinned field not applied: %+v", got)
-	}
-}
-
-func TestCreateDownloadWithOverrides(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
-	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
-
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"embed_lyrics":false,"quality_priority":["aac"],"memory_mode":"high"}}`)
-	if recorder.Code != http.StatusAccepted {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	var resp domain.BatchSubmitResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Accepted != 1 || resp.Results[0].Job == nil {
-		t.Fatalf("submit response = %+v", resp)
-	}
-	if o := resp.Results[0].Job.Overrides; o == nil || o.EmbedLyrics == nil || *o.EmbedLyrics {
-		t.Fatalf("accepted job overrides = %+v, want embed_lyrics=false", resp.Results[0].Job.Overrides)
-	}
-
-	// The overrides must survive the DB round-trip so retries and
-	// post-restart requeues run under the same overlay.
-	persisted, err := store.GetJob(t.Context(), resp.Results[0].Job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if persisted.Overrides == nil || persisted.Overrides.EmbedLyrics == nil || *persisted.Overrides.EmbedLyrics {
-		t.Fatalf("persisted overrides = %+v, want embed_lyrics=false", persisted.Overrides)
-	}
-	if qp := persisted.Overrides.QualityPriority; qp == nil || len(*qp) != 1 || (*qp)[0] != "aac" {
-		t.Fatalf("persisted quality_priority override = %v, want [aac]", qp)
-	}
-	if mode := persisted.Overrides.MemoryMode; mode == nil || *mode != config.MemoryModeHigh {
-		t.Fatalf("persisted memory_mode override = %v, want high", mode)
-	}
-}
-
-func TestCreateDownloadUsesMediaUserTokenOverrideWithoutEchoingIt(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
-	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
-
-	submit := func(body string) domain.Job {
-		t.Helper()
-		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", body)
-		if recorder.Code != http.StatusAccepted {
-			t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-		}
-		if strings.Contains(recorder.Body.String(), "secret-") || strings.Contains(recorder.Body.String(), "media_user_token") {
-			t.Fatalf("submit response echoed media-user-token: %s", recorder.Body.String())
-		}
-		var resp domain.BatchSubmitResponse
-		if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-			t.Fatal(err)
-		}
-		if resp.Accepted != 1 || resp.Results[0].Job == nil {
-			t.Fatalf("submit response = %+v", resp)
-		}
-		job, err := store.GetJob(t.Context(), resp.Results[0].Job.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return job
-	}
-
-	canonical := submit(`{"urls":["station|us|ra.1"],"overrides":{"media_user_token":" secret-canonical "}}`)
-	if canonical.Overrides == nil || canonical.Overrides.MediaUserToken == nil || *canonical.Overrides.MediaUserToken != "secret-canonical" {
-		t.Fatalf("canonical token override = %+v", canonical.Overrides)
-	}
-	for _, path := range []string{"/api/v1/downloads/" + canonical.ID, "/api/v1/downloads"} {
-		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("GET %s status = %d, body = %s", path, recorder.Code, recorder.Body.String())
-		}
-		if strings.Contains(recorder.Body.String(), "secret-canonical") || strings.Contains(recorder.Body.String(), "media_user_token") {
-			t.Fatalf("GET %s echoed media-user-token: %s", path, recorder.Body.String())
-		}
-	}
-
-	empty := submit(`{"urls":["station|us|ra.2"],"overrides":{"media_user_token":""}}`)
-	if empty.Overrides == nil || empty.Overrides.MediaUserToken == nil || *empty.Overrides.MediaUserToken != "" {
-		t.Fatalf("explicit-empty token override lost its three-state meaning = %+v", empty.Overrides)
-	}
-
-	notNeeded := submit(`{"urls":["song|us|3"],"overrides":{"media_user_token":"secret-unused"}}`)
-	if notNeeded.Overrides != nil && notNeeded.Overrides.MediaUserToken != nil {
-		t.Fatalf("unneeded song token was persisted: %+v", notNeeded.Overrides)
-	}
-}
-
-func TestCreateDownloadRejectsLegacyTopLevelMediaUserToken(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
-	for _, token := range []string{`"secret-legacy"`, `""`} {
-		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-			`{"urls":["station|us|ra.1"],"media_user_token":`+token+`}`)
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("token %s: status = %d, body = %s", token, recorder.Code, recorder.Body.String())
-		}
-		if !strings.Contains(recorder.Body.String(), "media_user_token") || !strings.Contains(recorder.Body.String(), "unknown field") {
-			t.Fatalf("token %s: error body does not identify unknown field: %s", token, recorder.Body.String())
-		}
-	}
-}
-
-func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
-	for _, field := range []string{"embedd_lyrics", "max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads", "max_parallel_wrapper_requests", "max_parallel_downloads", "max_parallel_decrypts"} {
-		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-			`{"urls":["song|us|1"],"overrides":{"`+field+`":1}}`)
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("field %s: status = %d, body = %s (unknown/process-wide overrides must not be silently accepted)", field, recorder.Code, recorder.Body.String())
-		}
-		if !strings.Contains(recorder.Body.String(), field) {
-			t.Fatalf("field %s: error body %q does not name the unknown field", field, recorder.Body.String())
-		}
-	}
-}
-
-func TestCreateDownloadRejectsInvalidOverrides(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default())}
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"lyrics_format":"srt"}}`)
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if !strings.Contains(recorder.Body.String(), "invalid overrides") {
-		t.Fatalf("error body %q does not mention invalid overrides", recorder.Body.String())
-	}
-}
-
-func TestCreateDownloadValidatesHookOverrideNames(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
-	manager.SetHooks(hooks.NewDispatcher(hooks.Config{
-		Enabled: false,
-		Entries: []hooks.Entry{{Name: "notify"}},
-	}, nil, slog.Default()))
-	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
-
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"hooks":["missing"]}}`)
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("unknown hook status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if !strings.Contains(recorder.Body.String(), `unknown hook \"missing\"`) {
-		t.Fatalf("unknown hook error does not name missing entry: %s", recorder.Body.String())
-	}
-
-	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|2"],"overrides":{"hooks":["notify","notify"]}}`)
-	if recorder.Code != http.StatusAccepted {
-		t.Fatalf("known hooks under global disable status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }

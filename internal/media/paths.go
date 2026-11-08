@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
@@ -15,64 +16,85 @@ var invalidPathChars = regexp.MustCompile(`[\/\\<>:"|?*]`)
 var templateVariablePattern = regexp.MustCompile(`\{([A-Za-z]+)(?::(02d))?\}`)
 
 type pathTemplateContext struct {
-	song          applemusic.Song
-	playlistIndex int
-	playlistName  string
-	playlistID    string
-	codec         string
-	quality       string
+	song            applemusic.Song
+	collectionIndex int
+	playlistName    string
+	playlistID      string
+	codec           string
+	quality         string
 }
 
-type selectedMediaInfo struct {
-	MediaURI   string
-	Keys       []string
-	CodecID    string
-	BitDepth   int
-	SampleRate int
-	Bandwidth  int
-}
+// maxSegmentBytes caps one cleaned path segment. 255 bytes is the per-name
+// limit of every filesystem the downloads root realistically lives on; the
+// remaining 15 bytes hold ".m4a", a ".ttml" sidecar extension and most of the
+// staging suffix (stagingPrefix trims the rest).
+const maxSegmentBytes = 240
 
-func safeName(v string) string {
+// safeName cleans one path segment: reserved characters become "_", dots and
+// whitespace go from both ends (a leading dot would hide the file, a trailing
+// one or a trailing space breaks Windows and SMB clients), and the result is
+// capped at maxSegmentBytes on a rune boundary. Output names depend on every
+// rule here.
+func safeName(v string) string { return safeNameCapped(v, maxSegmentBytes) }
+
+// safeNameCapped is safeName with a byte cap of limit instead of
+// maxSegmentBytes, for a segment something is appended to afterwards.
+func safeNameCapped(v string, limit int) string {
 	v = invalidPathChars.ReplaceAllString(v, "_")
-	v = strings.TrimSpace(v)
-	v = strings.TrimRight(v, ".")
+	v = strings.TrimFunc(v, isDotOrSpace)
+	if len(v) > limit {
+		v = strings.TrimRightFunc(trimToRuneBoundary(v, limit), isDotOrSpace)
+	}
 	if v == "" {
 		return "_"
 	}
 	return v
 }
 
+// qualitySuffixedPath is where another quality of the track at mainPath
+// lands (design §3.8): next to it, named after it plus " [CODEC label]", or
+// " [CODEC]" without a label. The codec is in the suffix because aac and
+// aac-binaural share a label. The base name is capped so the suffix always
+// survives maxSegmentBytes.
+func qualitySuffixedPath(mainPath, codec, label string) string {
+	inner := strings.ToUpper(codec)
+	if label != "" {
+		inner += " " + label
+	}
+	suffix := " [" + safeName(inner) + "]"
+	base := strings.TrimSuffix(filepath.Base(mainPath), ".m4a")
+	return filepath.Join(filepath.Dir(mainPath), safeNameCapped(base, maxSegmentBytes-len(suffix))+suffix+".m4a")
+}
+
+// fileNamesQuality reports whether the file-name segment of pattern names
+// {Codec} or {Quality}; every quality is then named by the template, and no
+// suffix is added.
+func fileNamesQuality(pattern string) bool {
+	segments := strings.Split(pattern, "/")
+	return segmentReferences(segments[len(segments)-1], "Codec", "Quality")
+}
+
+func isDotOrSpace(r rune) bool { return r == '.' || unicode.IsSpace(r) }
+
 // outputPath expands the task type's path template into the final .m4a path.
 // The template is split on "/"; every segment is expanded and sanitized
 // independently, so template values can never introduce extra directories.
-// Directory segments use folderArtist (the collection's grouping artist) for
-// {ArtistName} so all tracks of a collection land in one folder; the filename
-// segment always uses the track's own metadata.
-func outputPath(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, playlistIndex int, folderArtist, playlistName, playlistID, codec, quality string) string {
+// A song, album or artist track the job placed in the library takes
+// libraryTrackPath instead (trackTarget.outputPath).
+func outputPath(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, collectionIndex int, playlistName, playlistID, codec, quality string) string {
 	ctx := pathTemplateContext{
-		song:          song,
-		playlistIndex: playlistIndex,
-		playlistName:  playlistName,
-		playlistID:    playlistID,
-		codec:         codec,
-		quality:       quality,
+		song:            song,
+		collectionIndex: collectionIndex,
+		playlistName:    playlistName,
+		playlistID:      playlistID,
+		codec:           codec,
+		quality:         quality,
 	}
-	folderCtx := ctx
-	if folderArtist != "" {
-		folderSong := song
-		folderSong.ArtistName = folderArtist
-		folderCtx.song = folderSong
-	}
-
 	segments := strings.Split(pathPattern(cfg, collectionType), "/")
 	parts := make([]string, 0, len(segments)+1)
 	parts = append(parts, cfg.Download.DownloadsDir)
 	for i, segment := range segments {
-		segCtx := folderCtx
-		if i == len(segments)-1 {
-			segCtx = ctx
-		}
-		name := safeName(formatPattern(segment, segCtx))
+		name := safeName(formatPattern(segment, ctx))
 		if i == len(segments)-1 {
 			name += ".m4a"
 		}
@@ -82,56 +104,7 @@ func outputPath(cfg config.Config, song applemusic.Song, collectionType applemus
 }
 
 func collectionFolderPath(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, name, id string) string {
-	return filepath.Dir(outputPath(cfg, song, collectionType, 1, "", name, id, "", ""))
-}
-
-// standaloneCoverDirs resolves where standalone album and artist covers live.
-// The path templates are free-form, so the directories are located by variable
-// reference instead of by counting levels: the album cover goes into the
-// deepest directory segment referencing the album ({AlbumName} or {AlbumId}),
-// falling back to the track's directory; the artist cover goes into the
-// deepest directory segment referencing the artist ({ArtistName},
-// {UrlArtistName}, {AlbumArtist}, or {ArtistId}), and artistDir is empty when
-// no segment does, in which case the artist cover is skipped.
-//
-// Segments expand with the same context as outputPath's directory segments so
-// covers land next to the audio files; codec and quality stay empty because
-// covers are saved once per collection, before any codec attempt.
-func standaloneCoverDirs(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, playlistIndex int, folderArtist, playlistName, playlistID string) (albumDir, artistDir string) {
-	ctx := pathTemplateContext{
-		song:          song,
-		playlistIndex: playlistIndex,
-		playlistName:  playlistName,
-		playlistID:    playlistID,
-	}
-	if folderArtist != "" {
-		folderSong := song
-		folderSong.ArtistName = folderArtist
-		ctx.song = folderSong
-	}
-
-	segments := strings.Split(pathPattern(cfg, collectionType), "/")
-	dirSegments := segments[:len(segments)-1]
-	albumIdx, artistIdx := len(dirSegments)-1, -1
-	for i, segment := range dirSegments {
-		if segmentReferences(segment, "AlbumName", "AlbumId") {
-			albumIdx = i
-		}
-		if segmentReferences(segment, "ArtistName", "UrlArtistName", "AlbumArtist", "ArtistId") {
-			artistIdx = i
-		}
-	}
-
-	parts := make([]string, 0, len(dirSegments)+1)
-	parts = append(parts, cfg.Download.DownloadsDir)
-	for _, segment := range dirSegments {
-		parts = append(parts, safeName(formatPattern(segment, ctx)))
-	}
-	albumDir = filepath.Join(parts[:albumIdx+2]...)
-	if artistIdx >= 0 {
-		artistDir = filepath.Join(parts[:artistIdx+2]...)
-	}
-	return albumDir, artistDir
+	return filepath.Dir(outputPath(cfg, song, collectionType, 1, name, id, "", ""))
 }
 
 func segmentReferences(segment string, names ...string) bool {
@@ -147,17 +120,19 @@ func segmentReferences(segment string, names ...string) bool {
 
 func pathPattern(cfg config.Config, collectionType applemusic.URLType) string {
 	switch collectionType {
-	case applemusic.TypeAlbum:
-		return cfg.Download.AlbumPathFormat
 	case applemusic.TypePlaylist:
 		return cfg.Download.PlaylistPathFormat
 	case applemusic.TypeStation:
 		return cfg.Download.StationPathFormat
-	case applemusic.TypeArtist:
-		return cfg.Download.ArtistPathFormat
 	default:
-		return cfg.Download.SongPathFormat
+		return cfg.Download.LibraryPathFormat
 	}
+}
+
+// inLibrary reports whether collectionType's tracks land in the library
+// (download.library_path_format) rather than in a collection's own folder.
+func inLibrary(collectionType applemusic.URLType) bool {
+	return collectionType != applemusic.TypePlaylist && collectionType != applemusic.TypeStation
 }
 
 func formatPattern(pattern string, ctx pathTemplateContext) string {
@@ -183,7 +158,7 @@ func templateValue(key string, ctx pathTemplateContext) (string, bool) {
 	case "SongId":
 		return song.ID, true
 	case "SongNumber":
-		return strconv.Itoa(max(1, ctx.playlistIndex)), true
+		return strconv.Itoa(max(1, ctx.collectionIndex)), true
 	case "SongName":
 		return song.Name, true
 	case "ArtistName", "UrlArtistName":
@@ -237,6 +212,9 @@ func templateValue(key string, ctx pathTemplateContext) (string, bool) {
 	}
 }
 
+// qualityLabel is the {Quality} value of an enhanced codec: "24-bit/96 kHz"
+// (integer kHz) when the manifest names a bit depth and sample rate, else
+// "256Kbps" from the bandwidth. The strings end up in output paths.
 func qualityLabel(info selectedMediaInfo) string {
 	if info.BitDepth > 0 && info.SampleRate > 0 {
 		return fmt.Sprintf("%d-bit/%d kHz", info.BitDepth, info.SampleRate/1000)
@@ -252,9 +230,17 @@ func atoi(v string) int {
 	return i
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
+// aacLCQualityLabel is the {Quality} value of every AAC-LC download, which
+// has no manifest to read a quality from. Like qualityLabel's formats it is
+// part of on-disk names.
+const aacLCQualityLabel = "256Kbps"
+
+// lyricsSidecarPath is the lyrics file written next to outPath: <track>.ttml
+// for the ttml format and <track>.lrc otherwise.
+func lyricsSidecarPath(outPath, format string) string {
+	ext := ".lrc"
+	if format == "ttml" {
+		ext = ".ttml"
 	}
-	return b
+	return strings.TrimSuffix(outPath, ".m4a") + ext
 }

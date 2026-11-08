@@ -1,0 +1,714 @@
+/*
+ * The New download page (#/new, views/download*.js), after the form in
+ * download-form.css: submit results, the browser shortcut, the Custom…
+ * sheet and the quality sheet, then the page's phone rules. Base structure
+ * only; it reads tokens like every other base stylesheet, and the skin
+ * restyles it. Text sizes are --fs-13 and --fs-15 (card titles and the page
+ * title come from the skin). Linked after responsive.css, so the phone rules
+ * at the end of this file are its own.
+ */
+
+/* ---- Results ------------------------------------------------------- */
+
+.new-results-summary {
+  padding: var(--s-3) var(--card-pad-x);
+  border-bottom: var(--row-divider);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A Submitted job row sits in the main column, about 300-700 px wide from
+   640 px up, where the compact row's fixed progress and status columns
+   would squeeze the title to nothing. Here the title and artist take the
+   whole row and the progress and status run under them. Five classes, so
+   the layout outranks the skin's .job-list-compact and .job-row rules (four
+   at most with the :root[data-skin] prefix); a skin that restyles it
+   repeats the chain. Under 640 px the phone job card applies. */
+.new-results .job-row {
+  row-gap: var(--s-2);
+}
+
+/* The status cell is a badge's height whatever it holds, so the card keeps
+   its height when the run ends. */
+.job-list.job-list-compact.new-results > .new-result > .job-row > .job-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 20px;
+}
+
+@media (min-width: 640px) {
+  .job-list.job-list-compact.new-results > .new-result > .job-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "art main main"
+      "art prog status";
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .art {
+    grid-area: art;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-main {
+    grid-area: main;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-progress {
+    grid-area: prog;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-status {
+    grid-area: status;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-updated {
+    display: none;
+  }
+
+  /* A job with nothing in flight keeps both rows, the progress line empty
+     and its status where the running one's was. */
+}
+
+.new-result-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-areas: "icon main actions";
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 56px;
+  padding: var(--s-2) var(--card-pad-x);
+}
+
+.new-result-icon {
+  grid-area: icon;
+  display: flex;
+  justify-content: center;
+  color: var(--role, var(--text-secondary));
+}
+
+.new-result-main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.new-result-label {
+  font-weight: var(--w-medium);
+}
+
+.new-result-title {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-result-url {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-result-msg,
+.new-result-detail {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  overflow-wrap: anywhere;
+}
+
+.new-result-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+/* ---- Browser shortcut --------------------------------------------- */
+
+.new-shortcut {
+  margin-top: calc(var(--s-4) - var(--page-gap));
+}
+
+.new-shortcut-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  list-style: none;
+  cursor: pointer;
+}
+
+.new-shortcut-summary::-webkit-details-marker {
+  display: none;
+}
+
+.new-shortcut-summary .icon {
+  transform: rotate(-90deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.new-shortcut[open] .new-shortcut-summary .icon {
+  transform: none;
+}
+
+.new-shortcut-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  max-width: 560px;
+  padding-top: var(--s-3);
+}
+
+/* A bookmarklet needs a mouse and a bookmarks bar. */
+@media (pointer: coarse) {
+  .new-shortcut {
+    display: none;
+  }
+}
+
+.new-bookmarklet {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.new-bookmarklet-code {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  padding: var(--s-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  line-height: var(--lh-mono-12);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.new-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin: 0;
+  padding-inline-start: var(--s-5);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* ---- Custom quality sheet ----------------------------------------- */
+
+.sheet-custom {
+  width: min(420px, 100%);
+  max-height: calc(94vh - var(--s-2));
+  overflow: hidden;
+}
+
+.sheet-custom > * {
+  flex-shrink: 0;
+}
+
+.sheet-custom > .new-custom-body {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.new-custom-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.new-custom-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.new-custom-label,
+.new-custom-field > span:first-child {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+.new-custom-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  cursor: pointer;
+}
+
+.new-custom-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.new-custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.new-custom-field .select {
+  width: 100%;
+}
+
+.new-custom-limits[data-off] .new-custom-field > span:first-child {
+  color: var(--text-disabled);
+}
+
+.new-custom-actions {
+  justify-content: space-between;
+}
+
+/* ---- Quality sheet ------------------------------------------------- */
+
+.sheet-quality {
+  width: min(720px, 100%);
+  max-height: calc(80vh - var(--s-2));
+}
+
+/* The head, the title and any notice stay; the slots and tracks scroll. */
+.sheet-quality {
+  overflow: hidden;
+}
+
+.sheet-quality > * {
+  flex-shrink: 0;
+}
+
+.sheet-quality > .quality-body {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* A long track list opens nearer the top than the usual 20vh. */
+.overlay-host:has(> .sheet-quality)[data-placement="center"] {
+  padding-top: 6vh;
+}
+
+.overlay-host[data-placement="center"] > .sheet-quality {
+  max-height: calc(94vh - var(--s-2));
+}
+
+.quality-error-msg {
+  overflow-wrap: anywhere;
+}
+
+.quality-for {
+  margin-top: calc(-1 * var(--s-3));
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quality-wait {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.quality-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.quality-slots,
+.quality-tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.quality-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--s-2);
+}
+
+.quality-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.quality-slot-label {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+.quality-slot-codec,
+.quality-slot-count {
+  color: var(--text-secondary);
+}
+
+.quality-slot-codec {
+  margin-inline-start: var(--s-1_5);
+  font-size: var(--fs-13);
+  font-weight: var(--w-regular);
+}
+
+.quality-track {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2) 0;
+}
+
+.quality-track + .quality-track {
+  border-top: var(--row-divider);
+}
+
+.quality-track-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.quality-track-no {
+  flex: none;
+  min-width: 2.5ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.quality-track-name {
+  min-width: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quality-track-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1_5);
+  padding-inline-start: calc(2.5ch + var(--s-2));
+}
+
+.quality-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-0_5) var(--s-1_5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-badge);
+  corner-shape: round;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.quality-opt-label {
+  font-weight: var(--w-medium);
+}
+
+.quality-opt-spec {
+  color: var(--text-secondary);
+}
+
+.quality-same {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* ---- Phone --------------------------------------------------------- */
+
+@media (max-width: 639px) {
+  /* A Submitted job keeps its progress row, a text line tall, before its
+     numbers arrive and once its run ends, as above. */
+  .job-list.job-list-compact.new-results > .new-result > .job-row[data-progress="off"] {
+    grid-template-areas:
+      "art main status"
+      "prog prog prog";
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-progress {
+    display: block;
+    min-height: var(--lh-13);
+  }
+
+  /* The dock is fixed above the tab bar, outside the cards, and the page
+     keeps its height free below the last row (--new-bar-h, measured by the
+     page). */
+  .page.page-new {
+    padding-bottom: var(--new-bar-h, 0px);
+  }
+
+  .page-new > .new-dock-wrap {
+    position: fixed;
+    left: var(--s-3);
+    right: var(--s-3);
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+    z-index: 15;
+    width: auto;
+    max-width: none;
+  }
+
+  :root:has(.new-dock-wrap) .toasts {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2) + var(--new-bar-h, var(--dock-h)) + var(--s-2));
+  }
+
+  /* Fixed to the bottom, the dock keeps its place; the notes grow upward. */
+  .new-notes {
+    order: -1;
+  }
+
+  .new-dock {
+    gap: var(--s-3);
+    padding-left: var(--s-4);
+  }
+
+  /* The count keeps its room down to 320 px: the button drops its glyph. */
+  .new-dock-go {
+    min-width: 0;
+    padding: 0 var(--s-4);
+  }
+
+  .new-dock-go > .icon {
+    display: none;
+  }
+
+  /* Under 400 px the count takes both lines; the quality menu above says
+     the rest. */
+  @media (max-width: 399px) {
+    .new-dock-what,
+    .new-dock-asks {
+      display: none;
+    }
+
+    .new-dock-count {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      white-space: normal;
+    }
+  }
+
+  /* The count breaks only between its parts, so the narrowest phones give
+     it a third line. */
+  @media (max-width: 359px) {
+    .new-dock-count {
+      -webkit-line-clamp: 3;
+    }
+  }
+
+  .new-dock-count {
+    font-size: var(--fs-14);
+    line-height: var(--lh-14);
+  }
+
+  /* Both options share one line down to 320 px: the menu gives way first;
+     the Settings retry takes the next line. */
+  .new-options {
+    gap: var(--s-2) var(--s-3);
+  }
+
+  .new-quality {
+    flex: 1 1 0;
+  }
+
+  .new-quality-select {
+    flex: 1;
+    max-width: none;
+  }
+
+  .new-shortcut,
+  .new-results-card {
+    margin-top: 0;
+  }
+
+  /* The title shares its line with the row's buttons (32 px drawn, a full
+     target with the hit area around them); the meta line and the notes run
+     under both, so they get the row's width. Available qualities keeps only
+     its icon. */
+  .new-link {
+    grid-template-areas: none;
+    row-gap: var(--s-0_5);
+    column-gap: var(--s-2);
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .new-link-pick {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .new-link-art {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .new-link-main {
+    display: contents;
+  }
+
+  .new-link-head {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .new-link-main > :not(.new-link-head) {
+    grid-column: 3 / -1;
+  }
+
+  /* 12 px apart, so each 32 px button's 44 px target stays its own. */
+  .new-link-actions {
+    grid-column: 4;
+    grid-row: 1;
+    gap: var(--s-3);
+  }
+
+  .new-link .new-link-actions {
+    align-self: center;
+  }
+
+  .new-link-actions > .btn {
+    position: relative;
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .new-link-actions > :is(.new-link-quality, .new-link-again, .new-link-remove) {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+  }
+
+  .new-link-actions > .btn::after {
+    content: "";
+    position: absolute;
+    inset: calc((32px - var(--touch)) / 2);
+  }
+
+  /* Titles take two lines before they give way; the meta line wraps
+     between its facts, two lines at most. */
+  .new-link-title:not(.is-url) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* Each fact carries its dot in front, in a strip the clip hides at the
+     start of every line: a wrapped line neither ends nor starts with a dot. */
+  .new-link-sub {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: calc(2 * var(--lh-13));
+    margin-inline-start: -1em;
+    clip-path: inset(0 0 0 1em);
+  }
+
+  .new-link-sub > * {
+    position: relative;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    padding-inline-start: 1em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .new-link-sub > *::before,
+  .new-link-sub > * + *::before {
+    content: "·";
+    position: absolute;
+    inset-inline-start: 0;
+    width: 1em;
+    text-align: center;
+  }
+
+
+  /* Albums are the usual case; the kind is spelled out for the others. */
+  .new-link[data-kind="album"] .new-link-fact[data-key="type"],
+  .new-link-adm {
+    display: none;
+  }
+
+  :is(.new-link-quality, .new-link-again) > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .new-result-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-areas:
+      "icon main"
+      "actions actions";
+    row-gap: var(--s-2);
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .new-result-actions {
+    justify-content: flex-start;
+  }
+
+  .new-custom-limits {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quality-slots {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quality-for {
+    margin-top: 0;
+  }
+}

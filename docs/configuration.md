@@ -1,71 +1,212 @@
 # Configuration
 
+> Type: reference
+
 Everything lives in one file. `AMDL_CONFIG` picks its path; the default is:
 
 ```text
 configs/config.yaml
 ```
 
-On first start the backend generates it from
-[`configs/config.example.yaml`](../configs/config.example.yaml), which must stay in the
-same directory. **The example file is the documentation** — allowed enum values, units,
+On first start the backend creates it from
+[`configs/config.example.yaml`](../configs/config.example.yaml), which is built into the
+binary (`configs#Example`), so no example needs to be on disk. **The example file is the documentation** — allowed enum values, units,
 defaults and template variables are written into its comments, key by key. `config.yaml`
 itself is managed by the backend and its comments do not survive a write.
 
-## Runtime vs startup keys
+## Defaults
 
-`PUT /api/v1/config` may only change runtime-mutable keys, but it rewrites the whole file
-including startup keys, dropping all comments in the process.
+A key missing from `config.yaml` takes the value `configs/config.example.yaml` sets, so a
+sparse file behaves the way the example documents. Tests in `internal/config` hold
+`Default()` equal to the example and every `Default:` note in its comments equal to
+`Default()`.
 
-Edit runtime keys by hand and the next `GET /api/v1/config` re-reads and applies them
-immediately. Startup keys still need a restart.
+Unknown keys fail startup with an error naming each one; keys removed in 2.0 are listed in
+[Upgrading to 2.0](upgrading-to-2.0.md#config-and-environment). That includes the old
+per-job concurrency keys such as `download.max_parallel_tracks`, replaced by the
+process-wide pools in [download-pipeline.md](download-pipeline.md#concurrency).
+
+## Runtime, restart and file-only keys
+
+`config.yaml` is the one source of every setting. `PUT /api/v1/config` (the console's and
+the desktop app's Settings) changes every key except three, and rewrites the whole file,
+dropping all comments in the process. It validates the result the way a start does, so a
+value it saves always loads. `internal/config#classOf` sorts the keys:
 
 | | |
 | --- | --- |
-| **Startup** | `server.listen`, `database.path`, `wrapper.*`, `tools.ffmpeg`, most of `logging.*`, the developer-token signing keys, and every pool size (`download.max_running_jobs`, `max_parallel_downloads`, `max_parallel_decrypts`, `max_parallel_wrapper_requests`, `catalog.max_parallel_requests`, `catalog.requests_per_second`, `catalog.request_burst`) |
-| **Runtime** | `logging.level`, `logging.access_log`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.signed_mode_hls_source`, `catalog.motion_artwork_enabled`, all remaining `download.*` keys, the whole `simulate` section and the whole `library_sync` section |
+| **Runtime** | `logging.level`, `logging.access_log`, `catalog.default_storefront`, `catalog.album_track_url_mode`, `catalog.motion_artwork_enabled`, every `download.*` key except the two pools below, the whole `simulate` section, and the whole `library_sync` and `apple_library` sections. A change applies at once, to new requests and newly started jobs. |
+| **Restart** | `wrapper.address`, `wrapper.timeout_seconds`, `wrapper.login_timeout_seconds`, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size`, and the pool sizes `download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`. `PUT` saves the value; it applies when the backend starts again, since components built at startup hold the old one. |
+| **File only** | `server.listen` (a wrong value cuts the console off), `database.path` (a new path looks like lost history) and `tools.ffmpeg` (the desktop app writes the ffmpeg it found on every start; the container image keeps the default, its ffmpeg being on PATH). `PUT` refuses them with `422 config_key_not_mutable`; edit the file and restart. |
+
+While this machine runs its own wrapper (`amdl wrapper install`), the backend writes
+`wrapper.address` itself and `PUT` refuses to change it (`config_key_not_mutable`,
+`details.reason` `managed_wrapper`).
+The desktop app's "Another machine" leaves an installed wrapper stopped and uses the
+address it names instead.
+
+The `config.yaml` the desktop app and other clients write for the backend they run
+(`internal/local`) drops keys this version removed and names them in the backend log; a
+`config.yaml` you keep fails startup on them, as the upgrade guide lists.
+
+`GET /api/v1/config` returns runtime keys as they run and restart keys as saved;
+`pending_restart` in its answer, in the `PUT` answer and in `GET /api/v1/system` names the
+keys whose saved value differs from the running one, a hand edit of a file-only key
+included. `POST /api/v1/system/restart` (the console's save bar, `amdl system
+restart`) stops every component the way a shutdown does and starts again in the same
+process, on the same address, which applies them; the process start time stays, so
+`uptime_seconds` in `GET /api/v1/system` does not reset. No supervisor is needed: `amdl serve`,
+the container and the desktop app all restart in place. The desktop app restarts the
+backend it runs by itself after such a save.
+
+Hand edits reach the running service like this:
+
+| Trigger | Effect |
+| --- | --- |
+| `GET /api/v1/config` | Reads the restart and file-only keys from the file to report `pending_restart`; runtime keys come from the running snapshot. |
+| `POST /api/v1/config/reload` (the console's "Reload from file") | Re-reads the file and applies its runtime keys. If the file is unreadable or invalid, the previous snapshot stays live and the response reports the error as `reload_error`. |
+| `PUT /api/v1/config` | Re-reads the file under the same lock first, then applies the patch, so a hand edit made since the last reload, and a restart key waiting for a restart, are kept rather than overwritten. An invalid file fails the `PUT` and changes nothing. |
+| Restart | Applies restart and file-only keys. A reload or `PUT` never makes one live, and a `PUT` keeps the edited value on disk for the next start. |
 
 Set these before first real use:
 
-- `server.listen` — API listen address.
-- `wrapper.address` — `wrapper-manager` gRPC address.
-- `database.path` — SQLite file (default `data/db/amdl.db`).
+- `server.listen` — API listen address, in the file.
+- `wrapper.address` — the wrapper's URL ([Wrapper](#wrapper)), in Settings.
+- `database.path` — SQLite file (default `data/db/amdl.db`), in the file.
 - `download.downloads_dir` — where finished files go.
-- `logging.*` — format, in-memory retention, optional rotating file.
-- `tools.ffmpeg` — path or command name.
+- `logging.*` — level, stdout on or off, in-memory retention. There is no log file.
+- `tools.ffmpeg` — path or command name, in the file.
 
-## Environment overrides
+## Environment variables and first values
 
-Any key can be overridden with `AMDL_<SECTION>_<KEY>` — the YAML path uppercased with `_`
-as the separator: `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_DATABASE_PATH`,
-`AMDL_LOGGING_LEVEL`, `AMDL_DOWNLOAD_QUALITY_PRIORITY`.
+No environment variable sets a key. Two choose the files:
 
-- Overrides sit on top of the file on every start and every config reload. Loading alone
-  never writes them back.
-- Value syntax: strings verbatim; booleans `true`/`false`; integers as digits; string
-  lists comma-separated (`alac,aac`), with an empty value meaning an empty list.
-- Unrecognised `AMDL_*` variables **fail startup**, so a typo can never be silently
-  ignored. `AMDL_CONFIG` and `AMDL_HOOKS_CONFIG` are exempt.
-- A field pinned by an environment variable cannot be changed through
-  `PUT /api/v1/config` — it returns `422`. Change the variable and restart.
-- A `PUT` persists the effective runtime snapshot, so an unchanged runtime field pinned by
-  an environment variable may be written into the file during an unrelated `PUT`.
-  Startup-field overrides are never baked in.
-
-## Developer-token signing
-
-The three `catalog.apple_music_*` keys form one unit.
-
-| State | Behaviour |
+| Variable | Sets |
 | --- | --- |
-| All three empty | Legacy mode. The bearer token is scraped from `music.apple.com` and catalog metadata is read from `amp-api.music.apple.com`, with `enhancedHls` included in the response. |
-| All three set | The backend signs its own 24-hour ES256 developer token at startup (any signing error fails startup) and reads catalog metadata from the official `api.music.apple.com`. That token cannot read `enhancedHls`, so the Enhanced HLS source is chosen separately by `catalog.signed_mode_hls_source`. |
-| Only some set | Startup fails with a configuration error. |
+| `AMDL_CONFIG` | Path of `config.yaml` (default `configs/config.yaml`) |
+| `AMDL_HOOKS_CONFIG` | Path of `hooks.yaml` (default `configs/hooks.yaml`, not committed; `configs/hooks.example.yaml` is the commented template) |
 
-`catalog.signed_mode_hls_source` only matters in signed mode: `wrapper` (default) takes
-the master playlist from the wrapper's authorized device manifest; `web_token` scrapes a
-web-player JWT and reads `enhancedHls` from `amp-api.music.apple.com` independently of the
-signed token. Use `web_token` when the wrapper cannot supply a usable device manifest.
+Any other `AMDL_*` variable is ignored, and startup logs one warning per variable naming
+it; that includes `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and
+`AMDL_DATABASE_PATH`, which earlier releases read. Move such a setting into the file or
+Settings.
+
+An install type that knows better first values than the example passes them to
+`amdl serve --init key=value` (repeatable): they are written into `config.yaml` only when
+`serve` creates it, keeping the example's comments, and validated first. The container
+image passes `server.listen=:18080` and `wrapper.address=http://host.docker.internal:12340`.
+Once the file exists it wins; startup logs each `--init` value the file differs from. The
+one exception: a `--init server.listen` that is not loopback rewrites a loopback
+`server.listen` in an existing file on every start, with a warning, since a loopback
+address cannot be reached from outside a container. Once rewritten, later starts change
+nothing.
+
+## Wrapper
+
+The `wrapper` section points the backend at the HTTP service that holds the Apple Music
+account sessions. All its keys apply after a restart.
+
+- `wrapper.address` is `http://host:port` or `https://host:port`, with an optional path
+  prefix for a reverse proxy; the default is `http://127.0.0.1:12340`. A bare `host:port`
+  fails startup. The scheme picks the transport: `http` is plaintext, `https` is TLS 1.2+
+  with the certificate and hostname verified against the system trust store. There is no
+  option to skip verification.
+- The URL is either a wrapper-lite or a wrapper-manager v2 in front of one. Both serve
+  manifests, lyrics, licenses and the decryption templates; only wrapper-manager has the
+  login API, so only it lets the console's Account page log in. The backend tells them
+  apart from `/status` and reports it as `login_supported` in
+  `GET /api/v1/wrapper/status`. Container setups for both are in
+  [Deployment](deployment.md#the-wrapper); what the backend asks of the wrapper is in
+  [Architecture](architecture.md#21-the-wrapper-and-decryption).
+- `wrapper.timeout_seconds` (default 30) bounds one wrapper HTTP request; a failed key
+  template request is retried up to three more times, 1, 2 and 4 seconds apart. A `/key` or
+  `/m3u8` waits at most ten times this for a free playback slot. A `/key` that runs out of
+  that wait skips the retries above, though the track's decrypt attempts
+  (`download.max_attempts`) still apply; a `/m3u8` falls back to the web manifest.
+  Decryption runs in the backend and has no wrapper timeout.
+- `wrapper.login_timeout_seconds` (default 120) bounds one console login request to a
+  wrapper-manager. A login that needs a two-step code takes two requests.
+- `wrapper.token` (default empty) is an optional key for a wrapper behind a gateway that
+  checks one, such as a Cloudflare Worker in front of a wrapper-manager, or a reverse
+  proxy. The backend sends it as `Authorization: Bearer <key>` on every wrapper request;
+  set the same key on the gateway (several backends may share one). `amdl wrapper keygen`,
+  or Generate in the desktop app's Connection settings, makes a strong one (32 random
+  bytes, base64url). It is a runtime key and write-only: `GET /config` shows a set key as
+  `...`, and `GET /wrapper/status` says `token_set`. A gateway that answers `401` fails
+  the wrapper requests with `wrapper_unauthorized` (not retried). Empty sends no header, as
+  a wrapper on the LAN expects.
+- A wrapper at `*.workers.dev` that times out or loses its connection gets a hint in the
+  error: mainland China blocks `workers.dev`, so bind a custom domain to the Worker and
+  set `wrapper.address` to it.
+- The wrapper may hold several accounts: a wrapper-manager holds at most 10. The backend
+  learns them from the wrapper's `/status` (a wrapper-manager lists them as instances) and
+  keeps one row per account, with its switches, in the database
+  ([Accounts](api.md#accounts)); the keys of `library_sync` and `apple_library` are shared
+  by all of them.
+- Simulate mode (below) skips the wrapper status check, so jobs can be submitted without one.
+
+### The media-user-token
+
+Station downloads, private playlist covers, library sync and the Apple library cache (with
+the `in_apple_library` mark on search hits) need the Apple Music
+media-user-token of a subscribed account. Each account has its own: library sync and the
+Apple library use the token of the account they run for, and any other request uses the
+token of the active account that serves the request's storefront (the one with the lowest
+position when several do), else the default account's. With one, the backend also fetches lyrics and the
+AAC-LC playlist and license from Apple itself rather than through the wrapper
+([Download pipeline](download-pipeline.md#lyrics)); without one, the wrapper does that.
+
+The wrapper holds each logged-in account's token and refreshes it itself; the backend
+never takes one from the user. It reads the token over HTTP: `GET /token?instance=<id>` on a
+wrapper-manager (the wrapper amdl runs itself, `amdl wrapper install`, is read this way
+too), `GET /token` on amdl's wrapper-lite fork, so it works for a wrapper on another machine
+or in another container with nothing to configure beyond `wrapper.address` and, behind a
+gateway, `wrapper.token`. Accounts come from the wrapper-manager's `/status` instances. The backend
+asks at startup, again a few seconds after the wrapper's own next refresh
+(`next_refresh_at`; at least one minute and at most one hour apart), after a console login
+or logout, and when Apple refuses the token.
+
+The backend keeps its own copy of the last token `GET /token` returned for each account, in
+`usertoken/` next to the database file (`wrapper-token.json` for the implicit account,
+`account-<id>.json` for another; directory mode 0700, file 0600). It lets the backend work
+on while the wrapper restarts. It is replaced by every new token, deleted when the wrapper
+answers that no account is logged in (`503`) or that it has no `GET /token` (`404`), and not
+used once `wrapper.address` points at another wrapper. The token is never logged and no API
+response carries it.
+
+A wrapper without `GET /token` (upstream wrapper-lite, older fork builds, a wrapper-manager
+that does not forward the route) answers `404`; the backend asks again only every 30
+minutes and has no token meanwhile. Albums, songs and playlists still download, with
+lyrics and AAC-LC licenses from the wrapper; stations, private playlist covers, library
+sync and the Apple library do not work.
+
+`catalog.default_storefront` applies only while no account is known: a fresh install before
+the first sign-in, or a backend without a wrapper or with `simulate.enabled`. Search,
+browse, record reads and links without a region then use it. Once an account exists, the
+default account's region wins, and `GET /api/v1/system` reports the effective value.
+
+## Catalog tokens and the Hi-Res manifest
+
+Every catalog read goes to `amp-api.music.apple.com` with a bearer token the backend
+scrapes from `music.apple.com`; `catalog.token_cache_ttl_hours` sets how long it is
+trusted. The backend holds no Apple developer key and never signs a token.
+
+`catalog.language` is the language Apple answers in: the genre tag, the album, song and
+artist names that go into tags and output paths, and lyrics translations. Set it before
+the first download; changing it later renames what new downloads write, so the
+"already downloaded" check misses files saved under the old names.
+
+The Enhanced HLS master playlist normally comes from the catalog response (`enhancedHls`).
+The web player's playlist can leave out a Hi-Res track's higher ALAC renditions that the
+wrapper's device manifest lists: an 88.2, 96 or 192 kHz stream may be missing while 48 kHz
+is there, and nothing in the playlist says so. So a track with the `hi-res-lossless` audio
+trait takes the device manifest from the wrapper (`/m3u8`) when `download.alac_max_sample_rate`
+is above 48000 or is 0 or less (no ceiling) and the codec is ALAC. From 1 to 48000, for Atmos
+and AAC, and for any other track, the catalog playlist is used and the wrapper is not asked, because the wrapper serves
+`/m3u8` and `/key` from one lock. The answer is remembered per storefront and song for 12
+hours (at most 1024 songs), and dropped as soon as the playlist it points to fails to load.
+If the wrapper cannot supply a manifest the track keeps the catalog playlist and may be
+capped at 48 kHz. `download.alac_max_sample_rate` then picks from whichever playlist was read.
 
 `catalog.motion_artwork_enabled` (default `true`) controls the lookup of Apple's animated
 album covers. When on, one extra `amp-api` request per album runs out of band on a context
@@ -81,22 +222,10 @@ submitted without a running wrapper. Catalog metadata and Enhanced HLS media sel
 still run for real, so titles, artwork and the reported bit depth / sample rate / bitrate
 are authentic and selection failures fall back through `quality_priority` exactly like a
 real download. Every API response, status, progress breakdown and SSE event matches a real
-job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`.
+job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`; raise
+both for a Hi-Res album to finish in seconds. A
+simulated run records its slots as downloaded like a real one, across restarts, but writes
+no file, so a disk check (`POST /api/v1/library/check`) finds them missing.
 
-Note that with developer-token signing enabled, manifests normally come from the wrapper —
-without one, selection falls back to a faked AAC-LC.
-
-## Upgrade notes
-
-**From the two-file layout.** On first start the backend merges a legacy `runtime.yaml`
-into `config.yaml` and renames the old file to `runtime.yaml.pre-merge.bak` (a numeric
-suffix is appended if that name is taken). Delete the backup once you are satisfied.
-
-**Removed keys fail startup.** Old per-job concurrency keys such as
-`download.max_parallel_tracks` are rejected as unknown fields — remove them by hand before
-starting. They were replaced by the process-wide pools described in
-[download-pipeline.md](download-pipeline.md#concurrency).
-
-**Removed environment variables.** `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR` no longer exist;
-leaving them set fails startup with an unknown-variable error. Use `AMDL_SERVER_LISTEN`
-and `AMDL_WRAPPER_ADDRESS`.
+Without a running wrapper a Hi-Res track keeps the catalog playlist, which may lack its
+88.2 kHz and higher ALAC renditions.

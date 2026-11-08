@@ -1,0 +1,138 @@
+# Containerized deployment of the AMDL Backend.
+#
+#   docker compose up -d
+#
+# By default this pulls the multi-arch prebuilt image from GHCR; no local build
+# is needed. To build from source, see the note next to amdl-backend.image
+# below.
+#
+# The first start generates config.yaml in ./configs (the backend bootstraps it
+# from config.example.yaml; the commented field documentation is the example
+# file in the same directory). To change the configuration afterwards:
+#   - runtime fields: PUT /api/v1/config (the console's Settings page), which
+#     takes effect immediately and rewrites config.yaml in full;
+#   - or edit ./configs/config.yaml directly, then apply runtime fields with
+#     POST /api/v1/config/reload (the console's "Reload from file") and startup
+#     fields with docker compose restart.
+# No environment variable sets a key (see the environment block below).
+#
+# Stopping or restarting is safe mid-download: running jobs stay running in
+# the database and resume on the next start.
+services:
+  amdl-backend:
+    # Pulls the prebuilt image from GHCR by default (multi-arch linux/amd64 +
+    # linux/arm64). To pin a version, replace latest with a specific tag, for
+    # example :2.0 or :2.0.0.
+    image: ghcr.io/amdl-web/apple-music-downloader:latest
+    # To build locally from source instead of pulling the image, run compose
+    # from deploy/ in a clone of the repository and uncomment the build block
+    # below (the image line then becomes the tag of the locally built image),
+    # then run docker compose up -d --build. Where proxy.golang.org or
+    # dl-cdn.alpinelinux.org is unreachable, uncomment the mirror build args
+    # too (docs/deployment.md lists both):
+    # build:
+    #   context: ..
+    #   dockerfile: deploy/server/Dockerfile
+    #   args:
+    #     GOPROXY: "https://goproxy.cn,direct"
+    #     ALPINE_MIRROR: "https://mirrors.tuna.tsinghua.edu.cn/alpine"
+    container_name: amdl-backend
+    restart: unless-stopped
+    # Time between SIGTERM and SIGKILL. The backend's shutdown steps are each
+    # bounded (HTTP drain 5s + handlers 5s + library sync 10s + jobs 45s +
+    # downloader 15s + hooks 15s + 10s, about 105s worst case; see
+    # internal/server/shutdown.go), and Docker's default of 10s would cut them
+    # before the database is closed. Keep this above that sum.
+    stop_grace_period: 2m
+    ports:
+      - "18080:18080"
+    environment:
+      # Runtime user: the container starts the entrypoint as root, which gives
+      # the backend's own state (configs, database, data/tmp) to PUID:PGID and
+      # then drops to that user to run the backend; default 1000:1000. Set them
+      # to the uid/gid that owns the host directories. The downloads directory
+      # is never re-owned: create it on the host before the first start and
+      # make it writable by PUID:PGID. This mode keeps only the one group
+      # PGID; when write access comes through a supplementary group (Synology's
+      # administrators, gid 101), use user: plus group_add instead, see
+      # docs/deployment.md.
+      # PUID: "1000"
+      # PGID: "1000"
+      # Time zone for log timestamps and for the local time seen by commands in
+      # exec hooks. The image ships tzdata, so an IANA time zone name such as
+      # "Asia/Shanghai" is all that is needed.
+      TZ: "UTC"
+      # No environment variable sets a key: every setting lives in config.yaml,
+      # which the console's Settings edits, and any other AMDL_* variable is
+      # ignored with a warning at startup. The backend creates config.yaml on
+      # first start with server.listen ":18080" and wrapper.address
+      # "http://host.docker.internal:12340", a wrapper-lite on the host. For a
+      # wrapper service below, set Settings > Account > Session service to its
+      # URL and restart from the notice there:
+      #   - wrapper-manager (recommended): "http://wrapper-manager:8080";
+      #   - wrapper-lite: "http://wrapper-lite:12340".
+      # Only a wrapper-manager has the login API the console's Account page uses;
+      # against a bare wrapper-lite you log in on its own command line (--login).
+    extra_hosts:
+      # Lets containers on Linux reach the host through host.docker.internal too.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Config directory: config.yaml (managed by the backend, rewritten in full
+      # on PUT), config.example.yaml (full field documentation), hooks.yaml.
+      - ./configs:/app/configs
+      # SQLite database directory (database.path defaults to data/db/amdl.db).
+      - ./data/db:/app/data/db
+      # Download output directory; to put it elsewhere on the host, change the
+      # left side of the colon, for example /path/to/music:/app/data/downloads.
+      - ./data/downloads:/app/data/downloads
+      # The temp directory data/tmp stays inside the container and needs no
+      # mount; with an NVMe drive, mount one there for faster scratch files.
+
+  # Wrapper, option A (recommended): wrapper-manager v2, which supervises
+  # wrapper-lite accounts behind one HTTP port and lets you log in from the
+  # console; it holds up to 10 accounts and amdl serves them all. No image is
+  # published, so compose builds it from manager/ on the amdl branch of
+  # AMDL-Web's wrapper (Go and Docker are all it needs), which installs
+  # AMDL-Web's wrapper-lite instead of upstream's (docs/deployment.md, "The
+  # wrapper"); first start downloads the release asset of that payload it pins
+  # from GitHub.
+  # wrapper-lite-rootless needs user namespaces and chroot, which Docker blocks
+  # by default, hence privileged (a seccomp profile that allows unshare works
+  # too). Linux amd64 only. arm64 hosts and hosts without user
+  # namespaces: see docs/deployment.md, "The wrapper".
+  # Uncomment, add the wrapper-data volume at the bottom of this file, set the
+  # session service to "http://wrapper-manager:8080" in Settings and restart.
+  # Then log in on the console's Account page.
+  # wrapper-manager:
+  #   build: https://github.com/AMDL-Web/wrapper.git#amdl:manager
+  #   image: wrapper-manager:latest
+  #   container_name: wrapper-manager
+  #   restart: unless-stopped
+  #   privileged: true
+  #   command: ["--host", "0.0.0.0", "--port", "8080"]
+  #   volumes:
+  #     - wrapper-data:/root/data
+
+  # Wrapper, option B: a bare wrapper-lite, from AMDL-Web's fork. No image is
+  # published for it either; compose builds it from the fork's amdl branch,
+  # which downloads the Android NDK and takes a while.
+  # It has no login API: put USERNAME and PASSWORD in a .env file next to this
+  # one (never in this file) for the first start, which logs in; if Apple asks
+  # for a 2FA code, write it to 2fa.txt in the mounted data directory.
+  # Uncomment, and set the session service to "http://wrapper-lite:12340" in
+  # Settings, then restart.
+  # wrapper-lite:
+  #   build: https://github.com/AMDL-Web/wrapper.git#amdl
+  #   container_name: wrapper-lite
+  #   restart: unless-stopped
+  #   security_opt:
+  #     - seccomp:unconfined
+  #   environment:
+  #     USERNAME: ${USERNAME}
+  #     PASSWORD: ${PASSWORD}
+  #   volumes:
+  #     - ./data/wrapper:/app/rootfs/data
+
+# For option A:
+# volumes:
+#   wrapper-data:

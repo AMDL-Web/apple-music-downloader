@@ -1,0 +1,296 @@
+/* Library (views/library.js, views/library-apple.js), the record drawer
+   (views/record-drawer.js), record rows (views/record-row.js), and
+   Activity's Download missing (views/queue-missing.js) and Couldn't add
+   (views/queue-failed-adds.js). Rows reuse the job row frame (.job-row);
+   these rules add what records have of their own. */
+
+/* A record's flags on its second line, after the artist. */
+.record-row .job-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+}
+
+.record-flag {
+  color: var(--warning-text);
+}
+
+.record-flag[data-flag="failed"],
+.record-flag[data-flag="given_up"] {
+  color: var(--danger-text);
+}
+
+/* The strip over a list: the last disk check (or sync) and its actions. */
+.library-check-body {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-height: var(--control-h);
+}
+
+.library-check-text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.library-check-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+/* Record drawer tracks: number, title, quality chips, length, state, menu. */
+.rtracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rtrack {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto 44px minmax(112px, auto) var(--control-h);
+  grid-template-areas:
+    "idx main slots len state menu"
+    "idx note note note note note";
+  align-items: center;
+  column-gap: var(--s-3);
+  min-height: 44px;
+  padding: var(--s-1) 0;
+  border-top: var(--row-divider);
+}
+
+.rtrack:focus-visible {
+  outline-offset: -2px;
+}
+
+.rtrack .track-index {
+  align-self: center;
+}
+
+.rtrack[data-wanted="false"] .track-main {
+  color: var(--text-secondary);
+}
+
+.rtrack-slots {
+  grid-area: slots;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-1);
+}
+
+/* A record with another quality: each quality and its own state. */
+.rtrack-each {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-1) var(--s-3);
+}
+
+/* A quality chip keeps the label's case ("262 kbps", "44.1 kHz"). */
+.rtrack-slot .chip {
+  text-transform: none;
+}
+
+/* A slot that is not downloaded draws its chip quietly. */
+.rtrack-slot:not([data-state="done"]) {
+  opacity: 0.6;
+}
+
+.rtrack-len {
+  grid-area: len;
+  text-align: right;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.rtrack-state {
+  grid-area: state;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  font-size: var(--fs-12);
+}
+
+.rtrack-menu {
+  grid-area: menu;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rtrack > .track-error {
+  grid-area: note;
+  margin: 0 0 var(--s-1);
+}
+
+.record-runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Activity's Couldn't add rows. */
+.held-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.held-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 56px;
+  padding: var(--s-2) var(--card-pad-x);
+  border-top: var(--row-divider);
+}
+
+.held-row:first-child {
+  border-top: 0;
+}
+
+.held-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.held-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+.held-actions {
+  display: flex;
+  flex: none;
+  gap: var(--s-1);
+}
+
+/* Library › Apple Music. */
+.apple-lib {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+.apple-list,
+.apple-tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.apple-item + .apple-item {
+  border-top: var(--row-divider);
+}
+
+.apple-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 56px;
+  padding: var(--s-2) var(--card-pad-x);
+}
+
+.apple-row .art-round {
+  border-radius: 50%;
+}
+
+.apple-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.apple-title,
+.apple-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.apple-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+.apple-sub {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.apple-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.apple-mark {
+  color: var(--success-text);
+}
+
+.apple-tracks {
+  padding: 0 var(--card-pad-x) var(--s-2) calc(var(--card-pad-x) + 40px + var(--s-3));
+}
+
+.apple-track {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 44px var(--control-h);
+  grid-template-areas: "idx main len act";
+  align-items: center;
+  column-gap: var(--s-3);
+  min-height: 40px;
+  border-top: var(--row-divider);
+}
+
+.apple-track > .apple-action {
+  grid-area: act;
+}
+
+.apple-tracks-empty {
+  margin: 0;
+  padding: 0 var(--card-pad-x) var(--s-3) calc(var(--card-pad-x) + 40px + var(--s-3));
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+@media (max-width: 639px) {
+  /* On a phone a track's chips and state go under its title. */
+  .rtrack {
+    grid-template-columns: 24px minmax(0, 1fr) auto var(--touch);
+    grid-template-areas:
+      "idx main len menu"
+      "idx state slots menu"
+      "idx note note note";
+    row-gap: var(--s-1);
+    padding: var(--s-2) 0;
+  }
+
+  .rtrack-state,
+  .rtrack-each {
+    justify-content: flex-start;
+  }
+
+  .apple-tracks,
+  .apple-tracks-empty {
+    padding-inline-start: var(--card-pad-x);
+  }
+
+  .library-check-actions {
+    margin-left: 0;
+  }
+}

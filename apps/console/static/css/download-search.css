@@ -1,0 +1,679 @@
+/*
+ * The New download page's search results (views/download-search.js,
+ * download-search-group.js, download-tiles.js, download-songs.js): four
+ * titled sections (Albums, Playlists and Artists as Overview's tile wall,
+ * Songs as rows on a grouped surface) with Show more, one group alone under
+ * its tabs, the notes and an artist's albums. A song row is a detected-link row
+ * (download-form.css .new-link) without the include box. Linked after
+ * download.css, so its phone rules at the end are its own. Base structure
+ * only; it reads tokens like every other base stylesheet, and the skin
+ * restyles it.
+ */
+
+/* The room keeps the height the hits reached during a search
+   (views/download-search.js); the sections on top of it. The results run
+   wider than the compose column, up to --stage-max. */
+.new-search-room {
+  display: flex;
+  flex-direction: column;
+}
+
+.new-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  container-type: inline-size;
+}
+
+/* While a new term loads, the last hits stay where they are, quiet. */
+.new-search :is(.wall, .new-hits, .new-search-note) {
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.new-search[data-state="stale"] :is(.wall, .new-hits, .new-search-note) {
+  opacity: 0.55;
+}
+
+.new-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.new-hits > li + li {
+  border-top: var(--row-divider);
+}
+
+/* ---- Tile walls ---------------------------------------------------- */
+
+/* Six across (one answer's worth), three on a narrower page, two on a
+   phone page; a group shown alone runs on in rows. */
+.new-wall {
+  --cols: 6;
+  list-style: none;
+}
+
+@container (max-width: 959px) {
+  .new-wall {
+    --cols: 3;
+  }
+}
+
+@container (max-width: 479px) {
+  .new-wall {
+    --cols: 2;
+  }
+
+  /* On a phone the sections are shelves that scroll sideways, edge to
+     edge; a group shown alone is rows (data-expanded). The padding keeps
+     the covers' shadows out of the clip. */
+  .new-search-group .new-wall:not([data-expanded]) {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 42%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--main-x);
+    scrollbar-width: none;
+    margin: calc(-1 * var(--s-2)) calc(-1 * var(--main-x)) calc(-1 * var(--s-4));
+    padding: var(--s-2) var(--main-x) var(--s-4);
+  }
+
+  .new-search-group .new-wall:not([data-expanded]) > li {
+    scroll-snap-align: start;
+  }
+
+  /* A shelf's album facts take two lines there (they wrap between facts),
+     so the placeholders keep that room and the answer moves nothing. */
+  .new-search-group .new-wall[data-kind="album"]:not([data-expanded]) .wall-sub {
+    min-height: 2lh;
+  }
+}
+
+.new-tile {
+  min-width: 0;
+  /* The arrow keys scroll a tile clear of the top bar. */
+  scroll-margin-block: calc(var(--topbar-h) + var(--s-4)) var(--s-10);
+}
+
+/* The cover carries what the tile says: its first quality bottom left,
+   Download bottom right, a library or queue badge top right. */
+.new-tile-cover {
+  position: relative;
+}
+
+.new-tile-cover > .art,
+.new-tile-job > .art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.new-tile-job {
+  display: block;
+  border-radius: var(--r-art);
+}
+
+/* In the queue already: listed, quiet, nothing to download. */
+.new-tile[data-prior="active"] .art {
+  opacity: 0.6;
+}
+
+.new-tile-chip,
+.new-tile-badge,
+.new-tile-go {
+  position: absolute;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--bg-chrome);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  color: var(--text-primary);
+}
+
+.new-tile-chip {
+  left: var(--s-2);
+  bottom: var(--s-2);
+  max-width: calc(100% - 36px - 3 * var(--s-2));
+  padding: 0 var(--s-2);
+  overflow: hidden;
+  font-size: var(--fs-11);
+  line-height: 22px;
+  font-weight: var(--w-semibold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.new-tile-badge {
+  top: var(--s-2);
+  right: var(--s-2);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+}
+
+.new-tile-badge[data-state="complete"] {
+  color: var(--success-text);
+}
+
+/* Part of the album on disk: its count, "9/12", in a pill of the badge's
+   height. */
+.new-tile-badge[data-state="partial"] {
+  width: auto;
+  min-width: 28px;
+  padding: 0 var(--s-2);
+  font-size: var(--fs-11);
+  font-weight: var(--w-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Download: a 36 px glass circle (a 44 px target) that shows on hover or
+   focus with a mouse, always on a touch screen. */
+.new-tile-go {
+  right: var(--s-2);
+  bottom: var(--s-2);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  box-shadow: var(--shadow-thumb);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.new-tile-go::after {
+  content: "";
+  position: absolute;
+  inset: calc((36px - var(--touch)) / 2);
+}
+
+.new-tile:hover .new-tile-go,
+.new-tile-go:focus-visible,
+.new-tile-go[aria-busy] {
+  opacity: 1;
+}
+
+.new-tile-go:hover:not([aria-disabled="true"]) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.new-tile-go[aria-busy] {
+  cursor: progress;
+}
+
+@media (hover: none) {
+  .new-tile-go {
+    opacity: 1;
+  }
+}
+
+/* In the queue: still a focus stop, drawn as a disabled button. */
+.new-tile-go[aria-disabled="true"]:not([aria-busy]) {
+  cursor: not-allowed;
+}
+
+.new-tile:hover .new-tile-go[aria-disabled="true"]:not([aria-busy]),
+.new-tile-go[aria-disabled="true"]:not([aria-busy]):focus-visible {
+  opacity: 0.55;
+}
+
+@media (hover: none) {
+  .new-tile-go[aria-disabled="true"]:not([aria-busy]) {
+    opacity: 0.55;
+  }
+}
+
+.new-tile-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.new-tile-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.new-tile-title > .new-link-explicit {
+  flex: none;
+}
+
+/* Artist · year · tracks, one line cut at its end; on a phone it wraps
+   between facts instead (below). */
+.new-tile-fact + .new-tile-fact::before {
+  content: " · ";
+}
+
+/* An artist: one button, a round cover over the name. */
+.new-tile-open {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.new-wall[data-kind="artist"] :is(.art, .art.skel) {
+  border-radius: var(--r-full);
+  corner-shape: round;
+}
+
+.new-wall[data-kind="artist"] :is(.wall-title, .wall-sub) {
+  text-align: center;
+}
+
+/* ---- Song rows ----------------------------------------------------- */
+
+/* One column of rows, two or three side by side on a wider page. */
+.new-search-group[data-section="hits-songs"] .new-hits {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 600px) {
+  .new-search-group[data-section="hits-songs"] .new-hits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .new-search-group[data-section="hits-songs"] .new-hits > li:nth-child(2) {
+    border-top: 0;
+  }
+}
+
+@container (min-width: 960px) {
+  .new-search-group[data-section="hits-songs"] .new-hits {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .new-search-group[data-section="hits-songs"] .new-hits > li:nth-child(3) {
+    border-top: 0;
+  }
+}
+
+.new-hit {
+  position: relative;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--card-pad-x);
+  /* The arrow keys scroll a hit clear of the top bar. */
+  scroll-margin-block: calc(var(--topbar-h) + var(--s-4)) var(--s-10);
+}
+
+/* In the queue already: listed, quiet, nothing to download. */
+.new-hit[data-prior="active"] .new-hit-art {
+  opacity: 0.6;
+}
+
+.new-hit-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+  min-width: 0;
+  container-type: inline-size;
+}
+
+/* Title, the Explicit mark and the quality tags on one line; short of room
+   the tags give way first, then the title. */
+.new-hit-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.new-hit-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A quality chip is whole or gone (the container queries below drop it on a
+   narrow row): a long title gives way with its ellipsis instead. */
+.new-hit-head > .chip {
+  flex: none;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+@container (max-width: 440px) {
+  .new-hit-head > .chip + .chip {
+    display: none;
+  }
+}
+
+@container (max-width: 300px) {
+  .new-hit-head > .chip {
+    display: none;
+  }
+}
+
+.new-hit-sub {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-hit-sub > * + *::before {
+  content: " · ";
+}
+
+/* Download: a round glyph button with a 44 px target around it. */
+.new-hit-download {
+  position: relative;
+}
+
+.new-hit-download::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--control-h-sm) - var(--touch)) / 2);
+}
+
+/* A skeleton row holds a real row's two lines. */
+.new-hit.is-skel .new-hit-head,
+.new-hit.is-skel .new-hit-sub {
+  display: block;
+}
+
+.new-hit-skel-title {
+  width: 45%;
+}
+
+.new-hit-art > .skel {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+/* ---- One group alone ---------------------------------------------- */
+
+.new-search-alone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* Back to every group, then the four groups; past the screen's width the
+   groups scroll sideways inside their track, never the page. */
+.new-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
+}
+
+.new-group-back {
+  flex: none;
+}
+
+.new-group-head .seg {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.new-group-head .seg::-webkit-scrollbar {
+  display: none;
+}
+
+.new-group-head .seg-btn {
+  flex: 1 0 auto;
+  justify-content: center;
+}
+
+/* Under the list while pages are to come: one height whether it waits,
+   loads or failed, so nothing moves when its words change. */
+.new-search-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2) var(--s-3);
+  min-height: var(--touch);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* ---- Show more, notes ---------------------------------------------- */
+
+.new-search-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.new-search-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+.new-search-note .icon {
+  flex: none;
+  margin-top: var(--s-1);
+}
+
+.new-search-fail-text {
+  overflow-wrap: anywhere;
+}
+
+.new-search-fail-text > strong {
+  font-weight: var(--w-semibold);
+}
+
+/* ---- An artist's albums -------------------------------------------- */
+
+.new-artist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+/* Back over the head: a round cover, the name, Download all. */
+.new-artist-head {
+  scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "back back back"
+    "art main all";
+  align-items: center;
+  gap: var(--s-4) var(--s-6);
+}
+
+.new-artist-back {
+  grid-area: back;
+  justify-self: start;
+  scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
+}
+
+.new-artist-art {
+  grid-area: art;
+  width: 120px;
+  height: 120px;
+  border-radius: var(--r-full);
+  corner-shape: round;
+}
+
+.new-artist-main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.new-artist-name {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-page-title);
+  line-height: var(--lh-page-title);
+  font-weight: var(--w-title);
+  letter-spacing: var(--tracking-title);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-artist-sub {
+  color: var(--text-secondary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+.new-artist-all {
+  grid-area: all;
+}
+
+/* With a touch target Show more is 44 px tall: the head keeps that room
+   while the placeholders show, so the sections do not move when it
+   arrives. */
+@media (max-width: 639px), (pointer: coarse) {
+  .new-search-group > .card-head {
+    min-height: var(--touch);
+  }
+}
+
+/* ---- Phone --------------------------------------------------------- */
+
+@media (max-width: 639px) {
+  /* Clear of the tab bar too. */
+  .new-tile,
+  .new-hit {
+    scroll-margin-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-4));
+  }
+
+  /* The title takes two lines before it gives way, and the meta line wraps
+     between its facts, as on a link row. */
+  .new-hit {
+    column-gap: var(--s-2);
+    padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4);
+  }
+
+  .new-hit-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* An album tile's facts wrap between facts, two lines at most, as a
+     song's meta line does. */
+  .new-tile-sub {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: 2lh;
+    margin-inline-start: -1em;
+    clip-path: inset(0 0 0 1em);
+    white-space: normal;
+  }
+
+  .new-tile-sub > .new-tile-fact {
+    position: relative;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    padding-inline-start: 1em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .new-tile-sub > .new-tile-fact::before,
+  .new-tile-sub > .new-tile-fact + .new-tile-fact::before {
+    content: "·";
+    position: absolute;
+    inset-inline-start: 0;
+    width: 1em;
+    text-align: center;
+  }
+
+  /* As .new-link-sub: dots in a clipped strip, never at a line's end. */
+  .new-hit-sub {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: calc(2 * var(--lh-13));
+    margin-inline-start: -1em;
+    clip-path: inset(0 0 0 1em);
+    white-space: normal;
+  }
+
+  .new-hit-sub > * {
+    position: relative;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    padding-inline-start: 1em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .new-hit-sub > *::before,
+  .new-hit-sub > * + *::before {
+    content: "·";
+    position: absolute;
+    inset-inline-start: 0;
+    width: 1em;
+    text-align: center;
+  }
+
+  /* Back on its own line, then the artist, then Download all across. */
+  .new-artist-head {
+    grid-template-columns: 88px minmax(0, 1fr);
+    grid-template-areas:
+      "back back"
+      "art main"
+      "all all";
+    gap: var(--s-3) var(--s-4);
+  }
+
+  .new-artist-art {
+    width: 88px;
+    height: 88px;
+  }
+
+  .new-artist-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .new-artist-all {
+    width: 100%;
+    justify-content: center;
+  }
+}

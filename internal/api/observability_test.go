@@ -2,17 +2,13 @@ package api
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/coder/websocket"
 
 	"amdl/internal/config"
 	"amdl/internal/logging"
@@ -27,22 +23,22 @@ func newObservedServer(t *testing.T) (*Server, *logging.System) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = system.Close() })
-	server := NewServer(config.NewStore(cfg), nil, nil, nil, nil, nil, nil, system.Logger, system)
+	server := newServer(t, Deps{Config: config.NewStore(cfg), Logger: system.Logger, Logging: system})
 	return server, system
 }
 
 func TestHTTPObservationAndLogQuery(t *testing.T) {
 	server, system := newObservedServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	// A client's own id is not adopted: the server always generates one.
 	req.Header.Set("X-Request-ID", "client-request-1")
-	rec := httptest.NewRecorder()
-	server.Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || rec.Header().Get("X-Request-ID") != "client-request-1" {
-		t.Fatalf("health response = %d, request id %q", rec.Code, rec.Header().Get("X-Request-ID"))
+	rec := serve(t, server.Routes(), req)
+	requestID := rec.Header().Get("X-Request-ID")
+	if rec.Code != http.StatusOK || requestID == "" || requestID == "client-request-1" {
+		t.Fatalf("health response = %d, request id %q, want a generated id", rec.Code, requestID)
 	}
 
-	page := system.Store.List(logging.Filter{RequestID: "client-request-1", Limit: 10})
+	page := system.Store.List(logging.Filter{RequestID: requestID, Limit: 10})
 	if len(page.Entries) != 1 || page.Entries[0].Message != "http request" {
 		t.Fatalf("access logs = %#v", page.Entries)
 	}
@@ -51,9 +47,8 @@ func TestHTTPObservationAndLogQuery(t *testing.T) {
 		t.Fatalf("access attrs = %#v", attrs)
 	}
 
-	query := httptest.NewRequest(http.MethodGet, "/api/v1/logs?request_id=client-request-1&level=info&limit=10", nil)
-	queryRec := httptest.NewRecorder()
-	server.Routes().ServeHTTP(queryRec, query)
+	query := httptest.NewRequest(http.MethodGet, "/api/v1/logs?request_id="+requestID+"&level=info&limit=10", nil)
+	queryRec := serve(t, server.Routes(), query)
 	if queryRec.Code != http.StatusOK {
 		t.Fatalf("query status = %d: %s", queryRec.Code, queryRec.Body.String())
 	}
@@ -74,11 +69,8 @@ func TestHTTPObservationRecoversPanic(t *testing.T) {
 	handler := server.observeHTTP(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	}))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/panic", nil))
-	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "internal server error") {
-		t.Fatalf("panic response = %d %s", rec.Code, rec.Body.String())
-	}
+	rec := serve(t, handler, httptest.NewRequest(http.MethodGet, "/panic", nil))
+	assertErrorCode(t, rec, http.StatusInternalServerError, "internal_error")
 	page := system.Store.List(logging.Filter{Levels: []string{"error"}, Limit: 10})
 	if len(page.Entries) != 2 || page.Entries[0].Message != "http request panic" || page.Entries[1].Message != "http request" {
 		t.Fatalf("panic logs = %#v", page.Entries)
@@ -88,7 +80,7 @@ func TestHTTPObservationRecoversPanic(t *testing.T) {
 func TestLogStreamReplaysAndPublishes(t *testing.T) {
 	server, system := newObservedServer(t)
 	system.Logger.Info("backlog", "component", "test")
-	httpServer := httptest.NewServer(server.Routes())
+	httpServer := newHTTPServer(t, server.Routes())
 	defer httpServer.Close()
 
 	client := &http.Client{Timeout: 3 * time.Second}
@@ -118,100 +110,5 @@ func TestLogStreamReplaysAndPublishes(t *testing.T) {
 	}
 	if len(dataLines) != 2 || !strings.Contains(dataLines[0], `"message":"backlog"`) || !strings.Contains(dataLines[1], `"message":"live"`) {
 		t.Fatalf("stream data = %#v", dataLines)
-	}
-}
-
-func TestLogStreamWebSocketReplaysAndPublishes(t *testing.T) {
-	server, system := newObservedServer(t)
-	system.Logger.Info("backlog", "component", "wstest")
-	httpServer := httptest.NewServer(server.Routes())
-	defer httpServer.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/api/v1/logs/stream/ws?component=wstest&limit=10"
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.CloseNow()
-
-	// The backlog is queued before Dial returns, so publishing now exercises the
-	// live path rather than racing the replay.
-	system.Logger.Warn("live", "component", "wstest")
-
-	var messages []logging.Entry
-	for len(messages) < 2 {
-		_, raw, err := conn.Read(ctx)
-		if err != nil {
-			t.Fatalf("read %d: %v", len(messages), err)
-		}
-		var entry logging.Entry
-		if err := json.Unmarshal(raw, &entry); err != nil {
-			t.Fatalf("decode %q: %v", raw, err)
-		}
-		messages = append(messages, entry)
-	}
-	if messages[0].Message != "backlog" || messages[0].Level != "info" {
-		t.Fatalf("backlog message = %+v", messages[0])
-	}
-	if messages[1].Message != "live" || messages[1].Level != "warn" {
-		t.Fatalf("live message = %+v", messages[1])
-	}
-	if messages[1].Sequence <= messages[0].Sequence {
-		t.Fatalf("sequences not increasing: %d then %d", messages[0].Sequence, messages[1].Sequence)
-	}
-}
-
-func TestLogStreamWebSocketResumesAfterSequence(t *testing.T) {
-	server, system := newObservedServer(t)
-	system.Logger.Info("first", "component", "wsresume")
-	system.Logger.Info("second", "component", "wsresume")
-	httpServer := httptest.NewServer(server.Routes())
-	defer httpServer.Close()
-
-	page := system.Store.List(logging.Filter{Component: "wsresume", Limit: 10})
-	if len(page.Entries) != 2 {
-		t.Fatalf("seeded entries = %#v", page.Entries)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") +
-		"/api/v1/logs/stream/ws?component=wsresume&after=" + strconv.FormatUint(page.Entries[0].Sequence, 10)
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.CloseNow()
-
-	_, raw, err := conn.Read(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var entry logging.Entry
-	if err := json.Unmarshal(raw, &entry); err != nil {
-		t.Fatal(err)
-	}
-	if entry.Message != "second" {
-		t.Fatalf("resumed entry = %+v, want the record after the cursor", entry)
-	}
-}
-
-func TestLogStreamWebSocketRejectsInvalidFilter(t *testing.T) {
-	server, _ := newObservedServer(t)
-	httpServer := httptest.NewServer(server.Routes())
-	defer httpServer.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/api/v1/logs/stream/ws?level=nope"
-	conn, resp, err := websocket.Dial(ctx, wsURL, nil)
-	if err == nil {
-		conn.CloseNow()
-		t.Fatal("dial succeeded, want the handshake refused before the upgrade")
-	}
-	if resp == nil || resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("handshake response = %+v", resp)
 	}
 }

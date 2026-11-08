@@ -1,0 +1,185 @@
+package wrapperhost
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Fetcher writes a pinned asset's bytes from offset on, so an interrupted
+// download resumes. Download checks what it wrote against the pin.
+type Fetcher interface {
+	Fetch(ctx context.Context, a Asset, offset int64, w io.Writer) error
+}
+
+// Releases fetches GuestRepo's release assets. The URL names the release of
+// one commit, whose assets are never replaced, and the sha256 check guards
+// the bytes.
+type Releases struct {
+	Client *http.Client
+	// Base replaces "https://github.com"; tests point it at a local server.
+	Base string
+	// Conns is how many ranges Download fetches at once; 0 means defaultConns.
+	Conns int
+}
+
+// fetchTimeout bounds one download attempt; a slow link resumes on the next.
+const fetchTimeout = 30 * time.Minute
+
+// url is a's URL, on Base when it is set.
+func (r Releases) url(a Asset) string {
+	if r.Base == "" {
+		return a.URL
+	}
+	return r.Base + strings.TrimPrefix(a.URL, "https://github.com")
+}
+
+func (r Releases) client() *http.Client {
+	if r.Client != nil {
+		return r.Client
+	}
+	return http.DefaultClient
+}
+
+// Fetch implements Fetcher.
+func (r Releases) Fetch(ctx context.Context, a Asset, offset int64, w io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+	url := r.url(a)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	if offset > 0 {
+		req.Header.Set("Range", "bytes="+strconv.FormatInt(offset, 10)+"-")
+	}
+	resp, err := r.client().Do(req)
+	if err != nil {
+		return redact(err)
+	}
+	defer resp.Body.Close()
+	switch {
+	case offset > 0 && resp.StatusCode == http.StatusPartialContent, offset == 0 && resp.StatusCode == http.StatusOK:
+	case resp.StatusCode == http.StatusNotFound:
+		return fmt.Errorf("%s is not published", url)
+	default:
+		return fmt.Errorf("%s: %s", url, resp.Status)
+	}
+	_, err = io.Copy(w, resp.Body)
+	return err
+}
+
+// Phase names a step of installing a downloaded guest.
+type Phase string
+
+// The steps Install reports, in order.
+const (
+	Downloading Phase = "downloading"
+	Verifying   Phase = "verifying"
+	Unpacking   Phase = "unpacking"
+)
+
+// Progress is what Install and Download report: the step, and while
+// Downloading how many of Total bytes the file holds, counting a resumed
+// partial file.
+type Progress struct {
+	Phase       Phase
+	Done, Total int64
+}
+
+// countWriter reports the bytes written through it.
+type countWriter struct {
+	w      io.Writer
+	done   int64
+	total  int64
+	report func(Progress)
+}
+
+func (c *countWriter) Write(b []byte) (int, error) {
+	n, err := c.w.Write(b)
+	c.done += int64(n)
+	c.report(Progress{Downloading, c.done, c.total})
+	return n, err
+}
+
+// Download fetches a into path and fails unless the whole file has a's size
+// and sha256. A RangeFetcher is asked for several ranges at once, resuming
+// from the parts a canceled or failed attempt left in path+".parts"; any other
+// Fetcher, or a server that ignores Range, streams into path, resuming a
+// partial file left there. report, when not nil, hears of every written chunk
+// (never from two goroutines at once) and then of the checksum pass.
+func Download(ctx context.Context, f Fetcher, p Asset, path string, report func(Progress)) error {
+	if report == nil {
+		report = func(Progress) {}
+	}
+	ranged, err := downloadRanges(ctx, f, p, path, report)
+	if err != nil {
+		return err
+	}
+	if !ranged {
+		if err := downloadStream(ctx, f, p, path, report); err != nil {
+			return err
+		}
+	}
+	report(Progress{Phase: Verifying, Done: p.Size, Total: p.Size})
+	err = verify(path, p)
+	if err == nil || errors.Is(err, ErrChecksum) {
+		_ = os.RemoveAll(path + ".parts") // whole, or bad and not worth resuming
+	}
+	return err
+}
+
+func downloadStream(ctx context.Context, f Fetcher, p Asset, path string, report func(Progress)) error {
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	st, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	have := st.Size()
+	if have > p.Size {
+		if err := file.Truncate(0); err != nil {
+			return err
+		}
+		have = 0
+	}
+	if have < p.Size {
+		report(Progress{Downloading, have, p.Size})
+		if err := f.Fetch(ctx, p, have, &countWriter{w: file, done: have, total: p.Size, report: report}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func verify(path string, p Asset) error {
+	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, file)
+	if err != nil {
+		return err
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); n != p.Size || got != p.SHA256 {
+		_ = file.Truncate(0) // a bad download is not worth resuming
+		return fmt.Errorf("%w: got %d bytes with sha256 %s, want %d bytes with %s", ErrChecksum, n, got, p.Size, p.SHA256)
+	}
+	return nil
+}
+
+// ErrChecksum means a download did not match its pin.
+var ErrChecksum = errors.New("the download does not match its pin")

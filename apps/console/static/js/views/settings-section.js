@@ -1,0 +1,169 @@
+// The open Settings section's body, below its status head: its draft
+// fields, its fact rows (startup values) and its action blocks, never
+// mixed. Server has sub-groups under headings (lib/settings-sections.js
+// SETTINGS_GROUPS); a ?section= that names a group opens Server scrolled
+// to it.
+
+import { html } from '../ui/preact.js';
+import { sectionFields, fieldDisabled } from '../lib/settings.js';
+import { SETTINGS_GROUPS } from '../lib/settings-sections.js';
+import { bytes, absTime } from '../lib/format.js';
+import { groupByDisk } from '../lib/storage.js';
+import { settingsHash } from '../lib/route.js';
+import { Notice, ErrorNote, SkeletonRows, Unavailable, Button, CopyButton, Icon } from '../ui/components.js';
+import { SettingsField } from './settings-fields.js';
+import { AccountPanel } from './settings-account.js';
+import { SyncResetAction, SyncAccountLines, ConfigFilePanel } from './settings-panels.js';
+import { FactRows } from './settings-facts.js';
+import { HooksPanel } from './settings-hooks.js';
+
+/** The DOM id of a sub-group's block. */
+export const groupDomId = (id) => `settings-group-${id}`;
+
+/**
+ * `form` carries the page state every field needs: valueOf, dirtyKeys,
+ * errors, warnings, setValue, revert, showKeys. `after` maps a key to a
+ * line under its row.
+ */
+function FieldRows({ fields, form, after = {} }) {
+  if (fields.length === 0) return null;
+  return html`<div class="field-list">
+    ${fields.map(
+      (f) => html`<${SettingsField}
+        key=${f.key}
+        field=${f}
+        value=${form.valueOf(f.key)}
+        changed=${form.dirtyKeys.includes(f.key)}
+        error=${form.errors[f.key]}
+        warning=${form.warnings[f.key]}
+        showKeys=${form.showKeys}
+        disabled=${fieldDisabled(f.key, form.valueOf)}
+        after=${after[f.key]}
+        onChange=${(v) => form.setValue(f.key, v)}
+        onRevert=${() => form.revert(f.key)}
+      />`,
+    )}
+  </div>`;
+}
+
+const STORAGE_NAMES = { 'download.downloads_dir': 'downloads_dir', 'download.temp_dir': 'temp_dir' };
+
+/**
+ * The line under a folder field, for the saved path: its free space with
+ * Copy path, "Same disk as Downloads" for a temporary folder that shares
+ * it, or why the folder cannot be read. It holds its room until /system
+ * answers.
+ */
+function FolderStatus({ fieldKey, storage }) {
+  const entry = storage ? storage.find((d) => d.name === STORAGE_NAMES[fieldKey]) : null;
+  if (!entry) return html`<span class="folder-status" aria-hidden="true"> </span>`;
+  if (entry.error) {
+    return html`<span class="folder-status" data-role="warning"><${Icon} name="triangle-alert" size="sm" /><span class="wrap-any">Can't read this folder: ${entry.error}</span></span>`;
+  }
+  const shared = fieldKey === 'download.temp_dir' && groupByDisk(storage).some((g) => g.folders.includes(entry) && g.folders.some((f) => f.name === 'downloads_dir'));
+  const text = shared ? 'Same disk as Downloads' : typeof entry.free_bytes === 'number' ? `${bytes(entry.free_bytes)} free` : '';
+  return html`<span class="folder-status">
+    <span>${text}</span>
+    ${entry.path ? html`<${CopyButton} text=${entry.path} label="Copy path" />` : null}
+  </span>`;
+}
+
+/** One sub-group of a section, under its heading. */
+function Group({ group, children }) {
+  const titleId = `${groupDomId(group.id)}-title`;
+  return html`<section class="settings-group" id=${groupDomId(group.id)} data-group=${group.id} aria-labelledby=${titleId}>
+    <h3 class="section-title settings-group-title" id=${titleId}>${group.label}</h3>
+    ${children}
+  </section>`;
+}
+
+/** Server's facts besides the startup values: build, start and version; empty while /system is unanswered. */
+function serverFacts(sys, pending) {
+  if (pending) {
+    return [
+      { id: 'built', label: 'Built', value: { text: '' } },
+      { id: 'started', label: 'Started', value: { text: '' } },
+      { id: 'version', label: 'Version', value: { text: '' }, action: html`<${Button} variant="ghost" size="sm" icon="copy" aria-label="Copy version" disabled />` },
+    ];
+  }
+  if (!sys) return [];
+  return [
+    sys.build_date ? { id: 'built', label: 'Built', value: { text: absTime(sys.build_date) } } : null,
+    sys.started_at ? { id: 'started', label: 'Started', value: { text: absTime(sys.started_at) } } : null,
+    sys.version
+      ? { id: 'version', label: 'Version', value: { text: sys.version, mono: true }, title: sys.commit ? `Commit ${sys.commit}` : undefined, action: html`<${CopyButton} text=${sys.version} label="Copy version" />` }
+      : null,
+  ].filter(Boolean);
+}
+
+/**
+ * The body for `section`. `cfg` is the page's config load state ({loaded,
+ * error, base, persisted, reloadError}); `onRetry` loads it again and
+ * `onReloaded` takes a ConfigResponse. `st` is the status store's entries,
+ * `now` the shared clock, `offline` whether immediate actions are off.
+ */
+export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st, now, offline }) {
+  const fields = sectionFields(section.id);
+  const sys = st.system && st.system.data;
+  const sysPending = !st.system;
+  let failed = null;
+  if (cfg.error && !cfg.loaded)
+    failed =
+      cfg.error.status === 404
+        ? html`<${Unavailable} what="Runtime configuration (GET /api/v1/config)" />`
+        : html`<${ErrorNote} title="Couldn't load the settings" error=${cfg.error} onRetry=${onRetry} />`;
+  // Until the configuration answers, each list of rows holds a skeleton line
+  // per field; a failed read says so once, in place of the first list.
+  let told = false;
+  const fieldRows = (list, after) => {
+    if (failed) {
+      if (told) return null;
+      told = true;
+      return failed;
+    }
+    if (!cfg.loaded) return list.length ? html`<${SkeletonRows} n=${Math.min(list.length, 6)} kind="line" />` : null;
+    return html`<${FieldRows} fields=${list} form=${form} after=${after} />`;
+  };
+
+  switch (section.id) {
+    case 'account': {
+      const wrapper = st.wrapper && st.wrapper.data;
+      // While amdl runs the wrapper itself, its fact row (factRows) stands in
+      // for the wrapper.address field, which the API refuses to change.
+      const managed = !sysPending && Boolean(wrapper && wrapper.managed);
+      const shown = fields.filter((f) => !(managed && (f.key === 'wrapper.address' || f.key === 'wrapper.token')));
+      return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${wrapper} />
+        ${fieldRows(shown)}
+        <${AccountPanel} />`;
+    }
+    case 'files': {
+      const storage = sys && Array.isArray(sys.storage) ? sys.storage : null;
+      const after = Object.fromEntries(Object.keys(STORAGE_NAMES).map((k) => [k, html`<${FolderStatus} fieldKey=${k} storage=${storage} />`]));
+      return html`<${Notice} role="warning" icon="triangle-alert">
+          After a folder or template change, tracks saved under the old names download again.
+        </${Notice}>
+        ${fieldRows(fields, after)}`;
+    }
+    case 'jobs':
+      return html`<${FactRows} section="jobs" system=${sys} pending=${sysPending} showKeys=${form.showKeys} />${fieldRows(fields)}`;
+    case 'library_sync':
+      return html`${fieldRows(fields)}<${SyncAccountLines} sync=${st.librarySync && st.librarySync.data} /><${SyncResetAction} sync=${st.librarySync && st.librarySync.data} disabled=${offline} />`;
+    case 'hooks': {
+      return html`<${FactRows} section="hooks" system=${sys} pending=${sysPending} showKeys=${form.showKeys} />
+        <${HooksPanel} hooks=${st.hooks && st.hooks.data} outcomes=${st.stats && st.stats.data ? st.stats.data.hooks : []} now=${now} offline=${offline} />`;
+    }
+    case 'logging':
+      return html`<${FactRows} section="logging" system=${sys} pending=${sysPending} showKeys=${form.showKeys} />${fieldRows(fields)}`;
+    case 'server':
+      return html`<${FactRows} section="server" system=${sys} pending=${sysPending} showKeys=${form.showKeys} extra=${serverFacts(sys, sysPending)} />
+        ${SETTINGS_GROUPS.filter((g) => g.section === 'server').map(
+          (g) => html`<${Group} key=${g.id} group=${g}>
+            ${g.id === 'config_file'
+              ? html`<${ConfigFilePanel} persisted=${cfg.persisted} reloadError=${cfg.reloadError} dirty=${dirty} base=${cfg.base} onReloaded=${onReloaded} disabled=${offline} />`
+              : fieldRows(fields.filter((f) => f.group === g.id))}
+          </${Group}>`,
+        )}`;
+    default:
+      return fieldRows(fields);
+  }
+}

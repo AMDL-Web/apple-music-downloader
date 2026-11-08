@@ -1,0 +1,72 @@
+# Move-only commits. GitHub blame skips them; locally:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# refactor(api): split server.go and observability.go by resource (move-only)
+db356c28efc0c5316bd2f251e4f8016d4bb2325e
+# refactor(db): split db.go into schema, jobs, items and events (move-only)
+93cecad086b72870a0451762c2f8514050f9070d
+# refactor(jobs): split manager.go into manager, submit, finalize, processor and reporter (move-only)
+3f66db08aeed49d6ed272e656081f84f1975a25e
+# refactor(domain): split domain.go into job, item, event, submit and library (move-only)
+edc8852e0c76687042425a4350ad8f1262d6b595
+# refactor(media): split downloader.go and m3u8.go by pipeline stage (move-only)
+d6167fe51814436c33be6b7454cc1b795cae045f
+# refactor(applemusic): split catalog.go into catalog, auth, transport, ampapi, artwork and mapping (move-only)
+9855ae561b932d62d3b1a5a90ca5399f3e6cc8ba
+# refactor(config): split config.go into config, load and validate (move-only)
+9e3b407a47bc59c1c17ea65f815db83404e3a4e8
+# refactor(console): move the shell chrome out of app.js (move-only)
+1d0bfed4ee59c8b28438e69c51f814cbc881a86b
+# refactor(console): split app.css by area (move-only)
+d8937e1eb4f143ef85e80eab9d470a5ceff91328
+# refactor(console): move the throughput card out of overview.js (move-only)
+9b30a44031639269acee1ab17bd4a8fdc24b38f3
+# refactor(console): move the hash router out of app.js (move-only)
+bb9c223f7ba045d681a236b037925b14936d8c4d
+# refactor(console): move the link previews out of download.js (move-only)
+a4eec34aa055806380d257b378937056af8bf3f9
+# refactor(console): move the downloads feed, drawer stream and settings helpers out (move-only)
+1e553a1a42320ec223d902d0c21217f723141442
+362b9fe6876700b52b4ed9614ce447586b09157d
+c234cf96ffbe40e1168ce69d8792cfdd6bc93454
+# refactor(console): move the toast list, New download config loading and drawer track list out (move-only)
+094512909424fb827e115a260961eb183c4c965b
+712cd2d6afa7c1997a8da142f506f454ad674401
+6268496c609fdf8a7b9778634a7961ea19f08a2f
+# refactor(media): move trackRun.fetchLyrics into lyrics.go (move-only)
+d1a2168ba6250a36401fedaa109edf0b9009beb6
+# refactor(wrapper): move the decrypt tests out of client_test.go (move-only)
+7b8ad1d4f21573b8238a642d5c84d4f471ea3f11
+# refactor(librarysync): split submission handling into submit.go (move-only)
+6f3693abe33b9102e62b6dc2ca3caecd0d1de8aa
+# refactor(console): move Library sync's domain view into domain-library-sync.js (move-only)
+887f0f2c8e6fe5961d03a09c7970a95895e7daf2
+# refactor(media): move outputLease to output_locks.go (move-only)
+2cb006ecc043d72fa9eec9e33a761f5d3bdff41d
+# refactor(media): move the codec attempt out of track.go (move-only)
+d9fe175f9dac521866c8e33938024c6100a535d7
+# refactor(tui): split the card and input tests out of tui_test.go (move-only)
+47dd874ffd8070ba8ee3f6bfad29ae9373a86cfa
+# refactor(console): move search job tracking and song rows to their own files
+e80b7e3d1a9e7af8e6f511fbc599216cea703533
+# refactor(console): move New download's artist confirm to its own file (move-only)
+4d91665861b73299ee134659a67db868eddc5310
+# refactor(console): split the ui-audit mock, its fixtures and scenarios, and the hooks styles (move-only)
+e7aa7d702eba5a12efb61feaaeaaac6447836292
+# refactor(console): move the list editor's rules to list-editor.css (move-only)
+f98c6308b0be115bf7b44bf3dcc75a07026d04b8
+# refactor(db,demo): split migration fixtures, list tests and demo catalog routes (move-only)
+49f1f36803888bd0ba5b4cdbdbdceb2c872531d7
+# refactor(console): move the Queue's list loading and the mock's world steps out (move-only)
+ff59d2435492f86824ad192e8f7338198000c72d
+# refactor(console): move the sortable rows' motion to sortable-flip.js (move-only)
+9a94570c5494e63fb2d0161268e16917cdaff550
+# refactor(desktop): move the ordered list field out of fieldview.go (move-only)
+bb616d1d519b9aad40cc20ca6ab7b121aa21aed5
+# refactor(hooks): move the hook presets to internal/hookpreset (move-only)
+0ac68bbe489eb12df105116303336151112b67ba
+# refactor(desktop): move the screens' layering into screens.go (move-only)
+b2e7c1d719516580911af778a09118e32fc5f539
+# refactor(desktop): move the flight's sources into flight_sources.go (move-only)
+917d23257be301ec505b56c0d89d9af56f2a4d85
+# refactor(desktop): move the queue's hero into queue_hero.go (move-only)
+7bbfa0c2f24a947fb04f9924cfcb6ef591572b4d

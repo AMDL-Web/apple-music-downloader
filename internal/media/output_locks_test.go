@@ -15,13 +15,13 @@ func TestOutputLockSerializesNormalizedPathsAndReclaimsKey(t *testing.T) {
 	alias := filepath.Join(dir, "album", "unused", "..", "song.m4a")
 	table := &outputLockTable{}
 
-	unlockFirst, err := table.acquire(path)
+	unlockFirst, err := table.acquireContext(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	acquired := make(chan func(), 1)
 	go func() {
-		unlock, acquireErr := table.acquire(alias)
+		unlock, acquireErr := table.acquireContext(context.Background(), alias)
 		if acquireErr != nil {
 			acquired <- nil
 			return
@@ -61,7 +61,7 @@ func TestOutputLockSerializesNormalizedPathsAndReclaimsKey(t *testing.T) {
 func TestOutputLockWaitHonorsContextCancellation(t *testing.T) {
 	table := &outputLockTable{}
 	path := filepath.Join(t.TempDir(), "song.m4a")
-	unlock, err := table.acquire(path)
+	unlock, err := table.acquireContext(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,13 +101,13 @@ func TestOutputLockSerializesSymlinkAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	table := &outputLockTable{}
-	unlock, err := table.acquire(filepath.Join(realDir, "song.m4a"))
+	unlock, err := table.acquireContext(context.Background(), filepath.Join(realDir, "song.m4a"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	acquired := make(chan func(), 1)
 	go func() {
-		second, _ := table.acquire(filepath.Join(linkDir, "song.m4a"))
+		second, _ := table.acquireContext(context.Background(), filepath.Join(linkDir, "song.m4a"))
 		acquired <- second
 	}()
 	select {

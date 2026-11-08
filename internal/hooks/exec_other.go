@@ -4,6 +4,7 @@ package hooks
 
 import "os/exec"
 
-// setupProcessGroup is a no-op on platforms without POSIX process groups;
-// exec.CommandContext's default cancellation (kill the direct child) applies.
-func setupProcessGroup(cmd *exec.Cmd) {}
+// setupProcessGroup leaves the command as exec.CommandContext made it, whose
+// cancellation kills the direct child only: process groups as setpgid makes
+// them are a Unix feature.
+func setupProcessGroup(*exec.Cmd) {}

@@ -1,0 +1,973 @@
+/*
+ * The Settings page (#/settings, views/settings*.js): runtime configuration
+ * sections, the Apple Music account and library sync. Base structure only;
+ * it reads tokens like every other base stylesheet, and the skin restyles it.
+ * This file is linked after responsive.css, so it carries its own media
+ * queries. Fields stack by the width of .settings-main (a size container),
+ * not the viewport, so the rail and the masthead layouts get the same rule.
+ */
+
+/* ---- Frame: section list, open section, save bar ------------------- */
+
+.page-settings {
+  display: grid;
+  grid-template-columns: minmax(168px, 220px) minmax(0, 1fr);
+  grid-template-areas:
+    "nav main"
+    ". bar";
+  align-items: start;
+  gap: var(--page-gap) var(--grid-gap);
+}
+
+.settings-nav {
+  grid-area: nav;
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--s-4));
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.settings-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--control-h);
+  padding: var(--s-1_5) var(--s-2);
+  border-radius: var(--r-control);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.settings-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-nav-item[aria-current] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+  font-weight: var(--w-medium);
+}
+
+.settings-nav-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-nav-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.settings-nav-mark .icon {
+  color: var(--role);
+}
+
+/* A section with unsaved changes. */
+.settings-nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--accent);
+}
+
+/* Under 640 px: the list of sections first, each section its own view
+   with a way back. Hidden on wider screens, where the side list shows. */
+.settings-list-card,
+.settings-back {
+  display: none;
+}
+
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-list li + li .settings-list-row {
+  border-top: var(--row-divider);
+}
+
+.settings-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 60px;
+  padding: var(--s-2) 0;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.settings-list-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.settings-list-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.settings-list-label {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-medium);
+}
+
+.settings-list-summary {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-list-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.settings-back {
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--s-1);
+  min-height: var(--touch);
+  margin-bottom: calc(-1 * var(--s-2));
+  color: var(--accent-text);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  text-decoration: none;
+}
+
+.settings-main {
+  grid-area: main;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+.save-bar {
+  grid-area: bar;
+  position: sticky;
+  bottom: var(--s-4);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  animation: rise var(--dur-base) var(--ease-out);
+}
+
+.save-bar-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-3);
+  min-width: 0;
+}
+
+.save-bar-count {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.save-bar-where {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.save-bar-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+/* There when the page first draws (a restart still pending): no rise. */
+.save-bar[data-quiet] {
+  animation: none;
+}
+
+/* The restart offer keeps one row: the names give way, then the words. */
+.save-bar[data-state="restart"] {
+  flex-wrap: nowrap;
+}
+
+.save-bar[data-state="restart"] .save-bar-text {
+  flex: 1;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.save-bar[data-state="restart"] .save-bar-count,
+.save-bar[data-state="restart"] .save-bar-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-bar[data-state="restart"] .save-bar-count {
+  flex: 0 1 auto;
+}
+
+.save-bar[data-state="restart"] .save-bar-where {
+  flex: 0 1000 auto;
+  min-width: 0;
+}
+
+/* Keyboard focus and scrolled-to targets stop above the bar, not under it. */
+:root:has(.save-bar) {
+  scroll-padding-bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
+}
+
+/* While the save bar shows, toasts rise above it so they never cover Save.
+   A stack up when the bar goes keeps its height (data-lifted, ui/toasts.js)
+   until it empties, so no toast drops when the bar closes. */
+:root:has(.save-bar) .toasts,
+:root .toasts[data-lifted] {
+  bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
+}
+
+/* ---- Fields --------------------------------------------------------- */
+
+.field-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-2) var(--s-6);
+  padding: var(--s-3) 0;
+  border-top: var(--row-divider);
+}
+
+.field:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.field-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.field-control {
+  justify-self: end;
+  min-width: 0;
+  max-width: 320px;
+}
+
+/* One control column: selects as wide as their longest option (at least
+   160 px), numbers 96 px with the unit inside, every control flush right. */
+.field[data-wide] .field-control {
+  justify-self: stretch;
+  max-width: none;
+}
+
+.field[data-wide] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.field-error,
+.field-warning,
+.account-residue {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-1_5);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.field-error .icon,
+.field-warning .icon,
+.account-residue .icon {
+  margin-top: var(--s-0_5);
+  color: var(--role, var(--text-secondary));
+}
+
+.account-residue {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.field-error {
+  color: var(--danger-text);
+}
+
+.field-warning {
+  color: var(--warning-text);
+}
+
+.field-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+}
+
+.field-label {
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-medium);
+}
+
+.field-changed {
+  padding: 0 var(--s-1_5);
+  border-radius: var(--r-badge);
+  corner-shape: round;
+  background: var(--info-tint);
+  color: var(--text-primary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-weight: var(--w-medium);
+}
+
+.field-revert,
+.field-reset {
+  position: relative;
+  /* No phone .link padding and margin: the hit area is the ::before below,
+     and a wrapped link must not ride up into the label. */
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  cursor: pointer;
+}
+
+/* A 44 px tall hit area around the one-word link; the row keeps its height. */
+.field-revert::before,
+.field-reset::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--lh-12) - var(--touch)) / 2) 0;
+}
+
+.field-help {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.field-default {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.field-default-value {
+  padding: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  overflow-wrap: anywhere;
+}
+
+.field-key {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+}
+
+.field-input {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--s-2);
+  text-overflow: ellipsis;
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-control);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.field-input.mono {
+  font-size: var(--fs-13);
+}
+
+.field-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.field-input[aria-invalid="true"],
+.field .select[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.field-select {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-1);
+}
+
+.field-select .select {
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+}
+
+.field-custom {
+  width: 160px;
+}
+
+.field-number {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.field .field-number .field-input {
+  width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.field .field-number[data-unit] .field-input {
+  width: 128px;
+  padding-right: calc(var(--s-3) + 2.5em);
+}
+
+.field-unit {
+  position: absolute;
+  right: var(--s-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  pointer-events: none;
+}
+
+.field-secret {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 560px;
+}
+
+/* The show-password button sits inside the box, so the box is as wide as the
+   fields above and below it. */
+.field-secret .field-input {
+  flex: 1;
+  min-width: 0;
+  padding-inline-end: calc(var(--control-h-sm) + var(--s-1));
+}
+
+.field-secret-toggle {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--s-0_5);
+  margin-block: auto;
+}
+
+/* A checkbox drawn as a switch: the filled track says it is on. */
+.field-switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--track);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.field-switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--text-secondary);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.field-switch:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.field-switch:checked::before {
+  transform: translateX(16px);
+  background: var(--on-accent);
+}
+
+.check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  cursor: pointer;
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Advanced: one block per group under its sub-heading. */
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
+}
+
+.settings-group + .settings-group {
+  margin-top: var(--s-2);
+  padding-top: var(--s-4);
+  border-top: var(--row-divider);
+}
+
+/* ---- Panels: template reference, library sync, config file, account -- */
+
+/* A path template: the field and its Variables button in a row, the
+   popover of variable chips under them, and the sample track's path. */
+.template-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1_5);
+}
+
+.template-row {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.template-row .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.template-vars-anchor {
+  display: flex;
+  flex: none;
+}
+
+/* Narrow: the template gets the whole line, Variables goes under it. */
+@container (max-width: 560px) {
+  .template-row {
+    flex-wrap: wrap;
+  }
+
+  .template-row .field-input {
+    flex-basis: 100%;
+  }
+}
+
+/* In the flow under the field (the section is a size container, so an
+   overlay could not rise above the save bar). */
+.template-popover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+}
+
+.template-popover-note,
+.template-var-desc,
+.template-example {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.template-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1_5);
+}
+
+.template-chip {
+  padding: var(--s-0_5) var(--s-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  cursor: pointer;
+}
+
+.template-chip:hover {
+  background: var(--bg-hover);
+}
+
+.template-popover-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.template-var-desc {
+  min-height: calc(2 * var(--lh-12));
+}
+
+.template-example-label {
+  font-weight: var(--w-medium);
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  padding-top: var(--s-4);
+  border-top: var(--row-divider);
+}
+
+.settings-panel[data-panel="config-file"] {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.account-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.settings-reload-error,
+.account-error-detail {
+  display: block;
+}
+
+.account-error-details summary {
+  display: inline-block;
+  margin-top: var(--s-1);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  cursor: pointer;
+}
+
+/* A token field: its state or an empty box. */
+.token-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.token-row:not(.token-set) {
+  max-width: 440px;
+}
+
+.token-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.token-row .field-input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.token-state {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.token-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.settings-error:focus {
+  outline: none;
+}
+
+/* Both labels share one cell, so the button keeps the wider one's width. */
+.settings-restart-button {
+  flex: none;
+}
+
+.settings-restart-button > span {
+  display: inline-grid;
+}
+
+.settings-restart-label {
+  grid-area: 1 / 1;
+}
+
+.settings-restart-label:not([data-shown]) {
+  visibility: hidden;
+}
+
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.account-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.account-block + .account-block {
+  padding-top: var(--s-5);
+  border-top: var(--row-divider);
+}
+
+.account-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 44px;
+  border-top: var(--row-divider);
+}
+
+.account-row:first-child {
+  border-top: 0;
+}
+
+.account-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.account-cmd {
+  display: block;
+  padding: var(--s-2) var(--s-3);
+  overflow-wrap: anywhere;
+}
+
+.dialog-body .form-row {
+  margin-top: var(--s-3);
+  text-align: left;
+}
+
+.login-form .form-row,
+.login-form .field-secret,
+.login-form .notice,
+.login-form > p {
+  max-width: 440px;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.login-code {
+  max-width: 12em;
+  letter-spacing: 0.2em;
+}
+
+/* ---- Narrow content: one column per field --------------------------- */
+
+@container (max-width: 560px) {
+  /* A switch stays beside its text; other controls go under it, full width. */
+  .field:not([data-type="switch"]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field:not([data-type="switch"]) .field-control {
+    justify-self: stretch;
+    max-width: none;
+  }
+
+  .field-select {
+    align-items: stretch;
+  }
+
+  .field-select .select,
+  .field-custom {
+    width: 100%;
+  }
+}
+
+@media (max-width: 1023px) {
+  .page-settings {
+    grid-template-columns: minmax(150px, 184px) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .page-settings {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "main"
+      "bar";
+  }
+
+  .settings-nav {
+    display: none;
+  }
+
+  .settings-list-card {
+    display: block;
+  }
+
+  .settings-back {
+    display: inline-flex;
+  }
+
+  /* An open section's head is the back link and the section title. The
+     back link takes the page head's place, which keeps its height, so the
+     list and a section start at the same line; the page's "Settings" stays,
+     unseen, for screen readers and as the focus target. */
+  .page-view:has(> .page-settings[data-view="section"]) > .page-head > .page-title {
+    opacity: 0;
+  }
+
+  .page-settings[data-view="section"] .settings-back {
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin: 0;
+  }
+
+  .field-input,
+  .field-input.mono,
+  .field .select {
+    width: 100%;
+    min-height: var(--touch);
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+
+  /* Above the fixed tab bar and its safe area. */
+  .save-bar {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+    padding: var(--s-2) var(--s-3);
+  }
+
+  .save-bar-actions {
+    width: 100%;
+  }
+
+  .save-bar-actions .btn {
+    flex: 1;
+  }
+
+  :root:has(.save-bar) {
+    scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--touch) + var(--lh-14) + var(--s-8) + var(--s-4));
+  }
+
+  :root:has(.save-bar) .toasts,
+:root .toasts[data-lifted] {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--touch) + var(--lh-14) + var(--s-8) + var(--s-4));
+  }
+
+  .template-chip {
+    min-height: 40px;
+    padding: var(--s-1) var(--s-3);
+  }
+}
+
+@media (forced-colors: active) {
+  .settings-nav-item[aria-current] {
+    border: 1px solid CanvasText;
+  }
+
+  /* A skin restyles the switch with a longer selector, and its colors are
+     replaced here, so these repeat :root to win. Off is a hollow track with
+     the thumb at the start; on is a filled track with the thumb at the end. */
+  :root:root:root .field-switch {
+    border: 1px solid CanvasText;
+    background: Canvas;
+  }
+
+  :root:root:root .field-switch::before {
+    background: CanvasText;
+    box-shadow: none;
+  }
+
+  :root:root:root .field-switch:checked {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  :root:root:root .field-switch:checked::before {
+    background: HighlightText;
+  }
+}

@@ -1,0 +1,336 @@
+package store
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"sync"
+	"testing"
+	"time"
+
+	"amdl/apps/desktop/internal/testkit"
+)
+
+// fakeBackend answers the configuration and login routes as the API
+// contract describes them (internal/api/openapi.yaml), and 404 elsewhere.
+type fakeBackend struct {
+	mu     sync.Mutex
+	config map[string]map[string]any
+	bodies []string
+	// old answers /config 404, as a backend older than the route.
+	old   bool
+	reads int
+	// pending is the answers' pending_restart; down is how many reads of
+	// /config fail after a restart request, as while the backend restarts.
+	pending   []string
+	down      int
+	restarted bool
+	// stall holds POST /wrapper/login until it is closed or the client
+	// goes away; stalled and gone get a value as each happens.
+	stall         chan struct{}
+	stalled, gone chan struct{}
+}
+
+// body is the i-th request body the backend read.
+func (f *fakeBackend) body(i int) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if i >= len(f.bodies) {
+		return ""
+	}
+	return f.bodies[i]
+}
+
+func (f *fakeBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	stall := f.stall
+	f.mu.Unlock()
+	if stall != nil && r.URL.Path == "/api/v1/wrapper/login" {
+		// A server sees the client go away only once the body is read, as
+		// the backend's handler reads it before it calls the wrapper.
+		_, _ = io.Copy(io.Discard, r.Body)
+		f.stalled <- struct{}{}
+		select {
+		case <-stall:
+		case <-r.Context().Done():
+			f.gone <- struct{}{}
+			return
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	reply := func(status int, v any) { testkit.Reply(w, status, v) }
+	fail := func(status int, code, msg string) { testkit.Fail(w, status, code, msg) }
+	body, _ := io.ReadAll(r.Body)
+	switch r.Method + " " + r.URL.Path {
+	case "GET /api/v1/config":
+		f.reads++
+		if f.old {
+			http.NotFound(w, r)
+			return
+		}
+		if f.restarted && f.down > 0 {
+			f.down--
+			fail(http.StatusServiceUnavailable, "unavailable", "restarting")
+			return
+		}
+		reply(http.StatusOK, map[string]any{"config": f.config, "persisted": true, "pending_restart": f.pending})
+	case "POST /api/v1/system/restart":
+		f.restarted, f.pending = true, nil
+		reply(http.StatusAccepted, map[string]string{"status": "restarting"})
+	case "PUT /api/v1/config":
+		f.bodies = append(f.bodies, string(body))
+		var patch map[string]map[string]any
+		_ = json.Unmarshal(body, &patch)
+		if n, ok := patch["download"]["max_attempts"].(float64); ok && n > 10 {
+			fail(http.StatusUnprocessableEntity, "invalid_config", "download.max_attempts must be between 1 and 10")
+			return
+		}
+		for section, keys := range patch {
+			for k, v := range keys {
+				f.config[section][k] = v
+			}
+		}
+		reply(http.StatusOK, map[string]any{"config": f.config, "persisted": true})
+	case "POST /api/v1/wrapper/login":
+		f.bodies = append(f.bodies, string(body))
+		reply(http.StatusAccepted, map[string]string{"status": "needs_2fa", "login_id": "l-1"})
+	case "POST /api/v1/wrapper/login/l-1/2fa":
+		f.bodies = append(f.bodies, string(body))
+		if string(body) == `{"two_step_code":"12345"}` {
+			fail(http.StatusBadRequest, "invalid_request", "a two-step code is six digits")
+			return
+		}
+		fail(http.StatusUnauthorized, "authentication_failed", "wrong code")
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func TestSetConfigSendsOneKeyAndKeepsTheOldValueWhenRefused(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{
+		"download": {"cover_size": "5000x5000", "max_attempts": 3, "embed_cover": true},
+	}}
+	s, settle := live(t, f)
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Values != nil })
+
+	s.SetConfig("download.cover_size", "3000x3000")
+	if v := s.Config.Value("download.cover_size"); v != "3000x3000" {
+		t.Errorf("while it saves the field shows %v; want the new value", v)
+	}
+	read := time.Now().Add(-time.Second)
+	s.Server.Read = read
+	settle(func() bool { return !s.Config.Saving["download.cover_size"] })
+	// The server's state reads again at once, and the last read stays on
+	// screen meanwhile: cards that show it do not drop out for a frame.
+	if !s.Server.Read.Equal(read) || !s.Server.stale {
+		t.Errorf("after a saved change: read %v (was %v), stale %v", s.Server.Read, read, s.Server.stale)
+	}
+	if got := f.body(0); got != `{"download":{"cover_size":"3000x3000"}}` {
+		t.Errorf("PUT body %s; want the one key, which the backend merges", got)
+	}
+	if v := s.Config.Value("download.cover_size"); v != "3000x3000" {
+		t.Errorf("saved %v", v)
+	}
+
+	s.SetConfig("download.max_attempts", 11)
+	settle(func() bool { return !s.Config.Saving["download.max_attempts"] })
+	if v := s.Config.Value("download.max_attempts"); v != 3.0 {
+		t.Errorf("after a refusal the field shows %v; want the saved 3", v)
+	}
+	if msg := s.Config.Failed["download.max_attempts"]; msg != "download.max_attempts must be between 1 and 10" {
+		t.Errorf("refusal reads %q; want the backend's message", msg)
+	}
+	if v := s.Config.Refused["download.max_attempts"]; v != 11 {
+		t.Errorf("the refused value is %v; want 11, which the field shows with the reason", v)
+	}
+	s.SetConfig("download.max_attempts", 4)
+	if _, ok := s.Config.Refused["download.max_attempts"]; ok || s.Config.Failed["download.max_attempts"] != "" {
+		t.Errorf("a new change kept the old refusal: %q", s.Config.Failed["download.max_attempts"])
+	}
+	settle(func() bool { return !s.Config.Saving["download.max_attempts"] })
+}
+
+func TestCancelEndsTheLoginOnTheBackend(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{}, stall: make(chan struct{}),
+		stalled: make(chan struct{}, 1), gone: make(chan struct{}, 1)}
+	s, settle := live(t, f)
+	s.StartLogin("someone@example.invalid", "not-a-real-password")
+	if !s.Login.Busy {
+		t.Fatal("the login is not under way")
+	}
+	wait := func(c chan struct{}, what string) {
+		t.Helper()
+		select {
+		case <-c:
+		case <-time.After(testkit.Stall):
+			t.Fatal(what)
+		}
+	}
+	wait(f.stalled, "the login never reached the backend")
+	s.CancelLogin()
+	if s.Login.Busy || s.Login.LoginID != "" || s.Login.Err != "" {
+		t.Fatalf("after Cancel %+v; want the form back", s.Login)
+	}
+	wait(f.gone, "the backend never saw the canceled request go away")
+	// A retry right away is a login of its own: the canceled answer, posted
+	// late, does not end it.
+	f.mu.Lock()
+	close(f.stall)
+	f.stall = nil
+	f.mu.Unlock()
+	s.StartLogin("someone@example.invalid", "not-a-real-password")
+	settle(func() bool { return !s.Login.Busy })
+	if s.Login.LoginID != "l-1" || s.Login.Err != "" {
+		t.Fatalf("the retry %+v; want the code step", s.Login)
+	}
+}
+
+func TestLoginAsksForTheCodeAndSaysWhyItFailed(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{}}
+	s, settle := live(t, f)
+	s.StartLogin("someone@example.com", "not-a-real-password")
+	settle(func() bool { return !s.Login.Busy })
+	if s.Login.LoginID != "l-1" || s.Login.Err != "" {
+		t.Fatalf("after the first step %+v; want the code step", s.Login)
+	}
+	// A local wrapper keeps the login waiting after a code that is not six
+	// digits (internal/api/openapi.yaml, submitWrapperTwoStepCode).
+	s.SubmitCode("12345")
+	settle(func() bool { return !s.Login.Busy })
+	if s.Login.LoginID != "l-1" || s.Login.Code != "invalid_request" {
+		t.Fatalf("after a malformed code %+v; want the code step kept", s.Login)
+	}
+	s.SubmitCode("123456")
+	settle(func() bool { return !s.Login.Busy })
+	if s.Login.LoginID != "" || s.Login.Code != "authentication_failed" {
+		t.Errorf("after a wrong code %+v; want the login over with authentication_failed", s.Login)
+	}
+	if got := f.body(2); got != `{"two_step_code":"123456"}` {
+		t.Errorf("2fa body %s", got)
+	}
+}
+
+func TestAFailedConfigReadWaitsBeforeTheNext(t *testing.T) {
+	f := &fakeBackend{old: true}
+	s, settle := live(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Err != "" })
+	// Views call WatchConfig every frame; hovering redraws many a second.
+	for range 5 {
+		s.WatchConfig()
+	}
+	now = now.Add(ServerEvery)
+	s.WatchConfig()
+	settle(func() bool { return !s.Config.reading })
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.reads != 2 {
+		t.Errorf("%d reads of /config; want one, then one more after ServerEvery", f.reads)
+	}
+}
+
+// A key another client changed shows within ServerEvery, while a view that
+// shows the configuration is on screen: the configuration is read again,
+// not once per connection.
+func TestAConfigChangedElsewhereShowsOnTheNextRead(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{"download": {"overwrite_existing": false}}}
+	s, settle := live(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Values != nil && !s.Config.reading })
+	if s.Config.Value("download.overwrite_existing") != false {
+		t.Fatalf("first read: %v", s.Config.Value("download.overwrite_existing"))
+	}
+	f.mu.Lock()
+	f.config["download"]["overwrite_existing"] = true
+	f.mu.Unlock()
+	// Within the interval the views' every-frame calls read nothing.
+	for range 5 {
+		s.WatchConfig()
+	}
+	if s.Config.reading {
+		t.Fatal("read again before ServerEvery")
+	}
+	now = now.Add(ServerEvery)
+	s.WatchConfig()
+	settle(func() bool { return !s.Config.reading })
+	if got := s.Config.Value("download.overwrite_existing"); got != true {
+		t.Errorf("after ServerEvery the setting reads %v, want the console's true", got)
+	}
+}
+
+// A read sent before this app's own change was answered never puts the old
+// value back.
+func TestAConfigReadSentBeforeAChangeDoesNotUndoIt(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{"download": {"max_attempts": 3}}}
+	s, settle := live(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Values != nil && !s.Config.reading })
+	now = now.Add(ServerEvery)
+	s.WatchConfig()
+	// The change is answered while that read is out.
+	s.Config.edits++
+	settle(func() bool { return !s.Config.reading })
+	if v := s.Config.Value("download.max_attempts"); v != float64(3) {
+		t.Fatalf("setup: %v", v)
+	}
+	f.mu.Lock()
+	f.config["download"]["max_attempts"] = 9
+	f.mu.Unlock()
+	now = now.Add(ServerEvery)
+	s.WatchConfig()
+	s.Config.edits++
+	settle(func() bool { return !s.Config.reading })
+	if v := s.Config.Value("download.max_attempts"); v != float64(3) {
+		t.Errorf("a read that left before the change landed set %v", v)
+	}
+}
+
+// A restart keeps the configuration on screen while the backend is down: the
+// reads that fail meanwhile set no Err and are retried, and the read that
+// answers clears PendingRestart and Restarting together.
+func TestRestartKeepsTheValuesUntilTheBackendAnswers(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{"download": {"max_running_jobs": 4}}, pending: []string{"download.max_running_jobs"}, down: 2}
+	s, settle := live(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Values != nil })
+	if len(s.Config.PendingRestart) != 1 {
+		t.Fatalf("pending %q; want the one key", s.Config.PendingRestart)
+	}
+	s.RestartServer()
+	settle(func() bool { return s.Config.stale })
+	for i := 0; i < 3; i++ {
+		if s.Config.Values == nil || s.Config.Err != "" || !s.Config.Restarting {
+			t.Fatalf("read %d while restarting: values %v, err %q, restarting %v", i, s.Config.Values, s.Config.Err, s.Config.Restarting)
+		}
+		now = now.Add(restartPoll)
+		s.WatchConfig()
+		settle(func() bool { return !s.Config.reading })
+	}
+	if s.Config.Restarting || s.Config.stale || len(s.Config.PendingRestart) != 0 || s.Config.Values == nil {
+		t.Errorf("after the backend answered: restarting %v, stale %v, pending %q", s.Config.Restarting, s.Config.stale, s.Config.PendingRestart)
+	}
+}
+
+func TestLoginKeepsTheLastErrorUntilTheNextAnswer(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{}}
+	s, settle := live(t, f)
+	s.Login = Login{Err: "wrong", Code: "authentication_failed"}
+	s.StartLogin("someone@example.com", "not-a-real-password")
+	if !s.Login.Busy || s.Login.Err != "wrong" || s.Login.Since.IsZero() {
+		t.Fatalf("while the step runs %+v; want the last error kept and the start noted", s.Login)
+	}
+	settle(func() bool { return !s.Login.Busy })
+	if s.Login.LoginID != "l-1" || s.Login.Err != "" || s.Login.Code != "" {
+		t.Errorf("after the answer %+v; want the code step with the error gone", s.Login)
+	}
+}

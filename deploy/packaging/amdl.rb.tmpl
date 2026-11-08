@@ -1,0 +1,50 @@
+# Generated for {{tag}} by deploy/packaging/render.mjs; edit
+# deploy/packaging/amdl.rb.tmpl in AMDL-Web/apple-music-downloader instead.
+class Amdl < Formula
+  desc "Apple Music downloader: CLI, MCP server and local backend"
+  homepage "https://github.com/AMDL-Web/apple-music-downloader"
+  version "{{version}}"
+  license "AGPL-3.0-only"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/AMDL-Web/apple-music-downloader/releases/download/{{tag}}/amdl_{{tag}}_darwin_arm64.tar.gz"
+      sha256 "{{sha256 darwin_arm64}}"
+    end
+    on_intel do
+      url "https://github.com/AMDL-Web/apple-music-downloader/releases/download/{{tag}}/amdl_{{tag}}_darwin_amd64.tar.gz"
+      sha256 "{{sha256 darwin_amd64}}"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/AMDL-Web/apple-music-downloader/releases/download/{{tag}}/amdl_{{tag}}_linux_arm64.tar.gz"
+      sha256 "{{sha256 linux_arm64}}"
+    end
+    on_intel do
+      url "https://github.com/AMDL-Web/apple-music-downloader/releases/download/{{tag}}/amdl_{{tag}}_linux_amd64.tar.gz"
+      sha256 "{{sha256 linux_amd64}}"
+    end
+  end
+
+  depends_on "ffmpeg"
+
+  def install
+    bin.install "amdl"
+  end
+
+  def caveats
+    <<~EOS
+      To run the backend in the background from login:
+        amdl service install --wrapper http://<wrapper-host>:<port>
+      https://github.com/AMDL-Web/apple-music-downloader/blob/main/docs/install.md
+    EOS
+  end
+
+  test do
+    # A refused server address keeps amdl version from looking for one.
+    ENV["AMDL_URL"] = "http://127.0.0.1:1"
+    assert_match "\"version\":\"{{tag}}\"", shell_output("#{bin}/amdl version --fields client")
+  end
+end

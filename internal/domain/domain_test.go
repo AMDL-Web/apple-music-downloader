@@ -2,145 +2,216 @@ package domain
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"amdl/internal/config"
 )
 
-func TestJobJSONRedactsMediaUserTokenOverride(t *testing.T) {
-	token := "secret-token"
-	embed := false
-	raw, err := json.Marshal(Job{
-		ID:        "job-1",
-		Overrides: &config.DownloadOverrides{MediaUserToken: &token, EmbedCover: &embed},
-	})
+func TestJobItemMarshalsOutputPathOnlyWhenFinished(t *testing.T) {
+	for _, tc := range []struct {
+		status ItemStatus
+		shown  bool
+	}{
+		{ItemCompleted, true}, {ItemSkipped, true},
+		{ItemFailed, false}, {ItemCancelled, false}, {ItemDownloading, false}, {ItemQueued, false},
+	} {
+		raw, err := json.Marshal(JobItem{ID: "i", Status: tc.status, OutputPath: "/music/A/01.m4a"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(raw), `"output_path":"/music/A/01.m4a"`); got != tc.shown {
+			t.Errorf("%s: output_path shown = %v, want %v in %s", tc.status, got, tc.shown, raw)
+		}
+	}
+	relative, err := json.Marshal(JobItem{Status: ItemCompleted, OutputPath: "data/downloads/01.m4a"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), token) || strings.Contains(string(raw), "media_user_token") {
-		t.Fatalf("job JSON leaked media-user-token: %s", raw)
-	}
-	if !strings.Contains(string(raw), `"embed_cover":false`) {
-		t.Fatalf("job JSON lost ordinary override: %s", raw)
-	}
-
-	raw, err = json.Marshal(Job{ID: "job-2", Overrides: &config.DownloadOverrides{MediaUserToken: &token}})
-	if err != nil {
+	var got JobItem
+	if err := json.Unmarshal(relative, &got); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "overrides") {
-		t.Fatalf("token-only override should be omitted from job JSON: %s", raw)
+	if !filepath.IsAbs(got.OutputPath) || !strings.HasSuffix(got.OutputPath, filepath.Join("data", "downloads", "01.m4a")) {
+		t.Errorf("relative output path marshaled as %q, want its absolute form", got.OutputPath)
 	}
 }
 
-func TestMarshalEventPayloadKeepsSnapshotFieldsAndRedaction(t *testing.T) {
-	token := "secret-token"
-	embed := false
+func TestMarshalEventPayloadKeepsSnapshotFields(t *testing.T) {
+	force := true
 	payload := MarshalEventPayload(Job{
 		ID: "job-1", Status: JobCompleted,
-		Overrides: &config.DownloadOverrides{MediaUserToken: &token, EmbedCover: &embed},
+		Overrides: &config.DownloadOverrides{CodecAlternative: &force},
 	}, map[string]any{"message": "completed", "attempts": 2})
-	if payload == "" {
+	if len(payload) == 0 {
 		t.Fatal("MarshalEventPayload returned an empty payload")
 	}
-	if strings.Contains(payload, token) || strings.Contains(payload, "media_user_token") {
-		t.Fatalf("event payload leaked media-user-token: %s", payload)
-	}
 	var got map[string]any
-	if err := json.Unmarshal([]byte(payload), &got); err != nil {
+	if err := json.Unmarshal(payload, &got); err != nil {
 		t.Fatal(err)
 	}
 	if got["id"] != "job-1" || got["status"] != string(JobCompleted) || got["message"] != "completed" || got["attempts"] != float64(2) {
 		t.Fatalf("event payload = %#v, want snapshot plus event fields", got)
 	}
 	if _, ok := got["overrides"]; !ok {
-		t.Fatalf("event payload lost non-credential override: %#v", got)
+		t.Fatalf("event payload lost the override: %#v", got)
 	}
 }
 
-func TestSummarizeHooksKeepsLatestStatePerHook(t *testing.T) {
-	events := []Event{
-		{ID: 1, Type: "hook_started", Phase: "emby-refresh"},
-		{ID: 2, Type: "hook_started", Phase: "notify"},
-		{ID: 3, Type: "job_finished"}, // non-hook events must be ignored
-		{ID: 4, Type: "hook_succeeded", Phase: "emby-refresh"},
-		{ID: 5, Type: "hook_failed", Phase: "notify", Message: "connect: refused"},
+func TestSummarizeHooks(t *testing.T) {
+	started := []Event{{ID: 1, Type: "hook_started", Phase: "notify"}}
+	tests := []struct {
+		name         string
+		events       []Event
+		stillRunning bool
+		want         []HookState
+	}{
+		{name: "empty", events: nil, want: nil},
+		{
+			name: "latest state per hook",
+			events: []Event{
+				{ID: 1, Type: "hook_started", Phase: "emby-refresh"},
+				{ID: 2, Type: "hook_started", Phase: "notify"},
+				{ID: 3, Type: "job_finished"}, // non-hook events must be ignored
+				{ID: 4, Type: "hook_succeeded", Phase: "emby-refresh"},
+				{ID: 5, Type: "hook_failed", Phase: "notify", Message: "connect: refused"},
+			},
+			want: []HookState{
+				{Name: "emby-refresh", Status: "succeeded"},
+				{Name: "notify", Status: "failed", Error: "connect: refused"},
+			},
+		},
+		{name: "started while the job runs", events: started, stillRunning: true, want: []HookState{{Name: "notify", Status: "running"}}},
+		// Started but nothing in flight anymore (e.g. restart mid-hook): its
+		// terminal event will never arrive, so it must not read as running forever.
+		{name: "started, nothing in flight", events: started, want: []HookState{{Name: "notify", Status: "interrupted"}}},
 	}
-	got := SummarizeHooks(events, false)
-	want := []HookState{
-		{Name: "emby-refresh", Status: "succeeded"},
-		{Name: "notify", Status: "failed", Error: "connect: refused"},
-	}
-	if len(got) != len(want) {
-		t.Fatalf("SummarizeHooks = %+v, want %+v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("SummarizeHooks[%d] = %+v, want %+v", i, got[i], want[i])
-		}
-	}
-}
-
-func TestSummarizeHooksStartedState(t *testing.T) {
-	events := []Event{{ID: 1, Type: "hook_started", Phase: "notify"}}
-
-	if got := SummarizeHooks(events, true); len(got) != 1 || got[0].Status != "running" {
-		t.Fatalf("SummarizeHooks(stillRunning=true) = %+v, want notify running", got)
-	}
-	// Started but nothing in flight anymore (e.g. restart mid-hook): its
-	// terminal event will never arrive, so it must not read as running forever.
-	if got := SummarizeHooks(events, false); len(got) != 1 || got[0].Status != "interrupted" {
-		t.Fatalf("SummarizeHooks(stillRunning=false) = %+v, want notify interrupted", got)
-	}
-}
-
-func TestSummarizeHooksEmpty(t *testing.T) {
-	if got := SummarizeHooks(nil, false); len(got) != 0 {
-		t.Fatalf("SummarizeHooks(nil) = %+v, want empty", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SummarizeHooks(tt.events, tt.stillRunning); !slices.Equal(got, tt.want) {
+				t.Fatalf("SummarizeHooks(stillRunning=%v) = %+v, want %+v", tt.stillRunning, got, tt.want)
+			}
+		})
 	}
 }
 
 func TestIsOverviewMilestone(t *testing.T) {
-	milestones := []string{
-		"job_queued", "job_recovered", "job_started", "resolved_input",
-		"item_completed", "item_skipped", "item_failed",
-		"job_finished", "job_failed", "job_cancelled", EventDeleted,
+	milestones := []EventType{
+		"job_queued", "job_recovered", "job_retried", "job_started", "job_moved", "resolved_input", "motion_artwork_resolved",
+		"item_completed", "item_skipped", "item_unavailable", "lyrics_refreshed", "item_failed",
+		"job_finished", "job_failed", "job_cancelled", "job_deleted", "record_changed",
 	}
 	for _, ty := range milestones {
 		if !IsOverviewMilestone(ty) {
 			t.Errorf("IsOverviewMilestone(%q) = false, want true", ty)
 		}
 	}
-	// Per-item detail / intermediate events must not wake the overview feed.
-	for _, ty := range []string{"item_progress", "codec_selected", "codec_fallback", "codec_failed", "item_overwrite", "hook_started", ""} {
+	if len(OverviewMilestones) != len(milestones) {
+		t.Errorf("OverviewMilestones has %d types, want exactly the %d list-level ones", len(OverviewMilestones), len(milestones))
+	}
+	// Per-item detail and hook events must not wake the overview feed, or it
+	// degenerates into the per-item stream it exists to filter.
+	for _, ty := range []EventType{"item_progress", "codec_selected", "codec_fallback", "codec_failed", "item_overwrite", "operation_retry", "hook_started", ""} {
 		if IsOverviewMilestone(ty) {
 			t.Errorf("IsOverviewMilestone(%q) = true, want false", ty)
 		}
 	}
 }
 
-// The animated cover routinely resolves after the job is terminal and its
-// per-job stream has closed, so the overview feed is the only channel left that
-// can tell a client the fields appeared — both live and on cursor replay.
-func TestMotionArtworkResolvedIsAnOverviewMilestone(t *testing.T) {
-	if !IsOverviewMilestone("motion_artwork_resolved") {
-		t.Fatal("motion_artwork_resolved must wake the overview feed")
+func TestEventJSONPayloadIsAnObject(t *testing.T) {
+	ev := Event{ID: 7, JobID: "job_1", Type: EventItemCompleted, Payload: json.RawMessage(`{"status":"completed","attempts":2}`)}
+	raw, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatal(err)
 	}
-	var persisted bool
-	for _, t := range PersistedOverviewMilestones {
-		if t == "motion_artwork_resolved" {
-			persisted = true
+	var decoded struct {
+		Type    string         `json:"type"`
+		Payload map[string]any `json:"payload"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("payload is not a JSON object in %s: %v", raw, err)
+	}
+	if decoded.Type != "item_completed" || decoded.Payload["status"] != "completed" || decoded.Payload["attempts"] != float64(2) {
+		t.Fatalf("decoded event = %+v from %s", decoded, raw)
+	}
+
+	raw, err = json.Marshal(Event{ID: 8, JobID: "job_1", Type: EventJobDeleted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "payload") {
+		t.Fatalf("event without payload should omit the key: %s", raw)
+	}
+}
+
+func TestEventTypesAreUnique(t *testing.T) {
+	seen := map[EventType]bool{}
+	for _, ty := range EventTypes {
+		if seen[ty] {
+			t.Fatalf("EventTypes lists %q twice", ty)
+		}
+		seen[ty] = true
+	}
+	for _, ty := range append(append([]EventType{}, OverviewMilestones...), HookEventTypes...) {
+		if !seen[ty] {
+			t.Fatalf("%q is used by a filter list but missing from EventTypes", ty)
 		}
 	}
-	if !persisted {
-		t.Fatal("motion_artwork_resolved must be replayable from a cursor, not only live")
+}
+
+func TestJobJSONCountersAndTiming(t *testing.T) {
+	started := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	raw, err := json.Marshal(Job{ID: "job_1", Status: JobRunning, TotalItems: 4, CompletedItems: 1, SkippedItems: 1, StartedAt: &started})
+	if err != nil {
+		t.Fatal(err)
 	}
-	// The detail-level chatter must stay out, or the overview feed degenerates
-	// into the per-item stream it exists to filter.
-	for _, noisy := range []string{"item_progress", "codec_selected", "operation_retry"} {
-		if IsOverviewMilestone(noisy) {
-			t.Fatalf("%s must not wake the overview feed", noisy)
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]any{
+		"total_items": float64(4), "completed_items": float64(1), "skipped_items": float64(1),
+		"failed_items": float64(0), "cancelled_items": float64(0), "started_at": "2026-10-28T12:00:00Z",
+	} {
+		if got[key] != want {
+			t.Errorf("job JSON %s = %#v, want %#v (in %s)", key, got[key], want, raw)
 		}
+	}
+	for _, gone := range []string{"finished_at", "done_items", "force"} {
+		if _, ok := got[gone]; ok {
+			t.Errorf("job JSON has %q, want it absent: %s", gone, raw)
+		}
+	}
+}
+
+func TestJobJSONCarriesQueueOrderOnlyWhileQueued(t *testing.T) {
+	order := int64(3 << 20)
+	for status, want := range map[JobStatus]bool{JobQueued: true, JobRunning: false, JobCompleted: false, JobFailed: false, JobCancelled: false} {
+		raw, err := json.Marshal(Job{ID: "job_1", Status: status, QueueOrder: &order})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatal(err)
+		}
+		if _, has := got["queue_order"]; has != want {
+			t.Errorf("%s job JSON %s: queue_order present = %v, want %v", status, raw, has, want)
+		}
+		var back Job
+		if err := json.Unmarshal(raw, &back); err != nil {
+			t.Fatal(err)
+		}
+		if want && (back.QueueOrder == nil || *back.QueueOrder != order) {
+			t.Errorf("decoded %s job queue_order = %v, want %d", status, back.QueueOrder, order)
+		}
+	}
+	// A pointer marshals through the same method.
+	raw, err := json.Marshal(&Job{ID: "job_2", Status: JobRunning, QueueOrder: &order})
+	if err != nil || strings.Contains(string(raw), "queue_order") {
+		t.Fatalf("*Job JSON = %s (%v), want no queue_order for a running job", raw, err)
 	}
 }

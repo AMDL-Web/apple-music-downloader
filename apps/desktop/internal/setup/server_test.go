@@ -1,0 +1,128 @@
+package setup
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+// fakeServer answers the reads Diagnose makes with the given bodies.
+func fakeServer(t *testing.T, system, wrapper string) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	answer := func(body string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			if body == "" {
+				http.Error(w, `{"error":{"code":"unavailable","message":"down"}}`, http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(body))
+		}
+	}
+	mux.HandleFunc("/api/v1/health", answer(`{"status":"ok"}`))
+	mux.HandleFunc("/api/v1/system", answer(system))
+	mux.HandleFunc("/api/v1/wrapper/status", answer(wrapper))
+	mux.HandleFunc("/api/v1/accounts", answer(`{"accounts":[{"id":"a1","name":"a@b.c","region":"us","default":true,"state":"active"},{"id":"a2","name":"","region":"jp","state":"active"}]}`))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func system(version string, ffmpeg bool, free int64) string {
+	raw, _ := json.Marshal(map[string]any{
+		"version": version,
+		"tools":   []map[string]any{{"name": "ffmpeg", "available": ffmpeg, "path": "/usr/bin/ffmpeg"}},
+		"storage": []map[string]any{{"name": "downloads_dir", "path": "/volume1/music", "free_bytes": free, "total_bytes": int64(8) << 40}},
+	})
+	return string(raw)
+}
+
+func TestDiagnoseAHealthyServer(t *testing.T) {
+	url := fakeServer(t, system("2.0.0", true, 2<<40),
+		`{"ready":true,"logged_in":true,"regions":["us","jp"],"login_supported":true}`)
+	sv := Diagnose(context.Background(), url, "2.1.0")
+	for name, l := range map[string]Line{"reach": sv.Reach, "account": sv.Account, "ffmpeg": sv.FFmpeg, "folder": sv.Folder} {
+		if l.State != Ready {
+			t.Errorf("%s: %+v", name, l)
+		}
+	}
+	if !strings.HasPrefix(sv.Reach.Text, "amdl 2.0.0 · ") || sv.Account.Text != "a@b.c · United States, Japan" ||
+		sv.FFmpeg.Text != "/usr/bin/ffmpeg" || sv.Folder.Text != "/volume1/music · 2.2 TB free" {
+		t.Errorf("texts: %+v", sv)
+	}
+}
+
+func TestAccountTextFallsBackToTheRegions(t *testing.T) {
+	if got := AccountText(nil, []string{"us", "jp"}); got != "United States, Japan" {
+		t.Errorf("regions: %q", got)
+	}
+	if got := AccountText(nil, nil); got != "Signed in" {
+		t.Errorf("nothing named: %q", got)
+	}
+}
+
+func TestDiagnoseNamesWhatTheServerLacks(t *testing.T) {
+	url := fakeServer(t, system("1.9.2", false, 1<<30),
+		`{"ready":true,"logged_in":false,"regions":[],"accounts":[],"login_supported":false}`)
+	sv := Diagnose(context.Background(), url, "2.0.0")
+	if sv.Reach.State != Failed || sv.Reach.Text != "amdl 1.9.2 · this app needs amdl 2" {
+		t.Errorf("an older major version: %+v", sv.Reach)
+	}
+	if sv.Account.State != Missing || sv.FFmpeg.State != Failed || sv.Folder.State != Missing {
+		t.Errorf("account %+v, ffmpeg %+v, folder %+v", sv.Account, sv.FFmpeg, sv.Folder)
+	}
+
+	if sv := Diagnose(context.Background(), "http://127.0.0.1:1", "2.0.0"); sv.State != Failed || sv.Reach.State != Failed || sv.Account.State != Unchecked {
+		t.Errorf("nothing listening: %+v", sv)
+	}
+}
+
+func TestCompatible(t *testing.T) {
+	for _, c := range []struct {
+		theirs, mine string
+		want         bool
+	}{
+		{"2.0.0", "2.3.1", true},
+		{"v2.0.0-rc.1", "2.0.0", true},
+		{"1.9.0", "2.0.0", false},
+		{"dev", "2.0.0", true},
+		{"2.0.0", "0.0.0-dev.b8e7ed3", true},
+	} {
+		if got := Compatible(c.theirs, c.mine); got != c.want {
+			t.Errorf("Compatible(%q, %q) = %v, want %v", c.theirs, c.mine, got, c.want)
+		}
+	}
+}
+
+func TestTestServerKeepsTheLastResultUntilTheAnswer(t *testing.T) {
+	gate := make(chan struct{})
+	queue := make(chan func(), 4)
+	s := New(func(fn func()) { queue <- fn }, Deps{Diagnose: func(_ context.Context, address string) Server {
+		<-gate
+		return Server{Address: address, State: Ready, Reach: Line{Ready, "amdl 2.0.0"}}
+	}})
+	s.Server = Server{Address: "http://nas:18570", State: Failed, Reach: Line{Failed, "No answer"}}
+	s.TestServer("http://nas:18570")
+	if s.Testing != "http://nas:18570" || s.Server.Reach.Text != "No answer" {
+		t.Fatalf("while testing: Testing %q, Server %+v; want the last result kept", s.Testing, s.Server)
+	}
+	close(gate)
+	(<-queue)()
+	if s.Testing != "" || s.Server.Reach.Text != "amdl 2.0.0" {
+		t.Errorf("after the answer: Testing %q, Server %+v", s.Testing, s.Server)
+	}
+	// A test of another address replaces the first, whose answer is dropped.
+	gate = make(chan struct{})
+	s.TestServer("http://a:1")
+	s.TestServer("http://b:2")
+	close(gate)
+	(<-queue)()
+	(<-queue)()
+	if s.Server.Address != "http://b:2" {
+		t.Errorf("the answer of %q replaced the newer test's", s.Server.Address)
+	}
+}

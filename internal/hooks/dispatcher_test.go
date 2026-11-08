@@ -138,33 +138,29 @@ func TestList(t *testing.T) {
 	}
 
 	d := NewDispatcher(Config{Enabled: false, Entries: []Entry{
-		{Name: "default-enabled", Type: "webhook", Events: []string{"job_finished"}},
-		{Name: "explicit-enabled", Enabled: boolPtr(true), Type: "exec", Events: []string{"job_failed"}, JobTypes: []string{"album"}},
-		{Name: "disabled", Enabled: boolPtr(false), Type: "webhook", Events: []string{"job_queued"}, JobTypes: []string{}},
+		{Name: "default-enabled", Type: "webhook", Events: []string{"job_finished"},
+			URL: "https://user:pw@api.example.com/bot123:secret/send?token=x", Headers: map[string]string{"X-Token": "secret", "Accept": "*/*"}},
+		{Name: "explicit-enabled", Enabled: boolPtr(true), Type: "exec", Events: []string{"job_failed"}, JobTypes: []string{"album"}, Command: "secret.sh"},
+		{Name: "disabled", Enabled: boolPtr(false), Type: "webhook", Events: []string{"job_queued"}, JobTypes: []string{},
+			URL: "http://jellyfin.local:8096/Library/Refresh", Method: "PUT", MaxAttempts: 3, Body: "{{json .job.id}}"},
 	}}, nil, discardLogger())
+	// A webhook shows its origin and header names only: the path, query,
+	// user info, header values and body can carry tokens.
 	want := Listing{Enabled: false, Entries: []ListedEntry{
-		{Name: "default-enabled", Enabled: true, Type: "webhook", Events: []string{"job_finished"}, JobTypes: []string{}},
+		{Name: "default-enabled", Enabled: true, Type: "webhook", Events: []string{"job_finished"}, JobTypes: []string{},
+			Method: "POST", Origin: "https://api.example.com", HeaderNames: []string{"Accept", "X-Token"}, MaxAttempts: 1},
 		{Name: "explicit-enabled", Enabled: true, Type: "exec", Events: []string{"job_failed"}, JobTypes: []string{"album"}},
-		{Name: "disabled", Enabled: false, Type: "webhook", Events: []string{"job_queued"}, JobTypes: []string{}},
+		{Name: "disabled", Enabled: false, Type: "webhook", Events: []string{"job_queued"}, JobTypes: []string{},
+			Method: "PUT", Origin: "http://jellyfin.local:8096", MaxAttempts: 3},
 	}}
 	if got := d.List(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("listing = %+v, want %+v", got, want)
 	}
 }
 
-func TestDispatchHonorsPerJobHookSelection(t *testing.T) {
+func TestDispatchRunsEveryEnabledMatch(t *testing.T) {
 	runner := &recordingRunner{}
-	const runnerType = "selection-test"
-	previous, hadPrevious := runners[runnerType]
-	runners[runnerType] = runner
-	defer func() {
-		if hadPrevious {
-			runners[runnerType] = previous
-		} else {
-			delete(runners, runnerType)
-		}
-	}()
-
+	const runnerType = "match-test"
 	cfg := Config{Enabled: true, Entries: []Entry{
 		{Name: "first", Type: runnerType, Events: []string{"job_finished"}},
 		{Name: "second", Type: runnerType, Events: []string{"job_finished"}},
@@ -173,56 +169,33 @@ func TestDispatchHonorsPerJobHookSelection(t *testing.T) {
 		{Name: "wrong-event", Type: runnerType, Events: []string{"job_failed"}},
 		{Name: "wrong-job-type", Type: runnerType, Events: []string{"job_finished"}, JobTypes: []string{"album"}},
 	}}
+	force := true
 	tests := []struct {
 		name  string
 		event string
-		hooks *[]string
 		want  []string
 	}{
-		{name: "nil list runs all enabled matches", event: "job_finished", want: []string{"first", "second"}},
-		{name: "empty list runs none", event: "job_finished", hooks: stringSlicePtr([]string{}), want: nil},
-		{name: "named subset runs once despite duplicate names", event: "job_finished", hooks: stringSlicePtr([]string{"second", "second"}), want: []string{"second"}},
-		{name: "selection cannot bypass entry filters", event: "job_finished", hooks: stringSlicePtr([]string{"disabled", "wrong-event", "wrong-job-type"}), want: nil},
-		{name: "selection filters job queued", event: "job_queued", hooks: stringSlicePtr([]string{"queued"}), want: []string{"queued"}},
+		{name: "job finished", event: "job_finished", want: []string{"first", "second"}},
+		{name: "job queued", event: "job_queued", want: []string{"queued"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runner.reset()
-			job := domain.Job{ID: "job-1", Type: "song"}
-			if tt.hooks != nil {
-				job.Overrides = &config.DownloadOverrides{Hooks: tt.hooks}
-			}
+			job := domain.Job{ID: "job-1", Type: "song", Overrides: &config.DownloadOverrides{CodecAlternative: &force}}
 			d := NewDispatcher(cfg, nil, discardLogger())
+			d.runner = runner
 			d.Dispatch(tt.event, job, nil)
 			if err := d.Shutdown(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			got := runner.snapshot()
 			sort.Strings(got)
-			sort.Strings(tt.want)
 			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
 				t.Fatalf("called hooks = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
-
-func TestValidateSelection(t *testing.T) {
-	d := NewDispatcher(Config{Enabled: false, Entries: []Entry{{Name: "known"}}}, nil, discardLogger())
-	if err := d.ValidateSelection(stringSlicePtr([]string{"known", "known"})); err != nil {
-		t.Fatalf("known duplicate names rejected while hooks globally disabled: %v", err)
-	}
-	if err := d.ValidateSelection(stringSlicePtr([]string{"missing"})); err == nil || !strings.Contains(err.Error(), `unknown hook "missing"`) {
-		t.Fatalf("unknown hook error = %v", err)
-	}
-
-	emptyConfig := NewDispatcher(Config{}, nil, discardLogger())
-	if err := emptyConfig.ValidateSelection(stringSlicePtr([]string{"cannot-run"})); err != nil {
-		t.Fatalf("selection against empty hooks config rejected: %v", err)
-	}
-}
-
-func stringSlicePtr(values []string) *[]string { return &values }
 
 func TestDispatchRunsMatchingWebhookAndRecordsSuccessEvent(t *testing.T) {
 	var gotBody []byte
@@ -235,7 +208,7 @@ func TestDispatchRunsMatchingWebhookAndRecordsSuccessEvent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := Config{Enabled: true, TimeoutSeconds: 5, MaxConcurrent: 2, Entries: []Entry{
+	cfg := Config{Enabled: true, Entries: []Entry{
 		{Name: "emby-refresh", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
 	}}
 	collector := newEventCollector(2) // hook_started + hook_succeeded
@@ -269,39 +242,13 @@ func TestDispatchRunsMatchingWebhookAndRecordsSuccessEvent(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(gotBody) == 0 {
-		t.Fatal("webhook received empty body, want JSON payload (send_payload defaults to true)")
+		t.Fatal("webhook received empty body, want the JSON payload")
 	}
 }
 
-func TestDispatchWebhookNoPayloadSendsEmptyBody(t *testing.T) {
-	var gotLen int
-	var gotContentType string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		gotLen = len(body)
-		gotContentType = r.Header.Get("Content-Type")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	cfg := Config{Enabled: true, Entries: []Entry{
-		{Name: "refresh", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL, SendPayload: boolPtr(false)},
-	}}
-	collector := newEventCollector(2)
-	d := NewDispatcher(cfg, collector.record, discardLogger())
-	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
-	collector.wait(t)
-	d.Shutdown(context.Background())
-
-	if gotLen != 0 {
-		t.Fatalf("body length = %d, want 0 when send_payload is false", gotLen)
-	}
-	if gotContentType != "" {
-		t.Fatalf("content-type = %q, want empty when send_payload is false", gotContentType)
-	}
-}
-
-func TestDispatchWebhookFailureRetriesAndRecordsFailure(t *testing.T) {
+// A webhook answering a non-2xx status fails the attempt and records
+// hook_failed. TestDispatchRetriesAfterTheRetryDelay covers the retries.
+func TestDispatchWebhookFailureRecordsFailure(t *testing.T) {
 	var attempts int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&attempts, 1)
@@ -310,7 +257,7 @@ func TestDispatchWebhookFailureRetriesAndRecordsFailure(t *testing.T) {
 	defer server.Close()
 
 	cfg := Config{Enabled: true, Entries: []Entry{
-		{Name: "flaky", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL, MaxAttempts: 3},
+		{Name: "flaky", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
 	}}
 	collector := newEventCollector(2) // hook_started + hook_failed
 	d := NewDispatcher(cfg, collector.record, discardLogger())
@@ -318,17 +265,11 @@ func TestDispatchWebhookFailureRetriesAndRecordsFailure(t *testing.T) {
 	evs := collector.wait(t)
 	d.Shutdown(context.Background())
 
-	if got := atomic.LoadInt32(&attempts); got != 3 {
-		t.Fatalf("attempts = %d, want 3 (max_attempts = 3)", got)
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("attempts = %d, want 1 (max_attempts unset)", got)
 	}
-	var sawFailed bool
-	for _, ev := range evs {
-		if ev.Type == "hook_failed" {
-			sawFailed = true
-		}
-	}
-	if !sawFailed {
-		t.Fatalf("events = %+v, want a hook_failed event", evs)
+	if last := evs[len(evs)-1]; last.Type != domain.EventHookFailed || !strings.Contains(last.Message, "500") {
+		t.Fatalf("last event = %s %q, want hook_failed naming the 500", last.Type, last.Message)
 	}
 }
 
@@ -373,7 +314,7 @@ func TestPendingTracksInFlightHookExecution(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := Config{Enabled: true, TimeoutSeconds: 5, Entries: []Entry{
+	cfg := Config{Enabled: true, Entries: []Entry{
 		{Name: "h", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
 	}}
 	collector := newEventCollector(2) // hook_started + hook_succeeded
@@ -383,14 +324,9 @@ func TestPendingTracksInFlightHookExecution(t *testing.T) {
 		t.Fatal("Pending before Dispatch = true, want false")
 	}
 	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
-
-	deadline := time.After(2 * time.Second)
-	for !d.Pending("job-1") {
-		select {
-		case <-deadline:
-			t.Fatal("Pending never became true after Dispatch launched the hook")
-		case <-time.After(time.Millisecond):
-		}
+	// Dispatch counts the execution before it returns, so no wait is needed.
+	if !d.Pending("job-1") {
+		t.Fatal("Pending after Dispatch = false while the hook is blocked")
 	}
 
 	close(release) // let the blocked webhook call, and hook_succeeded, proceed
@@ -399,6 +335,38 @@ func TestPendingTracksInFlightHookExecution(t *testing.T) {
 
 	if d.Pending("job-1") {
 		t.Fatal("Pending after hook completion = true, want false")
+	}
+}
+
+// A stream that saw a job's last hook event may still have read the hook as
+// pending; OnIdle is how it learns, at once, that nothing more will come.
+func TestOnIdleRunsWhenTheLastHookEnds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer server.Close()
+	cfg := Config{Enabled: true, Entries: []Entry{
+		{Name: "a", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
+		{Name: "b", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
+	}}
+	d := NewDispatcher(cfg, newEventCollector(4).record, discardLogger())
+	idle := make(chan string, 4)
+	d.OnIdle(func(jobID string) {
+		if d.Pending(jobID) {
+			t.Errorf("OnIdle ran while %s still had a hook pending", jobID)
+		}
+		idle <- jobID
+	})
+	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
+	select {
+	case got := <-idle:
+		if got != "job-1" {
+			t.Fatalf("OnIdle(%q), want job-1", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnIdle never ran")
+	}
+	d.Shutdown(context.Background())
+	if len(idle) != 0 {
+		t.Errorf("OnIdle ran %d more times for two hooks of one job", len(idle))
 	}
 }
 

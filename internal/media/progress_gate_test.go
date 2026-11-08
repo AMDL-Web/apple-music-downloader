@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"amdl/internal/applemusic"
@@ -61,7 +62,7 @@ func TestProgressGateWithoutIntervalNeverWithholds(t *testing.T) {
 func TestProgressGateFlushesHeldUpdateAheadOfTerminalEvent(t *testing.T) {
 	base := &recordingReporter{}
 	gate, _ := newTestGate(base, time.Hour) // nothing may pass on the time gate
-	gate.emit = func() {
+	gate.emit = func(context.Context) {
 		gate.emitted()
 		_ = base.Event(context.Background(), domain.Event{
 			ItemID: "item-1", Type: eventItemProgress, Phase: "downloading", Message: "held 100%",
@@ -96,9 +97,9 @@ func TestProgressGateFlushesHeldUpdateAheadOfTerminalEvent(t *testing.T) {
 func TestProgressGatePassesNonProgressEventsStraightThrough(t *testing.T) {
 	base := &recordingReporter{}
 	gate, _ := newTestGate(base, time.Hour)
-	gate.emit = func() { t.Fatal("nothing was held; emit must not be called") }
+	gate.emit = func(context.Context) { t.Fatal("nothing was held; emit must not be called") }
 
-	for _, ty := range []string{"codec_selected", "item_failed", "item_skipped", "operation_retry"} {
+	for _, ty := range []domain.EventType{"codec_selected", "item_failed", "item_skipped", "operation_retry"} {
 		if err := gate.Event(context.Background(), domain.Event{ItemID: "item-1", Type: ty}); err != nil {
 			t.Fatal(err)
 		}
@@ -142,25 +143,31 @@ func simulateTrackEvents(t *testing.T, intervalMS, durationMS, minKBps, maxKBps 
 		ID: "song-1", Name: "Track", ArtistName: "Artist", AlbumName: "Album",
 		DurationInMillis: durationMS, EnhancedHLS: server.URL + "/master.m3u8",
 	}
-	downloader := (&Downloader{
-		cfg:     cfg,
-		catalog: fakeDownloaderCatalog{song: song},
-		http:    server.Client(),
-	}).withConfig(cfg)
+	// The simulated transfer and the progress gate run on the bubble's
+	// virtual clock; the manifest server stays outside it.
+	var events []domain.Event
+	synctest.Test(t, func(t *testing.T) {
+		downloader := (newTestDownloader(&Downloader{
+			cfg:     cfg,
+			catalog: fakeDownloaderCatalog{song: song},
+			http:    bubbleClient(),
+		})).withConfig(cfg)
 
-	reporter := &recordingReporter{}
-	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"},
-		domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn",
-		applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); err != nil {
-		t.Fatalf("simulated processTrack failed: %v", err)
-	}
-	return reporter.events
+		reporter := &recordingReporter{}
+		if err := downloader.processTrack(t.Context(), domain.Job{ID: "job-1"},
+			domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn",
+			applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
+			t.Fatalf("simulated processTrack failed: %v", err)
+		}
+		events = reporter.events
+	})
+	return events
 }
 
 func itemProgressSnapshot(t *testing.T, ev domain.Event) domain.JobItem {
 	t.Helper()
 	var snapshot domain.JobItem
-	if err := json.Unmarshal([]byte(ev.Payload), &snapshot); err != nil {
+	if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
 		t.Fatalf("decode %s payload: %v", ev.Type, err)
 	}
 	return snapshot

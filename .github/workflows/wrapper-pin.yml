@@ -1,0 +1,62 @@
+# Keeps the pin of the wrapper guest (internal/wrapperhost#GuestRepo) current.
+# amdl wrapper install reads it from wrapper-manager-guest.json on the wrapper-pins
+# branch (internal/wrapperhost#ManifestURL) before the one built into the
+# binary, so installs follow new guests between amdl releases. Weekly, the job
+# pins the newest successful manager run's manager-qemu-guest and the newest
+# successful build-lite run's wrapper-lite-linux-x86_64 (the payload the
+# guest's manager is told to install, with its digest), both from the amdl
+# branch only and as that repository's publish workflow put them up as release
+# assets, once each one's downloaded bytes match the digest GitHub reports, and
+# commits the file only when it changed, and only after it boots that guest in
+# QEMU the way amdl does (.github/actions/guestboot) and its manager answers: a
+# candidate that does not boot is never committed. wrapper-pin.json on that
+# branch pins upstream's unpatched guest for the 2.0 release candidates and is
+# no longer updated.
+name: wrapper-pin
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Pin the newest guest and payload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/wrapper-pin.mjs "$RUNNER_TEMP/wrapper-pin.json"
+
+      - name: Boot the candidate guest
+        uses: ./.github/actions/guestboot
+        with:
+          pin-file: ${{ runner.temp }}/wrapper-pin.json
+          fresh: 'true'
+
+      # The step switches the workspace to wrapper-pins and back: the
+      # guestboot action's post steps read their files from this ref.
+      - name: Commit it to wrapper-pins
+        run: |
+          set -eu
+          trap 'git checkout -q --detach "$GITHUB_SHA"' EXIT
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git fetch --depth 1 origin wrapper-pins; then
+            git switch -C wrapper-pins FETCH_HEAD
+          else
+            git switch --orphan wrapper-pins
+          fi
+          cp "$RUNNER_TEMP/wrapper-pin.json" wrapper-manager-guest.json
+          git add wrapper-manager-guest.json
+          if git diff --cached --quiet; then echo "the pin is current"; exit 0; fi
+          git commit -s -m "chore(wrapper): pin $(node -p "const p = require('./wrapper-manager-guest.json'); p.commit.slice(0, 12) + ' with lite ' + p.lite.commit.slice(0, 12)")"
+          git push origin wrapper-pins

@@ -3,12 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 func TestWrapperLoginTimeout(t *testing.T) {
@@ -29,81 +27,16 @@ func TestWrapperLoginTimeout(t *testing.T) {
 	}
 }
 
-func TestDefaultLyricsOptions(t *testing.T) {
-	defaults := Default().Download
-	if defaults.LyricsType != "lyrics" {
-		t.Fatalf("default lyrics type = %q, want lyrics", defaults.LyricsType)
+// Existing config files lack download.integrity_mode; they must keep loading,
+// with the quick check.
+func TestIntegrityModeDefaultLoadAndValidate(t *testing.T) {
+	cfg, err := Load(writeConfig(t, "download:\n  check_integrity: true\n"))
+	if err != nil || cfg.Download.IntegrityMode != IntegrityModeQuick {
+		t.Fatalf("Load() config without integrity_mode = %q, %v; want %q", cfg.Download.IntegrityMode, err, IntegrityModeQuick)
 	}
-	if defaults.LyricsFormat != "lrc" {
-		t.Fatalf("default lyrics format = %q, want lrc", defaults.LyricsFormat)
-	}
-	if len(defaults.LyricsExtras) != 0 {
-		t.Fatalf("default lyrics extras = %#v, want empty", defaults.LyricsExtras)
-	}
-}
-
-func TestMemoryModeDefaultLoadAndValidate(t *testing.T) {
-	if got := Default().Download.MemoryMode; got != MemoryModeLow {
-		t.Fatalf("default memory mode = %q, want %q", got, MemoryModeLow)
-	}
-
-	// Configs written before memory_mode existed inherit the low-memory
-	// default, preserving the current production behavior.
-	cfg, err := Load(writeConfig(t, "download:\n  cover_format: jpg\n"))
-	if err != nil {
-		t.Fatalf("Load() legacy config: %v", err)
-	}
-	if cfg.Download.MemoryMode != MemoryModeLow {
-		t.Fatalf("legacy config memory mode = %q, want %q", cfg.Download.MemoryMode, MemoryModeLow)
-	}
-
-	cfg, err = Load(writeConfig(t, "download:\n  memory_mode: high\n"))
-	if err != nil {
-		t.Fatalf("Load() high memory mode: %v", err)
-	}
-	if cfg.Download.MemoryMode != MemoryModeHigh {
-		t.Fatalf("loaded memory mode = %q, want %q", cfg.Download.MemoryMode, MemoryModeHigh)
-	}
-
-	if _, err := Load(writeConfig(t, "download:\n  memory_mode: auto\n")); err == nil || !strings.Contains(err.Error(), "memory_mode") {
-		t.Fatalf("Load() invalid memory mode error = %v, want memory_mode validation error", err)
-	}
-}
-
-func TestDefaultLogging(t *testing.T) {
-	logging := Default().Logging
-	if logging.Level != "info" || logging.Format != "text" || !logging.Console || logging.AccessLog {
-		t.Fatalf("default logging = %+v", logging)
-	}
-	if logging.FileEnabled || logging.BufferSize != 2000 {
-		t.Fatalf("default logging outputs = %+v", logging)
-	}
-}
-
-func TestDefaultGlobalConcurrencyControls(t *testing.T) {
-	cfg := Default()
-	if cfg.Catalog.MaxParallelRequests != 16 || cfg.Catalog.RequestsPerSecond != 10 || cfg.Catalog.RequestBurst != 16 {
-		t.Fatalf("default catalog controls = %+v", cfg.Catalog)
-	}
-	if cfg.Download.MaxParallelDownloads != 16 || cfg.Download.MaxParallelDecrypts != 32 || cfg.Download.MaxParallelWrapperRequests != 24 {
-		t.Fatalf("default media pools = %+v", cfg.Download)
-	}
-}
-
-func TestLoadValidatesLogging(t *testing.T) {
-	for name, body := range map[string]string{
-		"level":        "logging:\n  level: trace\n",
-		"format":       "logging:\n  format: xml\n",
-		"buffer":       "logging:\n  buffer_size: -1\n",
-		"file path":    "logging:\n  file_enabled: true\n  file_path: \"\"\n",
-		"max size":     "logging:\n  max_size_mb: 0\n",
-		"all disabled": "logging:\n  console: false\n  file_enabled: false\n  buffer_size: 0\n",
-	} {
-		t.Run(name, func(t *testing.T) {
-			if _, err := Load(writeConfig(t, body)); err == nil || !strings.Contains(err.Error(), "logging") {
-				t.Fatalf("Load() error = %v, want logging validation error", err)
-			}
-		})
+	cfg, err = Load(writeConfig(t, "download:\n  integrity_mode: full\n"))
+	if err != nil || cfg.Download.IntegrityMode != IntegrityModeFull {
+		t.Fatalf("Load() full integrity mode = %q, %v", cfg.Download.IntegrityMode, err)
 	}
 }
 
@@ -116,10 +49,7 @@ func TestValidateBoundsResourceAmplifyingDownloadSettings(t *testing.T) {
 	}{
 		{name: "running jobs", apply: func(c *Config, value int) { c.Download.MaxRunningJobs = value }, key: "max_running_jobs", max: maxRunningJobsLimit},
 		{name: "parallel downloads", apply: func(c *Config, value int) { c.Download.MaxParallelDownloads = value }, key: "max_parallel_downloads", max: maxGlobalPoolLimit},
-		{name: "parallel decrypts", apply: func(c *Config, value int) { c.Download.MaxParallelDecrypts = value }, key: "max_parallel_decrypts", max: maxGlobalPoolLimit},
 		{name: "catalog parallel requests", apply: func(c *Config, value int) { c.Catalog.MaxParallelRequests = value }, key: "max_parallel_requests", max: maxGlobalPoolLimit},
-		{name: "catalog requests per second", apply: func(c *Config, value int) { c.Catalog.RequestsPerSecond = value }, key: "requests_per_second", max: maxGlobalPoolLimit},
-		{name: "catalog request burst", apply: func(c *Config, value int) { c.Catalog.RequestBurst = value }, key: "request_burst", max: maxGlobalPoolLimit},
 		{name: "attempts", apply: func(c *Config, value int) { c.Download.MaxAttempts = value }, key: "max_attempts", max: maxAttemptsLimit},
 		{name: "progress event interval", apply: func(c *Config, value int) { c.Download.ProgressEventIntervalMS = value }, key: "progress_event_interval_ms", max: maxProgressEventIntervalMSLimit},
 	}
@@ -145,27 +75,6 @@ func TestValidateBoundsResourceAmplifyingDownloadSettings(t *testing.T) {
 	}
 }
 
-func TestDefaultPathFormats(t *testing.T) {
-	defaults := Default().Download
-	want := map[string]string{
-		"song":     "songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",
-		"album":    "albums/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",
-		"artist":   "artists/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",
-		"playlist": "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}",
-	}
-	got := map[string]string{
-		"song":     defaults.SongPathFormat,
-		"album":    defaults.AlbumPathFormat,
-		"artist":   defaults.ArtistPathFormat,
-		"playlist": defaults.PlaylistPathFormat,
-	}
-	for kind, wantFormat := range want {
-		if got[kind] != wantFormat {
-			t.Fatalf("default %s path format = %q, want %q", kind, got[kind], wantFormat)
-		}
-	}
-}
-
 func writeConfig(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -175,184 +84,117 @@ func writeConfig(t *testing.T, body string) string {
 	return path
 }
 
-func TestLoadRejectsUnknownFields(t *testing.T) {
-	path := writeConfig(t, "download:\n  codec: alac\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "field codec not found") {
-		t.Fatalf("Load() error = %v, want unknown field error", err)
+// An unknown key fails startup with an error naming every unknown dotted key
+// and the upgrade guide, so an operator upgrading from 1.x learns what to edit.
+func TestLoadRejectsUnknownKeysNamingThemAndTheUpgradeGuide(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{name: "typo", body: "download:\n  codec: alac\n", want: []string{"download.codec"}},
+		{name: "unknown section", body: "storage:\n  path: x\n", want: []string{"storage"}},
+		{
+			name: "removed 1.x keys",
+			body: "catalog:\n  media_user_token_priority: request\ndownload:\n  max_parallel_tracks: 5\n  max_parallel_metadata_requests: 5\n  max_parallel_media_downloads: 5\n",
+			want: []string{
+				"catalog.media_user_token_priority",
+				"download.max_parallel_media_downloads, download.max_parallel_metadata_requests, download.max_parallel_tracks",
+			},
+		},
+		{name: "removed wrapper TLS switch", body: "wrapper:\n  insecure: true\n", want: []string{"wrapper.insecure"}},
+		{name: "removed memory mode", body: "download:\n  memory_mode: high\n", want: []string{"download.memory_mode"}},
 	}
-}
-
-func TestLoadRejectsRemovedConcurrencyKeys(t *testing.T) {
-	for _, key := range []string{"max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads"} {
-		t.Run(key, func(t *testing.T) {
-			path := writeConfig(t, "download:\n  "+key+": 5\n")
-			if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "field "+key+" not found") {
-				t.Fatalf("Load() error = %v, want removed-field error for %s", err, key)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(writeConfig(t, tt.body))
+			if err == nil {
+				t.Fatal("Load() accepted an unknown key")
+			}
+			for _, want := range append(tt.want, "docs/upgrading-to-2.0.md") {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("Load() error = %v, want it to contain %q", err, want)
+				}
 			}
 		})
 	}
 }
 
-func TestLoadClampsWrapperRequestLimit(t *testing.T) {
-	path := writeConfig(t, "download:\n  max_parallel_wrapper_requests: 999\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() oversized wrapper limit: %v", err)
+// Apple's artwork URLs take a "{width}x{height}" size; anything else is an
+// error there, after which the fetcher falls back to its standard sizes, so
+// the setting would silently never apply.
+func TestValidateCoverSize(t *testing.T) {
+	for _, size := range []string{"5000x5000", "600x600", "1200x800", "1x1"} {
+		cfg := Default()
+		cfg.Download.CoverSize = size
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() rejected cover_size %q: %v", size, err)
+		}
 	}
-	if cfg.Download.MaxParallelWrapperRequests != maxGlobalPoolLimit {
-		t.Fatalf("max_parallel_wrapper_requests = %d, want clamped %d", cfg.Download.MaxParallelWrapperRequests, maxGlobalPoolLimit)
-	}
-}
-
-func TestLoadRejectsExplicitEmptyValues(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  album_track_url_mode: \"\"\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "album_track_url_mode") {
-		t.Fatalf("Load() error = %v, want album_track_url_mode validation error", err)
-	}
-}
-
-func TestLoadRejectsPartialDeveloperTokenConfig(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  apple_music_key_id: \"88KBJL3CKU\"\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "apple_music_") {
-		t.Fatalf("Load() error = %v, want partial signing config error", err)
+	for _, size := range []string{"big", "", "0x0", "5000x0", "05000x5000", "5000", "5000x", "x5000", "5000X5000", "5000x5000bb", " 5000x5000", "-1x-1"} {
+		cfg := Default()
+		cfg.Download.CoverSize = size
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "download.cover_size ") {
+			t.Errorf("Validate() with cover_size %q = %v, want a download.cover_size error", size, err)
+		}
 	}
 }
 
-func TestDeveloperTokenSigningEnabled(t *testing.T) {
-	if Default().Catalog.DeveloperTokenSigningEnabled() {
-		t.Fatal("default config should have signing disabled")
+func TestValidateWrapperAddress(t *testing.T) {
+	for _, address := range []string{"http://127.0.0.1:12340", "https://wrapper.example.com", "http://wrapper:12340/lite"} {
+		cfg := Default()
+		cfg.Wrapper.Address = address
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() rejected wrapper.address %q: %v", address, err)
+		}
 	}
-	complete := CatalogConfig{
-		AppleMusicPrivateKeyPath: "keys/AuthKey.p8",
-		AppleMusicKeyID:          "88KBJL3CKU",
-		AppleMusicTeamID:         "2VTXNMR2GL",
-	}
-	if !complete.DeveloperTokenSigningEnabled() {
-		t.Fatal("complete config should have signing enabled")
-	}
-}
-
-func TestLoadMigratesLegacyMediaUserTokenPriority(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  media_user_token: configured-token\n  media_user_token_priority: request\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() legacy priority: %v", err)
-	}
-	if cfg.Catalog.MediaUserToken != "configured-token" {
-		t.Fatalf("media_user_token = %q, want configured-token", cfg.Catalog.MediaUserToken)
-	}
-	if cfg.Catalog.LegacyMediaUserTokenPriority != "" {
-		t.Fatalf("legacy priority survived normalization: %q", cfg.Catalog.LegacyMediaUserTokenPriority)
-	}
-	if err := Save(path, cfg); err != nil {
-		t.Fatalf("Save() normalized config: %v", err)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "media_user_token_priority") {
-		t.Fatalf("managed-file rewrite kept deprecated priority:\n%s", raw)
+	for _, address := range []string{"", "127.0.0.1:8080", "wrapper:8080", "grpc://127.0.0.1:8080", "ftp://wrapper", "http://", "/lite"} {
+		cfg := Default()
+		cfg.Wrapper.Address = address
+		err := cfg.Validate()
+		if err == nil || !strings.HasPrefix(err.Error(), "wrapper.address ") || !strings.Contains(err.Error(), UpgradeGuide) {
+			t.Errorf("Validate() with wrapper.address %q = %v, want a wrapper.address error naming %s", address, err, UpgradeGuide)
+		}
 	}
 }
 
-func TestLoadRejectsUnknownMediaUserTokenPriority(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  media_user_token_priority: always\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "media_user_token_priority") {
-		t.Fatalf("Load() error = %v, want media_user_token_priority validation error", err)
+// Load fails on a value it cannot honour, and the error names the offending
+// key so an operator knows what to edit.
+func TestLoadRejects(t *testing.T) {
+	tests := []struct {
+		name, body, want string
+	}{
+		{"logging level", "logging:\n  level: trace\n", "logging"},
+		{"logging buffer", "logging:\n  buffer_size: -1\n", "logging"},
+		{"logging all disabled", "logging:\n  console: false\n  buffer_size: 0\n", "logging"},
+		{"explicit empty value", "catalog:\n  album_track_url_mode: \"\"\n", "album_track_url_mode"},
+		// 2.0 removed developer-token signing. A config that still sets one of
+		// its keys fails startup instead of being silently ignored, so an
+		// install that relied on the signed token notices the change.
+		{"removed signing private key", "catalog:\n  apple_music_private_key_path: \"x\"\n", "apple_music_private_key_path"},
+		{"removed signing key id", "catalog:\n  apple_music_key_id: \"x\"\n", "apple_music_key_id"},
+		{"removed signing team id", "catalog:\n  apple_music_team_id: \"x\"\n", "apple_music_team_id"},
+		{"removed signed HLS source", "catalog:\n  signed_mode_hls_source: \"x\"\n", "signed_mode_hls_source"},
+		{"unknown cover format", "download:\n  cover_format: webp\n", "cover_format"},
+		{"malformed cover size", "download:\n  cover_size: big\n", "download.cover_size"},
+		{"unknown lyrics file", "download:\n  lyrics_files: [json]\n", "lyrics_files"},
+		{"duplicate lyrics file", "download:\n  lyrics_files: [lrc, lrc]\n", "lyrics_files"},
+		{"unknown lyrics timing", "download:\n  lyrics_timing: syllable\n", "lyrics_timing"},
+		// 1.x lyrics keys are gone in 2.0; a config that still has one must
+		// fail loudly instead of silently dropping the setting.
+		{"removed save_lyrics_file", "download:\n  save_lyrics_file: true\n", "save_lyrics_file"},
+		{"removed lyrics_format", "download:\n  lyrics_format: lrc\n", "lyrics_format"},
+		{"removed lyrics_type", "download:\n  lyrics_type: lyrics\n", "lyrics_type"},
+		{"unknown lyrics extra", "download:\n  lyrics_extras: [translation, romanization]\n", "lyrics_extras"},
+		{"explicit AAC-LC in priority", "download:\n  quality_priority: [alac, aac-lc]\n", "aac-lc"},
+		{"unknown integrity mode", "download:\n  integrity_mode: fast\n", "integrity_mode"},
 	}
-}
-
-func TestSignedModeHLSSourceDefaultAndValidate(t *testing.T) {
-	if got := Default().Catalog.SignedModeHLSSource; got != "wrapper" {
-		t.Fatalf("default signed_mode_hls_source = %q, want wrapper", got)
-	}
-	if Default().Catalog.EnhancedHLSFromWebToken() {
-		t.Fatal("default should not use web-token HLS source")
-	}
-	web := CatalogConfig{SignedModeHLSSource: "web_token"}
-	if !web.EnhancedHLSFromWebToken() {
-		t.Fatal("web_token should enable EnhancedHLSFromWebToken")
-	}
-	path := writeConfig(t, "catalog:\n  signed_mode_hls_source: device\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "signed_mode_hls_source") {
-		t.Fatalf("Load() error = %v, want signed_mode_hls_source validation error", err)
-	}
-	path = writeConfig(t, "catalog:\n  signed_mode_hls_source: web_token\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Catalog.SignedModeHLSSource != "web_token" {
-		t.Fatalf("signed_mode_hls_source = %q, want web_token", cfg.Catalog.SignedModeHLSSource)
-	}
-}
-
-func TestDeveloperTokenTTL(t *testing.T) {
-	if got := Default().Catalog.DeveloperTokenTTL(); got != time.Hour {
-		t.Fatalf("default developer token TTL = %s, want 1h", got)
-	}
-	if got := (CatalogConfig{DeveloperTokenTTLHours: 0}).DeveloperTokenTTL(); got != time.Hour {
-		t.Fatalf("zero-value developer token TTL = %s, want 1h fallback", got)
-	}
-	if got := (CatalogConfig{DeveloperTokenTTLHours: 6}).DeveloperTokenTTL(); got != 6*time.Hour {
-		t.Fatalf("configured developer token TTL = %s, want 6h", got)
-	}
-}
-
-func TestLoadRejectsBlankAllowedOrigin(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  allowed_origins: [\"https://example.com\", \"  \"]\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "allowed_origins") {
-		t.Fatalf("Load() error = %v, want allowed_origins validation error", err)
-	}
-}
-
-func TestLoadAcceptsAllowedOrigins(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  allowed_origins: [\"https://example.com\"]\n  developer_token_ttl_hours: 2\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if len(cfg.Catalog.AllowedOrigins) != 1 || cfg.Catalog.AllowedOrigins[0] != "https://example.com" {
-		t.Fatalf("allowed origins = %#v", cfg.Catalog.AllowedOrigins)
-	}
-	if got := cfg.Catalog.DeveloperTokenTTL(); got != 2*time.Hour {
-		t.Fatalf("developer token TTL = %s, want 2h", got)
-	}
-}
-
-func TestLoadRejectsUnknownCoverFormat(t *testing.T) {
-	path := writeConfig(t, "download:\n  cover_format: webp\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "cover_format") {
-		t.Fatalf("Load() error = %v, want cover_format validation error", err)
-	}
-}
-
-func TestLoadRejectsUnknownLyricsFormat(t *testing.T) {
-	path := writeConfig(t, "download:\n  lyrics_format: json\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_format") {
-		t.Fatalf("Load() error = %v, want lyrics_format validation error", err)
-	}
-}
-
-func TestLoadRejectsUnknownLyricsType(t *testing.T) {
-	path := writeConfig(t, "download:\n  lyrics_type: word-by-word\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_type") {
-		t.Fatalf("Load() error = %v, want lyrics_type validation error", err)
-	}
-}
-
-func TestLoadRejectsUnknownLyricsExtra(t *testing.T) {
-	path := writeConfig(t, "download:\n  lyrics_extras: [translation, romanization]\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_extras") {
-		t.Fatalf("Load() error = %v, want lyrics_extras validation error", err)
-	}
-}
-
-func TestLoadRejectsExplicitAACLCInPriority(t *testing.T) {
-	path := writeConfig(t, "download:\n  quality_priority: [alac, aac-lc]\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "aac-lc") {
-		t.Fatalf("Load() error = %v, want implicit AAC-LC validation error", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Load(writeConfig(t, tt.body)); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Load() error = %v, want an error naming %q", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -362,65 +204,141 @@ func TestDefaultConfigPassesValidation(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsEmptyPathFormat(t *testing.T) {
-	path := writeConfig(t, "download:\n  artist_path_format: \"\"\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "artist_path_format") {
-		t.Fatalf("Load() error = %v, want artist_path_format validation error", err)
-	}
-}
-
 // TestLoadClampsResourceLimitsFromFile covers machine-managed config files
 // that may hold values above limits introduced by a newer backend.
 func TestLoadClampsResourceLimitsFromFile(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  max_parallel_requests: 200\n  requests_per_second: 200\n  request_burst: 200\ndownload:\n  max_running_jobs: 100\n  max_parallel_downloads: 200\n  max_parallel_decrypts: 200\n  max_attempts: 50\n")
+	path := writeConfig(t, "catalog:\n  max_parallel_requests: 200\ndownload:\n  max_running_jobs: 100\n  max_parallel_downloads: 200\n  max_attempts: 50\n")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() with over-limit values failed: %v", err)
 	}
-	if cfg.Catalog.MaxParallelRequests != maxGlobalPoolLimit || cfg.Catalog.RequestsPerSecond != maxGlobalPoolLimit || cfg.Catalog.RequestBurst != maxGlobalPoolLimit {
+	if cfg.Catalog.MaxParallelRequests != maxGlobalPoolLimit {
 		t.Fatalf("Load() did not clamp catalog values: %+v", cfg.Catalog)
 	}
-	if cfg.Download.MaxRunningJobs != maxRunningJobsLimit || cfg.Download.MaxParallelDownloads != maxGlobalPoolLimit || cfg.Download.MaxParallelDecrypts != maxGlobalPoolLimit || cfg.Download.MaxAttempts != maxAttemptsLimit {
+	if cfg.Download.MaxRunningJobs != maxRunningJobsLimit || cfg.Download.MaxParallelDownloads != maxGlobalPoolLimit || cfg.Download.MaxAttempts != maxAttemptsLimit {
 		t.Fatalf("Load() did not clamp download values: %+v", cfg.Download)
 	}
 }
 
-func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
-	raw, err := os.ReadFile("../../configs/config.example.yaml")
+// Validate returns the first violation; with several invalid keys of one group
+// the message must not depend on map iteration order.
+func TestValidateReportsViolationsInKeyOrder(t *testing.T) {
+	cfg := Default()
+	cfg.Catalog.MaxParallelRequests = maxGlobalPoolLimit + 1
+	cfg.Logging.BufferSize = -1
+	cfg.Download.LibraryPathFormat = ""
+	cfg.Download.StationPathFormat = ""
+	for range 20 {
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "logging.buffer_size ") {
+			t.Fatalf("Validate() = %v, want the logging.buffer_size error every time", err)
+		}
+	}
+	cfg.Logging = Default().Logging
+	for range 20 {
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "catalog.max_parallel_requests ") {
+			t.Fatalf("Validate() = %v, want the catalog.max_parallel_requests error every time", err)
+		}
+	}
+	cfg.Catalog = Default().Catalog
+	for range 20 {
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "download.library_path_format ") {
+			t.Fatalf("Validate() = %v, want the download.library_path_format error every time", err)
+		}
+	}
+}
+
+// download.force_overwrite, wrapper.data_dir and catalog.media_user_token were
+// written into config.yaml by PUT /api/v1/config. Their removal must not stop
+// an upgraded install: Load drops them, RetiredKeys names them for the startup
+// warning, and the other keys of their sections still load.
+func TestLoadDropsRetiredKeys(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantRetired []string
+		check       func(t *testing.T, cfg Config)
+	}{
+		{
+			name:        "force_overwrite",
+			body:        "download:\n  force_overwrite: true\n  max_attempts: 5\n",
+			wantRetired: []string{"download.force_overwrite"},
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Download.MaxAttempts != 5 {
+					t.Fatalf("max_attempts = %d, want 5 from the file", cfg.Download.MaxAttempts)
+				}
+			},
+		},
+		{
+			name:        "wrapper token sources",
+			body:        "wrapper:\n  address: \"http://10.0.0.1:12340\"\n  data_dir: /wrapper-data\ncatalog:\n  media_user_token: old-token\n  language: en-US\n",
+			wantRetired: []string{"catalog.media_user_token", "wrapper.data_dir"},
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Wrapper.Address != "http://10.0.0.1:12340" || cfg.Catalog.Language != "en-US" {
+					t.Fatalf("kept keys lost: wrapper %+v, catalog %+v", cfg.Wrapper, cfg.Catalog)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeConfig(t, tt.body)
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load() error = %v, want the retired keys dropped", err)
+			}
+			tt.check(t, cfg)
+			var got []string
+			for _, r := range RetiredKeys(path) {
+				if r.Replacement == "" {
+					t.Fatalf("retired key %s has no replacement text", r.Key)
+				}
+				got = append(got, r.Key)
+			}
+			if !reflect.DeepEqual(got, tt.wantRetired) {
+				t.Fatalf("RetiredKeys() = %v, want %v", got, tt.wantRetired)
+			}
+		})
+	}
+	if got := RetiredKeys(writeConfig(t, "download:\n  max_attempts: 5\n")); len(got) != 0 {
+		t.Fatalf("RetiredKeys() of a current file = %+v, want none", got)
+	}
+}
+
+func TestValidateGiveUpAfterRuns(t *testing.T) {
+	if got := Default().Download.GiveUpAfterRuns; got != 3 {
+		t.Fatalf("default give_up_after_runs = %d, want 3", got)
+	}
+	for _, value := range []int{0, 1, giveUpAfterRunsLimit} {
+		cfg := Default()
+		cfg.Download.GiveUpAfterRuns = value
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() rejected give_up_after_runs=%d: %v", value, err)
+		}
+	}
+	for _, value := range []int{-1, giveUpAfterRunsLimit + 1} {
+		cfg := Default()
+		cfg.Download.GiveUpAfterRuns = value
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "give_up_after_runs") {
+			t.Errorf("Validate() with give_up_after_runs=%d error = %v, want a bounds error", value, err)
+		}
+	}
+}
+
+// A file a program writes for itself loses the keys this version removed,
+// and keeps every other value.
+func TestLoadGeneratedDropsRemovedKeys(t *testing.T) {
+	path := writeConfig(t, "download:\n  memory_mode: low\n  max_attempts: 7\nstorage:\n  path: x\nwrapper:\n  address: http://127.0.0.1:12340\n")
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load accepted removed keys")
+	}
+	cfg, dropped, err := LoadGenerated(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var doc map[string]map[string]any
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		t.Fatal(err)
+	if strings.Join(dropped, ",") != "download.memory_mode,storage" {
+		t.Errorf("dropped %v", dropped)
 	}
-	want := knownKeys()
-	// Accepted only to read old v1.2 files; it is normalized away and should
-	// not be advertised as a current setting.
-	delete(want, "catalog.media_user_token_priority")
-	got := map[string]bool{}
-	for section, fields := range doc {
-		for field := range fields {
-			got[section+"."+field] = true
-		}
-	}
-	var missing, extra []string
-	for key := range want {
-		if !got[key] {
-			missing = append(missing, key)
-		}
-	}
-	for key := range got {
-		if !want[key] {
-			extra = append(extra, key)
-		}
-	}
-	slices.Sort(missing)
-	slices.Sort(extra)
-	if len(missing) > 0 || len(extra) > 0 {
-		t.Fatalf("config.example.yaml keys: missing=%v extra=%v", missing, extra)
-	}
-	if _, err := load("../../configs/config.example.yaml", nil); err != nil {
-		t.Fatalf("config.example.yaml does not load: %v", err)
+	if cfg.Download.MaxAttempts != 7 || cfg.Wrapper.Address != "http://127.0.0.1:12340" {
+		t.Errorf("kept max_attempts %d, wrapper %q", cfg.Download.MaxAttempts, cfg.Wrapper.Address)
 	}
 }

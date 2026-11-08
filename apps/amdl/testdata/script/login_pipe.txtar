@@ -1,0 +1,38 @@
+# From a pipe, wrapper login needs both --username and --password-stdin, and
+# a two-step code comes on stdin, never as an argument. Each refusal is exit
+# 2; the setup's AMDL_URL answers nothing, so a request would be exit 5.
+stdin password.txt
+exits 2 amdl wrapper login --username me@example.com
+stderr '"code":"usage_error"'
+stdin password.txt
+exits 2 amdl wrapper login --password-stdin
+stderr '"code":"usage_error"'
+exits 2 amdl wrapper 2fa demo-login 123456
+stderr '"code":"usage_error"'
+exits 2 amdl wrapper 2fa demo-login
+stderr '"code":"usage_error"'
+stdin empty-line.txt
+exits 2 amdl wrapper 2fa demo-login
+stderr '"code":"usage_error"'
+
+# With a backend: the piped login leaves the code to wrapper 2fa, which
+# reads it from stdin; no secret is printed.
+demo-backend
+stdin password.txt
+exec amdl wrapper login --username me@example.com --password-stdin
+stdout '"status":"needs_2fa"'
+stdout '"login_id":"demo-login"'
+! stdout hunter2
+! stderr hunter2
+stdin code.txt
+exec amdl wrapper 2fa demo-login
+stdout '"status":"logged_in"'
+! stdout 654321
+! stderr 654321
+
+-- password.txt --
+hunter2
+-- code.txt --
+654321
+-- empty-line.txt --
+

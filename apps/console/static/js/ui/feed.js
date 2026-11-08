@@ -1,0 +1,233 @@
+// The downloads feed shared by every page: connection state, the live
+// event stream, retry and backoff, watched jobs with completion toasts,
+// and screen-reader announcements.
+
+import { useState, useEffect, useRef, useCallback } from './preact.js';
+import { listDownloads, feedStreamUrl, parseData } from '../api.js';
+import { applyFeedMessage, EMPTY_COUNTS, FEED_TYPES } from '../lib/store.js';
+import { StreamClient, createCoalescer, backoffDelay, isOlderCursor, EPOCH_AFTER_MS } from '../lib/stream.js';
+import { jobTitle, typeLabel, isUnresolved } from '../lib/format.js';
+import { rowView } from '../lib/jobview.js';
+import { isTerminal } from '../lib/status.js';
+import { BURST_MS, endsWatch, addEnded, finishedToast } from '../lib/watch.js';
+
+const ANNOUNCE_GAP_MS = 5000;
+
+/**
+ * Downloads feed, connection state and live announcements for App():
+ * {feed, counts, conn, epoch, retryRef, retryFeed, subscribeFeed, watchJobs, unwatchJobs, announce, liveText}.
+ */
+export function useFeed({ toast, route }) {
+  const [feed, setFeed] = useState({ counts: null, cursor: null });
+  const [conn, setConn] = useState({ state: 'connecting', retryAt: null, downSince: null });
+  const [epoch, setEpoch] = useState(0);
+  const [liveText, setLiveText] = useState('');
+  const listeners = useRef(new Set());
+  const retryRef = useRef(() => {});
+  const lastStatus = useRef(new Map());
+  const announceQueue = useRef([]);
+  const announceTimer = useRef(null);
+  const lastAnnounce = useRef(0);
+
+  // Jobs a page asked to watch (app.watchJobs, after New download submits
+  // them): when they end, one visible toast per burst (lib/watch.js).
+  const watched = useRef(new Set());
+  const recentEnded = useRef(new Map());
+  const endedBurst = useRef([]);
+  const burstTimer = useRef(null);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const flushEnded = useCallback(() => {
+    burstTimer.current = null;
+    const jobs = endedBurst.current;
+    endedBurst.current = [];
+    if (jobs.length) toast(finishedToast(jobs, routeRef.current));
+  }, [toast]);
+  const noteEnded = useCallback(
+    (job) => {
+      watched.current.delete(job.id);
+      // Spent: a later watch of this id waits for its next ending.
+      recentEnded.current.delete(job.id);
+      endedBurst.current = addEnded(endedBurst.current, job);
+      if (burstTimer.current === null) burstTimer.current = setTimeout(flushEnded, BURST_MS);
+    },
+    [flushEnded],
+  );
+  // Returns the ids it started watching, so a view can drop its own later.
+  // `catchUp: false` (a view watching what it shows) skips a job that has
+  // already ended: its row may come from a stale list.
+  const watchJobs = useCallback(
+    (ids, { catchUp = true } = {}) => {
+      const added = [];
+      for (const id of ids || []) {
+        if (!id) continue;
+        // The feed can report the end before the submit answer arrives.
+        const done = recentEnded.current.get(id);
+        if (done) {
+          if (catchUp) noteEnded(done);
+        } else if (!watched.current.has(id)) {
+          watched.current.add(id);
+          added.push(id);
+        }
+      }
+      if (watched.current.size > 500) watched.current = new Set([...watched.current].slice(-500));
+      return added;
+    },
+    [noteEnded],
+  );
+  const unwatchJobs = useCallback((ids) => {
+    for (const id of ids || []) watched.current.delete(id);
+  }, []);
+  const noteEndedRef = useRef(noteEnded);
+  noteEndedRef.current = noteEnded;
+
+  const flushAnnouncements = useCallback(() => {
+    announceTimer.current = null;
+    const items = announceQueue.current;
+    announceQueue.current = [];
+    if (items.length === 0) return;
+    lastAnnounce.current = Date.now();
+    setLiveText(items.length > 3 ? `${items.slice(0, 3).join('. ')}. And ${items.length - 3} more.` : `${items.join('. ')}.`);
+  }, []);
+  const announce = useCallback(
+    (text) => {
+      announceQueue.current.push(text);
+      if (announceTimer.current !== null) return;
+      const wait = Math.max(0, lastAnnounce.current + ANNOUNCE_GAP_MS - Date.now());
+      announceTimer.current = setTimeout(flushAnnouncements, wait);
+    },
+    [flushAnnouncements],
+  );
+
+  const subscribeFeed = useCallback((fn) => {
+    listeners.current.add(fn);
+    return () => listeners.current.delete(fn);
+  }, []);
+
+  // The downloads feed: one snapshot for counts and the cursor, then the
+  // stream from that cursor. Every page subscribes to its batches.
+  useEffect(() => {
+    let stopped = false;
+    let client = null;
+    let bootTimer = null;
+    let attempt = 0;
+    let downSince = null;
+    const noteTransitions = (batch) => {
+      for (const msg of batch) {
+        const job = msg.job;
+        if (!job) continue;
+        const prev = lastStatus.current.get(job.id);
+        lastStatus.current.set(job.id, job.status);
+        if (isTerminal(job.status)) {
+          recentEnded.current.set(job.id, job);
+          if (recentEnded.current.size > 50) recentEnded.current.delete(recentEnded.current.keys().next().value);
+        } else recentEnded.current.delete(job.id);
+        if (watched.current.has(job.id) && endsWatch(job)) {
+          // Its toast is announced through the toasts' own live region.
+          noteEndedRef.current(job);
+        } else if (prev && prev !== job.status && (job.status === 'completed' || job.status === 'failed')) {
+          // A link that never resolved is named as its row names it, not by its slug.
+          announce(isUnresolved(job) ? `${rowView(job).title} ${job.status}` : `${typeLabel(job.type)} ${jobTitle(job)} ${job.status}`);
+        }
+      }
+      if (lastStatus.current.size > 1000) {
+        const drop = lastStatus.current.size - 1000;
+        let i = 0;
+        for (const k of lastStatus.current.keys()) {
+          if (i++ >= drop) break;
+          lastStatus.current.delete(k);
+        }
+      }
+    };
+    const coalescer = createCoalescer((batch) => {
+      setFeed((f) => batch.reduce(applyFeedMessage, f));
+      for (const fn of listeners.current) fn(batch);
+      noteTransitions(batch);
+    }, 100);
+    const refreshCounts = () =>
+      listDownloads({ limit: 1 }).then(
+        (body) => setFeed((f) => ({ ...f, counts: { ...EMPTY_COUNTS, ...body.status_counts } })),
+        () => {},
+      );
+    // The backend's database was replaced: forget what belongs to the old one,
+    // read a fresh snapshot and stream from its cursor, and have every page
+    // refetch its lists.
+    const restart = () => {
+      client = null;
+      coalescer.cancel();
+      lastStatus.current.clear();
+      recentEnded.current.clear();
+      setEpoch((e) => e + 1);
+      boot();
+    };
+    const boot = async () => {
+      bootTimer = null;
+      try {
+        const body = await listDownloads({ limit: 1 });
+        if (stopped) return;
+        for (const j of body.downloads || []) lastStatus.current.set(j.id, j.status);
+        setFeed({ counts: { ...EMPTY_COUNTS, ...body.status_counts }, cursor: body.event_cursor ?? null });
+        // The first snapshot failed, so the pages that loaded with it did too.
+        if (downSince !== null) setEpoch((e) => e + 1);
+        client = new StreamClient({
+          url: feedStreamUrl(),
+          cursor: body.event_cursor ?? null,
+          onEvent: (ev) => {
+            if (!FEED_TYPES.has(ev.type)) return;
+            const msg = parseData(ev);
+            if (msg) coalescer.push(msg);
+          },
+          // stop() reports 'stopped', which only a restart (below) causes.
+          onState: (s) => {
+            if (s.state !== 'stopped') setConn(s);
+          },
+          // Before every resume: a backend that came back on another database
+          // (event ids start over) accepts the old cursor and stays silent, so
+          // start over from a snapshot instead (docs/api.md, Seeding).
+          verifyCursor: async (cursor) => !isOlderCursor(cursor, (await listDownloads({ limit: 1 })).event_cursor),
+          onStale: restart,
+          // Live again after an outage: the feed replays what it missed from
+          // the cursor. Only an outage of EPOCH_AFTER_MS or more (a restart,
+          // not a proxy closing an idle stream) bumps the epoch, which tells
+          // every page to refetch what it could not load meanwhile (error
+          // panels, defaults, previews).
+          onReconnect: refreshCounts,
+          resyncAfterMs: EPOCH_AFTER_MS,
+          onResync: () => setEpoch((e) => e + 1),
+          onEnd: ({ status }) => setConn({ state: 'offline', retryAt: null, downSince: Date.now(), endStatus: status }),
+        });
+        retryRef.current = () => client.retryNow();
+        client.start();
+      } catch {
+        if (stopped) return;
+        if (downSince === null) downSince = Date.now();
+        const delay = backoffDelay(attempt++);
+        const state = Date.now() - downSince >= 60000 ? 'offline' : 'reconnecting';
+        setConn({ state, retryAt: Date.now() + delay, downSince });
+        bootTimer = setTimeout(boot, delay);
+        retryRef.current = () => {
+          if (bootTimer !== null) {
+            clearTimeout(bootTimer);
+            boot();
+          }
+        };
+      }
+    };
+    // The device came back online: retry now instead of at the end of the
+    // backoff. No epoch bump here: the server may still be unreachable, and
+    // the stream bumps it once it is live after a real outage.
+    const onOnline = () => retryRef.current();
+    window.addEventListener('online', onOnline);
+    boot();
+    return () => {
+      window.removeEventListener('online', onOnline);
+      if (burstTimer.current !== null) clearTimeout(burstTimer.current);
+      stopped = true;
+      if (bootTimer !== null) clearTimeout(bootTimer);
+      coalescer.cancel();
+      if (client) client.stop();
+    };
+  }, []);
+
+  return { feed, counts: feed.counts, conn, epoch, retryRef, retryFeed: () => retryRef.current(), subscribeFeed, watchJobs, unwatchJobs, announce, liveText };
+}

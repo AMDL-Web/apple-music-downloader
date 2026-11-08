@@ -1,0 +1,389 @@
+process.env.TZ = 'UTC';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  capitalized,
+  punctuated,
+  sentence,
+  artworkUrl,
+  artworkSrcset,
+  artWidths,
+  isArtworkTemplate,
+  bytes,
+  count,
+  trackLength,
+  elapsed,
+  relTime,
+  absTime,
+  dateTime,
+  darkArtColor,
+  clockTime,
+  dayLabel,
+  kHz,
+  codecLabel,
+  codecMeaning,
+  legacyCatalogError,
+  formatShares,
+  isHiRes,
+  jobTitle,
+  jobSubtitle,
+  isUnresolved,
+  inputLabel,
+  linkLabel,
+  LINK_SHOWN,
+  unresolvedHint,
+  errorSummary,
+  shortId,
+  displayId,
+  safeHttpUrl,
+  contrastRatio,
+  parseHex,
+  artTextColor,
+  artPalette,
+  paletteStyle,
+  finishedLine,
+  pageSummary,
+  releaseYear,
+  jobFacts,
+  attrPairs,
+} from '../static/js/lib/format.js';
+
+const TEMPLATE = 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/{w}x{h}bb.{f}';
+const PRESIGNED = 'https://example-bucket.s3.amazonaws.com/cover.jpg?X-Amz-Signature=abc';
+
+test('artworkUrl fills {w}, {h} and {f}', () => {
+  assert.equal(artworkUrl(TEMPLATE, 300), 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/300x300bb.webp');
+  assert.equal(artworkUrl(TEMPLATE, 600, 'jpg'), 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/600x600bb.jpg');
+});
+
+test('artworkUrl treats the .jpg of an Apple template as the format', () => {
+  // The shape the catalog sends (artwork.url): no {f}, a fixed .jpg.
+  const apple = 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b4/1c/0d/x/4547366802955.jpg/{w}x{h}bb.jpg';
+  assert.equal(artworkUrl(apple, 224), 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b4/1c/0d/x/4547366802955.jpg/224x224bb.webp');
+  assert.equal(artworkUrl(apple, 224, 'jpg'), 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b4/1c/0d/x/4547366802955.jpg/224x224bb.jpg');
+  const odd = 'https://example.com/cover/{w}x{h}.png';
+  assert.equal(artworkUrl(odd, 100), 'https://example.com/cover/100x100.png', 'only a .jpg tail is a format slot');
+});
+
+test('artWidths covers 1x to 3x of every drawn size, rounded up to 10 px', () => {
+  assert.deepEqual(artWidths(48), [50, 100, 150]);
+  assert.deepEqual(artWidths(88, 112), [90, 120, 180, 230, 270, 340]);
+});
+
+test('artworkUrl leaves a pre-signed URL without placeholders untouched', () => {
+  assert.equal(isArtworkTemplate(PRESIGNED), false);
+  assert.equal(artworkUrl(PRESIGNED, 300), PRESIGNED);
+  assert.equal(artworkSrcset(PRESIGNED, [300, 600]), '');
+  assert.equal(artworkUrl('', 300), '');
+  assert.equal(artworkUrl(undefined, 300), '');
+});
+
+test('artworkSrcset lists width descriptors', () => {
+  assert.equal(
+    artworkSrcset(TEMPLATE, [300, 600]),
+    'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/300x300bb.webp 300w, https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/600x600bb.webp 600w',
+  );
+});
+
+test('bytes uses decimal units', () => {
+  assert.equal(bytes(0), '0 B');
+  assert.equal(bytes(999), '999 B');
+  assert.equal(bytes(1500), '1.5 kB');
+  assert.equal(bytes(987654321), '988 MB');
+  assert.equal(bytes(9876543210), '9.9 GB');
+  assert.equal(bytes(-1), '—');
+  assert.equal(bytes(undefined), '—');
+});
+
+test('count adds thousands separators', () => {
+  assert.equal(count(1284), '1,284');
+  assert.equal(count(0), '0');
+  assert.equal(count(null), '—');
+});
+
+test('trackLength and elapsed', () => {
+  assert.equal(trackLength(225000), '3:45');
+  assert.equal(trackLength(3723000), '1:02:03');
+  assert.equal(trackLength(0), '');
+  assert.equal(elapsed(45000), '45s');
+  assert.equal(elapsed(192000), '3m 12s');
+  assert.equal(elapsed(7500000), '2h 5m');
+  assert.equal(elapsed(90000000), '1d 1h');
+});
+
+test('relTime against a fixed now', () => {
+  const now = Date.parse('2026-10-28T12:00:00Z');
+  assert.equal(relTime('2026-10-28T11:59:55Z', now), 'just now');
+  assert.equal(relTime('2026-10-28T11:59:30Z', now), '30s ago');
+  assert.equal(relTime('2026-10-28T11:55:00Z', now), '5m ago');
+  assert.equal(relTime('2026-10-28T09:00:00Z', now), '3h ago');
+  assert.equal(relTime('2026-10-26T12:00:00Z', now), '2d ago');
+  assert.equal(relTime('2026-08-01T12:00:00Z', now), 'Aug 1');
+  assert.equal(relTime('not a date', now), '—');
+});
+
+test('absTime, clockTime and dayLabel', () => {
+  assert.equal(absTime('2026-10-28T12:04:05.123Z'), '2026-10-28 12:04:05');
+  assert.equal(clockTime('2026-10-28T12:04:05.123Z'), '12:04:05.123');
+  assert.equal(clockTime('2026-10-28T12:04:05.123Z', false), '12:04:05');
+  assert.equal(dayLabel('2026-10-28'), 'Oct 28');
+  assert.equal(dayLabel('2026-01-03'), 'Jan 3');
+});
+
+test('dateTime: time today, date and time this year, the year before that', () => {
+  const now = new Date(2026, 9, 29, 12, 0);
+  assert.equal(dateTime(new Date(2026, 9, 29, 6, 21).toISOString(), now), '06:21');
+  assert.equal(dateTime(new Date(2026, 9, 28, 23, 31).toISOString(), now), 'Oct 28 23:31');
+  assert.equal(dateTime(new Date(2025, 9, 28, 23, 31).toISOString(), now), 'Oct 28, 2025 23:31');
+  assert.equal(dateTime('', now), '');
+});
+
+test('codec labels', () => {
+  assert.equal(kHz(96000), '96');
+  assert.equal(kHz(44100), '44.1');
+  assert.equal(kHz(192000), '192');
+  assert.equal(codecLabel({ codec: 'alac', bit_depth: 24, sample_rate: 96000 }), 'ALAC 24/96');
+  assert.equal(codecLabel({ codec: 'alac', bit_depth: 16, sample_rate: 44100 }), 'ALAC 16/44.1');
+  assert.equal(codecLabel({ codec: 'aac' }), 'AAC');
+  assert.equal(codecLabel({ codec: 'ec3' }), 'Dolby Atmos');
+  assert.equal(codecLabel({}), '');
+  assert.equal(isHiRes({ bit_depth: 24, sample_rate: 96000 }), true);
+  assert.equal(isHiRes({ bit_depth: 24, sample_rate: 48000 }), false);
+  assert.equal(isHiRes({ bit_depth: 16, sample_rate: 44100 }), false);
+});
+
+test('jobTitle falls back to the input URL slug before the input resolves', () => {
+  assert.equal(jobTitle({ title: 'Midnights', input: 'https://music.apple.com/us/album/x/1' }), 'Midnights');
+  assert.equal(jobTitle({ input: 'https://music.apple.com/us/album/1989-taylors-version/1708308989' }), '1989 taylors version');
+  assert.equal(jobTitle({ input: 'not a url' }), 'not a url');
+  assert.equal(jobSubtitle({ curator_name: 'Apple Music Pop' }), 'Apple Music Pop');
+  assert.equal(jobSubtitle({ artist_name: 'Taylor Swift', curator_name: 'x' }), 'Taylor Swift');
+});
+
+test('shortId and safeHttpUrl', () => {
+  assert.equal(shortId('job_0123456789abcdef0123456789abcdef'), '01234567');
+  assert.equal(displayId('job_0123456789abcdef0123456789abcdef'), '01234567');
+  assert.equal(displayId('job_doesnotexist'), 'job_doesnotexist', 'an id that cannot be real is shown whole');
+  assert.equal(displayId(undefined), '');
+  assert.equal(safeHttpUrl('https://music.apple.com/us/album/1'), 'https://music.apple.com/us/album/1');
+  assert.equal(safeHttpUrl('javascript:alert(1)'), '');
+  assert.equal(safeHttpUrl(undefined), '');
+});
+
+test('contrastRatio matches published WCAG values', () => {
+  assert.equal(Number(contrastRatio('ffffff', '000000').toFixed(2)), 21);
+  // #767676 is the lightest gray that passes 4.5:1 on white; #777777 fails.
+  assert.equal(Number(contrastRatio('767676', 'ffffff').toFixed(2)), 4.54);
+  assert.equal(Number(contrastRatio('777777', 'ffffff').toFixed(2)), 4.48);
+  assert.equal(contrastRatio('xyz', 'ffffff'), null);
+});
+
+test('artTextColor keeps Apple colors that pass 4.5:1 and falls back otherwise', () => {
+  assert.equal(artTextColor('1a1a1a', 'f0f0f0'), '#f0f0f0');
+  assert.equal(artTextColor('000000', '333333'), 'var(--on-art-light)');
+  assert.equal(artTextColor('ffffff', '777777'), 'var(--on-art-dark)');
+  assert.equal(artTextColor('ffffff', undefined), 'var(--on-art-dark)');
+});
+
+test('artPalette uses the motion asset palette only when asked', () => {
+  const job = {
+    artwork_bg_color: '598090',
+    artwork_text_color1: '0a0a0a',
+    artwork_text_color2: '1a1a1a', // 4.08:1 on 598090, below 4.5
+    artwork_text_color3: '000000',
+    motion_artwork_bg_color: '05104b',
+    motion_artwork_text_color1: 'f5f5f5',
+    motion_artwork_text_color2: 'e0e0e0',
+    motion_artwork_text_color3: 'd0d0d0',
+  };
+  const light = artPalette(job);
+  assert.deepEqual({ ...light, dark: undefined }, { bg: '#598090', text1: '#0a0a0a', text2: 'var(--on-art-dark)', text3: '#000000', dark: undefined });
+  // Already dark: no dark-theme variant.
+  assert.deepEqual(artPalette(job, true), { bg: '#05104b', text1: '#f5f5f5', text2: '#e0e0e0', text3: '#d0d0d0' });
+  assert.equal(artPalette({}), null);
+  assert.equal(artPalette({ artwork_bg_color: 'red' }), null);
+  assert.deepEqual(paletteStyle({ bg: '#000000', text1: 'a', text2: 'b', text3: 'c' }), {
+    '--art-bg': '#000000',
+    '--art-t1': 'a',
+    '--art-t2': 'b',
+    '--art-t3': 'c',
+  });
+  assert.equal(paletteStyle(null), undefined);
+});
+
+test('a light album color gets a dark-theme variant with light text', () => {
+  // Blonde: a light gray slab with dark text.
+  const p = artPalette({ artwork_bg_color: 'e3e4e4', artwork_text_color1: '0a0a0a', artwork_text_color2: 'f5f5f5', artwork_text_color3: '2a2a2a' });
+  assert.equal(p.bg, '#e3e4e4');
+  const bg = p.dark.bg.slice(1);
+  const c = parseHex(bg);
+  const lightness = (Math.max(c.r, c.g, c.b) + Math.min(c.r, c.g, c.b)) / 2 / 255;
+  assert.ok(lightness <= 0.3, `dark bg ${bg} lightness ${lightness}`);
+  assert.equal(p.dark.text1, 'var(--on-art-light)');
+  assert.equal(p.dark.text2, '#f5f5f5');
+  assert.ok(contrastRatio(bg, 'ffffff') >= 4.5);
+  // Hue survives: a light pink stays reddish, no more vivid than it was.
+  const pink = parseHex(darkArtColor('ffc0cb'));
+  assert.ok(pink.r > pink.g && pink.r > pink.b, JSON.stringify(pink));
+  // A light yellow is pushed darker until white text reaches 4.5:1.
+  assert.ok(contrastRatio(darkArtColor('ffff66'), 'ffffff') >= 4.5);
+  assert.equal(darkArtColor('101010'), null);
+  assert.deepEqual(paletteStyle(p), {
+    '--art-bg': `light-dark(#e3e4e4, ${p.dark.bg})`,
+    '--art-t1': `light-dark(${p.text1}, var(--on-art-light))`,
+    '--art-t2': `light-dark(${p.text2}, #f5f5f5)`,
+    '--art-t3': `light-dark(${p.text3}, var(--on-art-light))`,
+  });
+});
+
+test('finishedLine shows the finish date and the duration when both stamps exist', () => {
+  assert.equal(finishedLine({ started_at: '2026-10-28T12:00:00Z', finished_at: '2026-10-28T12:03:12Z' }).replace(/Oct \d+/, 'Oct D'), 'Downloaded Oct D · took 3m 12s');
+  assert.equal(finishedLine({ finished_at: '2026-10-28T12:03:12Z' }).startsWith('Downloaded '), true);
+  assert.equal(finishedLine({ started_at: '2026-10-28T12:00:00Z' }), '');
+});
+
+test('pageSummary reads the feed counts per page', () => {
+  const counts = { total: 16, running: 2, queued: 0, failed: 1, completed: 13, cancelled: 0 };
+  const now = new Date('2026-10-29T00:57:00Z');
+  assert.equal(pageSummary('overview', counts, now), 'Oct 29', 'the counts are the Jobs card\'s');
+  assert.equal(pageSummary('overview', null, now), 'Oct 29');
+  assert.equal(pageSummary('queue', counts, now), '2 running · 1 failed');
+  assert.equal(pageSummary('queue', { ...counts, running: 0, failed: 0 }, now), 'Nothing active');
+  assert.equal(pageSummary('queue', null, now), '');
+  assert.equal(pageSummary('notfound', counts, now), '');
+  // The page names say what these pages are; only live counts get a line.
+  for (const page of ['logs', 'system', 'new', 'settings']) assert.equal(pageSummary(page, counts, now), '', page);
+});
+
+test('jobFacts gives kicker and meta parts, empty when unknown', () => {
+  const job = {
+    type: 'album',
+    genre: 'Pop',
+    release_date: '2022-10-21',
+    total_items: 20,
+    started_at: '2026-10-28T16:57:07Z',
+    finished_at: '2026-10-28T16:58:19Z',
+  };
+  assert.deepEqual(jobFacts(job), {
+    type: 'Album',
+    genre: 'Pop',
+    year: '2022',
+    tracks: '20 tracks',
+    started: '16:57:07',
+    finished: 'Oct 28 16:58',
+    took: '1m 12s',
+  });
+  assert.equal(jobFacts({ total_items: 1 }).tracks, '1 track');
+  assert.deepEqual(jobFacts(null), { type: '', genre: '', year: '', tracks: '', started: '', finished: '', took: '' });
+  assert.equal(releaseYear({ release_date: 'soon' }), '');
+});
+
+test('attrPairs sorts keys and leaves out the omitted ones', () => {
+  assert.deepEqual(attrPairs({ job_type: 'album', component: 'jobs', n: 3, ok: true }, ['component']), ['job_type=album', 'n=3', 'ok=true']);
+  assert.deepEqual(attrPairs(null), []);
+});
+
+test('formatShares turns the stats codec mix into shares and folds the tail', () => {
+  const two = formatShares([
+    { codec: 'alac', bit_depth: 24, sample_rate: 96000, tracks: 30 },
+    { codec: 'alac', bit_depth: 16, sample_rate: 44100, tracks: 10 },
+  ]);
+  assert.deepEqual(two.map((f) => [f.key, f.label, f.tracks, f.share]), [
+    ['alac-24-96000', 'ALAC 24/96', 30, 0.75],
+    ['alac-16-44100', 'ALAC 16/44.1', 10, 0.25],
+  ]);
+  const many = formatShares(
+    [
+      { codec: 'alac', bit_depth: 24, sample_rate: 96000, tracks: 4 },
+      { codec: 'alac', bit_depth: 24, sample_rate: 48000, tracks: 3 },
+      { codec: 'aac', bit_depth: 0, sample_rate: 0, tracks: 2 },
+      { codec: 'ec3', bit_depth: 0, sample_rate: 0, tracks: 1 },
+    ],
+    3,
+  );
+  assert.deepEqual(many.map((f) => [f.key, f.tracks]), [['alac-24-96000', 4], ['alac-24-48000', 3], ['other', 3]]);
+  const aac = formatShares([
+    { codec: 'alac', bit_depth: 24, sample_rate: 96000, tracks: 5 },
+    { codec: 'aac', bit_depth: 0, sample_rate: 0, tracks: 3 },
+    { codec: 'aac', bit_depth: 0, sample_rate: 44100, tracks: 4 },
+    { codec: 'aac', bit_depth: 0, sample_rate: 48000, tracks: 1 },
+  ]);
+  assert.deepEqual(aac.map((f) => [f.key, f.label, f.tracks]), [['aac', 'AAC', 8], ['alac-24-96000', 'ALAC 24/96', 5]], 'AAC at any rate is one bar');
+  assert.deepEqual(formatShares([]), []);
+  assert.deepEqual(formatShares(undefined), []);
+  assert.deepEqual(formatShares([{ codec: 'alac', tracks: 0 }]), []);
+});
+
+test('server messages read as row text or as a sentence', () => {
+  assert.equal(capitalized('station "X" is a live radio stream'), 'Station "X" is a live radio stream');
+  assert.equal(capitalized('  '), '');
+  assert.equal(sentence('database is locked'), 'Database is locked.');
+  assert.equal(sentence('Already a sentence!'), 'Already a sentence!');
+  assert.equal(sentence(undefined), '');
+  assert.equal(punctuated('download.cover_size must be {width}x{height}'), 'download.cover_size must be {width}x{height}.');
+});
+
+test('an unresolved job is shown by its link, not by a guessed title', () => {
+  assert.equal(isUnresolved({ input: 'https://music.apple.com/us/album/x/1' }), true);
+  assert.equal(isUnresolved({ title: 'Blonde' }), false);
+  assert.equal(isUnresolved(null), false);
+  assert.equal(inputLabel('https://music.apple.com/us/album/after-hours/1499378108?i=3&l=en'), 'music.apple.com/us/album/after-hours/1499378108');
+  assert.equal(inputLabel('https://music.apple.com/us/album/x/'), 'music.apple.com/us/album/x');
+  assert.equal(inputLabel('not a url'), 'not a url');
+  assert.equal(linkLabel('https://music.apple.com/cn/album/1234567890'), 'cn/album/1234567890');
+  const cut = linkLabel('https://music.apple.com/cn/album/mr.-morale-%26-the-big-steppers/1623854804');
+  assert.equal(cut.length, LINK_SHOWN);
+  assert.ok(cut.startsWith('cn/album/'));
+  assert.ok(cut.endsWith('/1623854804'), cut);
+  assert.equal(linkLabel('https://example.com/x'), 'example.com/x');
+  assert.equal(unresolvedHint({ status: 'queued' }), 'Not resolved yet');
+  assert.equal(unresolvedHint({ status: 'failed' }), "Couldn't be resolved");
+  assert.equal(unresolvedHint({ status: 'cancelled' }), 'Cancelled before it resolved');
+});
+
+test('errorSummary keeps the first line, drops an embedded JSON body and reads a bare one', () => {
+  assert.equal(errorSummary('Apple Music has no album 1 in storefront us (404)'), 'Apple Music has nothing at this link in the US storefront');
+  assert.equal(errorSummary('Apple Music has nothing at this link.'), 'Apple Music has nothing at this link.');
+  assert.equal(errorSummary('first line\nsecond line'), 'first line');
+  assert.equal(errorSummary('{"error":"x"}'), 'x');
+  assert.equal(errorSummary('{"error":{"code":"upstream_error","message":"Apple answered 503 Service Unavailable"}}'), 'Apple answered 503 Service Unavailable');
+  assert.equal(errorSummary('{"errors":[{"id":"Q","title":"Resource Not Found"}]}'), 'Resource Not Found');
+  assert.equal(errorSummary('{"code":1}'), '{"code":1}');
+  assert.equal(errorSummary('{not json'), '{not json');
+  assert.equal(errorSummary(''), '');
+  assert.equal(errorSummary(undefined), '');
+  const long = errorSummary('x'.repeat(300));
+  assert.equal(long.length, 140);
+  assert.ok(long.endsWith('…'));
+});
+
+test('legacyCatalogError puts the stored catalog failures into plain words', () => {
+  const nf = 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}';
+  assert.equal(legacyCatalogError(nf), 'Apple Music has nothing at this link');
+  assert.equal(legacyCatalogError('read Apple Music catalog: catalog request failed: 404 Not Found'), 'Apple Music has nothing at this link');
+  assert.equal(legacyCatalogError('catalog request failed: 403 Forbidden'), 'Apple Music refused access (403)');
+  assert.equal(legacyCatalogError('catalog request failed: 401 Unauthorized'), 'Apple Music refused access (401)');
+  assert.equal(legacyCatalogError('catalog request failed: 429 Too Many Requests'), 'Apple Music is limiting requests, try again later (429)');
+  assert.equal(legacyCatalogError('catalog request failed: 503 Service Unavailable'), 'Apple Music had a server problem (503)');
+  assert.equal(legacyCatalogError('catalog request failed: 400 Bad Request'), 'Apple Music rejected the request (400)');
+  // Anything else, including the server's current wording, is not touched.
+  assert.equal(legacyCatalogError('Apple Music has no album 1 in storefront us (404)'), '');
+  assert.equal(legacyCatalogError('disk full'), '');
+  assert.equal(legacyCatalogError(undefined), '');
+});
+
+test('errorSummary words a stored legacy catalog error and the caller keeps the full text', () => {
+  const raw = 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}';
+  assert.equal(errorSummary(raw), 'Apple Music has nothing at this link');
+  assert.equal(errorSummary('catalog request failed: 502 Bad Gateway\nretry later'), 'Apple Music had a server problem (502)');
+  assert.notEqual(errorSummary(raw), raw.trim(), 'the drawer offers "Full error" when the summary differs');
+});
+
+test('codecMeaning spells a chip out in the words of the Qualities sheet', () => {
+  assert.equal(codecMeaning({ codec: 'alac', bit_depth: 24, sample_rate: 44100 }), 'Lossless 24-bit / 44.1\u00a0kHz');
+  assert.equal(codecMeaning({ codec: 'alac', bit_depth: 16, sample_rate: 44100 }), 'Lossless 16-bit / 44.1\u00a0kHz');
+  assert.equal(codecMeaning({ codec: 'aac', bit_depth: 16, sample_rate: 48000 }), '16-bit / 48\u00a0kHz');
+  assert.equal(codecMeaning({ codec: 'aac' }), '');
+  assert.equal(codecMeaning(null), '');
+});

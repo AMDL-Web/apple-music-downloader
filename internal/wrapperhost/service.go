@@ -1,0 +1,67 @@
+package wrapperhost
+
+import (
+	"context"
+	"time"
+
+	"amdl/internal/wrapper"
+)
+
+// Service is the backend's wrapper service for a managed wrapper: status
+// from the guest's manager, marked as managed and as able to log in, and
+// login, two-step and logout through the supervisor.
+type Service struct {
+	Wrapper interface {
+		Status(context.Context) (wrapper.Status, error)
+	}
+	Sup *Supervisor
+}
+
+// Status reports the guest; while it is not serving, or does not answer
+// within a few seconds, the answer is "not ready" with the supervisor's
+// state rather than an error. A booting guest's port can take a connection
+// and never answer it.
+func (s Service) Status(ctx context.Context) (wrapper.Status, error) {
+	m := s.Sup.Managed()
+	st := wrapper.Status{Regions: []string{}}
+	if m.Mode == "serving" {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if got, err := s.Wrapper.Status(ctx); err == nil {
+			st = got
+		}
+	}
+	st.LoginSupported = true
+	st.Managed = &m
+	return st, nil
+}
+
+// StartLogin implements the backend's wrapper service.
+func (s Service) StartLogin(ctx context.Context, user, pass string) (wrapper.LoginResult, error) {
+	return s.Sup.StartLogin(ctx, user, pass)
+}
+
+// SubmitTwoStepCode implements the backend's wrapper service.
+func (s Service) SubmitTwoStepCode(ctx context.Context, id, code string) (wrapper.LoginResult, error) {
+	return s.Sup.SubmitTwoStepCode(ctx, id, code)
+}
+
+// Logout implements the backend's wrapper service.
+func (s Service) Logout(ctx context.Context, account string) error {
+	instances, err := s.Sup.home.Instances(ctx)
+	if err != nil {
+		return err
+	}
+	for _, in := range instances {
+		// The backend's existing logout contract supplies a username; the
+		// manager removes an instance by id. Account-aware callers can pass id.
+		if in.ID == account || in.Name == account {
+			return s.Sup.Logout(ctx, in.ID)
+		}
+	}
+	return wrapper.ErrAccountNotFound
+}
+
+// LogoutAccount implements the backend's wrapper service: the manager
+// removes an instance by its id.
+func (s Service) LogoutAccount(ctx context.Context, id string) error { return s.Logout(ctx, id) }

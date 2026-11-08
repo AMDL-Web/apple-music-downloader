@@ -1,0 +1,161 @@
+// What the command palette lists for a query (views/palette.js renders it):
+// pages, actions, filters and themes; with a query, also a download
+// action for Apple Music links in it, Settings sections and fields, a
+// catalog search for words (New download runs it), and the jobs the search
+// found.
+
+import { buildHash, newDownloadHash, newSearchHash, settingsHash, queueHash } from './route.js';
+import { searchTerm } from './search.js';
+import { pastedLinks } from './links.js';
+import { FIELDS } from './settings.js';
+import { SETTINGS_SECTIONS, SETTINGS_GROUPS, groupById } from './settings-sections.js';
+import { jobTitle, jobSubtitle, typeLabel, dateTime } from './format.js';
+import { jobStatusView } from './status.js';
+
+const STATIC_ITEMS = [
+  { id: 'act-new', group: 'Actions', label: 'New download', icon: 'plus', hash: buildHash('new'), keys: 'n' },
+  { id: 'nav-overview', group: 'Navigate', label: 'Overview', icon: 'grid', hash: buildHash('overview'), keys: 'g o' },
+  {
+    id: 'nav-queue',
+    group: 'Navigate',
+    label: 'Activity',
+    icon: 'activity',
+    words: 'queue runs jobs downloads records albums playlists stations done check files missing',
+    // Its last filters, read when the palette lists it.
+    get hash() {
+      return queueHash();
+    },
+    keys: 'g q',
+  },
+  { id: 'nav-library', group: 'Navigate', label: 'Library', icon: 'disc', hash: buildHash('library'), keys: 'g b', words: 'apple music songs albums playlists artists sync' },
+  { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
+  { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,', words: 'system status health server' },
+  { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },
+  { id: 'f-running', group: 'Filters', label: 'Show active jobs', icon: 'dot', hash: buildHash('queue', { tab: 'active' }) },
+  { id: 'f-errors', group: 'Filters', label: 'Show error logs', icon: 'triangle-alert', hash: buildHash('logs', { level: 'warn,error' }) },
+];
+
+const PREF_ITEMS = [
+  { id: 'theme-system', group: 'Theme', label: 'Use system theme', icon: 'monitor', theme: 'system' },
+  { id: 'theme-light', group: 'Theme', label: 'Use light theme', icon: 'sun', theme: 'light' },
+  { id: 'theme-dark', group: 'Theme', label: 'Use dark theme', icon: 'moon', theme: 'dark' },
+];
+
+/** Settings sections listed before anything is typed. */
+const SECTIONS_SHOWN_EMPTY = ['account', 'library_sync'];
+
+/** Words a section or group answers to besides its label and id (what its panels do). */
+const SECTION_WORDS = {
+  account: 'login log in log out wrapper session apple id storefront language',
+  quality: 'codec alac atmos lossless formats',
+  files: 'folder path template naming disk storage space',
+  lyrics_artwork: 'cover artwork lyrics lrc ttml karaoke translation romanization pronunciation motion animated',
+  jobs: 'tuning workers parallel concurrency concurrent threads pool pools limits queue',
+  library_sync: 'anchor poll',
+  hooks: 'webhook exec notify',
+  logging: 'logs errors',
+  server: 'version uptime build ffmpeg database health status',
+  config_file: 'reload yaml config locked startup restart keys defaults',
+};
+
+const SECTION_LABELS = new Map(SETTINGS_SECTIONS.map((s) => [s.id, s]));
+
+// The sections, then their sub-groups, which open the section at the group.
+const SECTION_ITEMS = [...SETTINGS_SECTIONS, ...SETTINGS_GROUPS].map((s) => ({
+  id: `set-${s.id}`,
+  group: 'Settings',
+  label: `Settings: ${s.label}`,
+  sub: s.section ? SECTION_LABELS.get(s.section).label : undefined,
+  icon: s.icon,
+  hash: settingsHash(s.id),
+  section: s.id,
+  words: `${s.id.replace(/_/g, ' ')} ${SECTION_WORDS[s.id] || ''}`,
+}));
+
+/** Words a field answers to besides its label and key: by type, then by key. */
+const TYPE_WORDS = { template: 'template name format', path: 'folder directory' };
+const KEY_WORDS = {
+  'download.max_attempts': 'retry retries tries attempts',
+  'catalog.album_track_url_mode': 'song track album link',
+  'library_sync.interval_minutes': 'poll interval',
+  'download.give_up_after_runs': 'retry retries give up failed runs',
+  'download.overwrite_existing': 'replace force overwrite skip existing',
+  'download.progress_event_interval_ms': 'throttle',
+  'logging.level': 'verbose',
+};
+const fieldWords = (f) => `${TYPE_WORDS[f.type] || ''} ${KEY_WORDS[f.key] || ''}`;
+
+/** At most this many Settings fields for one query. */
+const FIELD_LIMIT = 6;
+
+const matches = (q, ...texts) => texts.some((t) => typeof t === 'string' && t.toLowerCase().includes(q));
+
+/** One palette row for a job the search found: enough to tell two runs of one album apart. */
+export function jobItem(job) {
+  const status = jobStatusView(job);
+  return {
+    id: `job-${job.id}`,
+    group: 'Jobs',
+    label: jobTitle(job),
+    sub: [jobSubtitle(job), typeLabel(job.type), status && status.label, dateTime(job.updated_at || job.created_at)].filter(Boolean).join(' · '),
+    icon: 'music',
+    hash: buildHash('queue', {}, job.id),
+    dir: 'auto',
+  };
+}
+
+/**
+ * The palette's rows for `query` and the jobs its search returned, in
+ * display order. Rows carry {id, group, label, icon} and a hash or a
+ * theme; `sub`, `keys`, `dir` and, for a Settings field,
+ * `field` (its config key, to focus once the section is open) are optional.
+ */
+export function paletteItems(query, jobs = []) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) {
+    return [...STATIC_ITEMS, ...SECTIONS_SHOWN_EMPTY.map((id) => SECTION_ITEMS.find((s) => s.section === id)), ...PREF_ITEMS];
+  }
+  const out = [];
+  const links = pastedLinks(query);
+  if (links.length > 0) {
+    out.push({
+      id: 'act-download-links',
+      group: 'Actions',
+      label: links.length === 1 ? 'Download this link' : `Download these ${links.length} links`,
+      sub: links.length === 1 ? links[0] : undefined,
+      icon: 'download',
+      hash: newDownloadHash(links),
+    });
+  }
+  out.push(...STATIC_ITEMS.filter((it) => matches(q, it.label, it.group, it.words)));
+  out.push(...SECTION_ITEMS.filter((it) => matches(q, it.label, it.words)));
+  if (q.length >= 2 && links.length === 0) {
+    const fields = FIELDS.filter((f) => matches(q, f.label, f.key, fieldWords(f))).slice(0, FIELD_LIMIT);
+    for (const f of fields) {
+      const section = SECTION_LABELS.get(f.section);
+      out.push({
+        id: `field-${f.key}`,
+        group: 'Settings',
+        label: f.label,
+        // The key stays searchable but is not shown: the page hides keys by default.
+        sub: [section ? section.label : f.section, f.group ? groupById(f.group).label : ''].filter(Boolean).join(' › '),
+        icon: section ? section.icon : 'settings',
+        hash: settingsHash(f.section, f.key),
+        field: f.key,
+      });
+    }
+  }
+  out.push(...PREF_ITEMS.filter((it) => matches(q, it.label, it.group)));
+  const term = links.length === 0 ? searchTerm(query, []).term : '';
+  if (term) {
+    out.push({ id: 'act-search', group: 'Apple Music', label: `Search Apple Music for “${term}”`, icon: 'search', hash: newSearchHash(term), dir: 'auto' });
+  }
+  out.push(...jobs.map(jobItem));
+  return out;
+}
+
+/** The polite status the palette announces: "3 results", "No results". */
+export function resultCount(n) {
+  if (n === 0) return 'No results';
+  return n === 1 ? '1 result' : `${n} results`;
+}

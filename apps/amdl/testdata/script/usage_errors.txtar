@@ -1,0 +1,63 @@
+# A usage error is exit 2 with one JSON error object on stderr and nothing on
+# stdout. The setup's AMDL_URL answers nothing, so a command that sent a
+# request would exit 5 instead: exit 2 also shows nothing was sent.
+
+# A flag with no command before it is not a command named "".
+exits 2 amdl --bogus
+! stdout .
+stderr -count=1 '"code":"usage_error"'
+stderr '\-\-bogus'
+! stderr 'command \\"\\"'
+
+# An unknown command suggests the nearest spelling first.
+exits 2 amdl jobs lst
+stderr '"did_you_mean":\["amdl jobs list"'
+exits 2 amdl jobs gett
+stderr '"did_you_mean":\["amdl jobs get"'
+exits 2 amdl wrapper lo
+stderr '"did_you_mean":\["amdl wrapper login"'
+exits 2 amdl job retry
+stderr '"did_you_mean":\["amdl jobs retry"'
+# A word no command is spelled like is matched by meaning.
+exits 2 amdl retry
+stderr 'amdl jobs retry'
+
+# An unknown flag names the command's own flags, not the global ones, and
+# the closest of them.
+exits 2 amdl library list --stat partial
+stderr '"did_you_mean":\["--state"'
+stderr '"flags":\[[^]]*"--limit"'
+! stderr '"flags":\[[^]]*"--server"'
+stderr 'library list --help'
+
+# A flag parse error is reported once; a duration without a unit gets
+# examples with units, and a bad number does not.
+exits 2 amdl jobs wait job_a --timeout 30
+stderr -count=1 '"code":"usage_error"'
+stderr '"hint":"[^"]*30s[^"]*2h'
+exits 2 amdl jobs list --no-such-flag
+stderr -count=1 '"code":"usage_error"'
+exits 2 amdl jobs list --limit x
+stderr -count=1 '"code":"usage_error"'
+! stderr unit
+
+# amdl mcp runs for as long as its client, so it takes neither --dry-run
+# nor --fields.
+exits 2 amdl mcp --dry-run
+exits 2 amdl mcp --fields=id
+
+# wrapper logout takes exactly one of the two ways to name the account.
+exits 2 amdl wrapper logout --yes
+stderr 'exactly one of --username and --account-id'
+exits 2 amdl wrapper logout --username a@icloud.com --account-id a1 --yes
+stderr 'exactly one of --username and --account-id'
+
+# serve's flags that only go together.
+exits 2 amdl serve extra
+exits 2 amdl serve --local --init server.listen=:1
+stderr 'without --local'
+exits 2 amdl serve --listen 127.0.0.1:1
+stderr 'go with --local'
+
+# schema's views.
+exits 2 amdl schema download --view huge

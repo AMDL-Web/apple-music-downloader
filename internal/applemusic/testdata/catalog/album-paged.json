@@ -1,0 +1,51 @@
+{
+  "data": [
+    {
+      "id": "album-1",
+      "type": "albums",
+      "attributes": {
+        "name": "Album",
+        "artistName": "Album Artist",
+        "trackCount": 3
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "artist-1",
+              "attributes": {
+                "name": "Album Artist",
+                "artwork": {
+                  "url": "artist-art"
+                }
+              }
+            }
+          ]
+        },
+        "tracks": {
+          "data": [
+            {
+              "id": "song-1",
+              "type": "songs",
+              "attributes": {
+                "name": "One",
+                "artistName": "Artist",
+                "albumName": "Album",
+                "trackNumber": 1,
+                "discNumber": 1
+              }
+            },
+            {
+              "id": "video-1",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Video"
+              }
+            }
+          ],
+          "next": "/v1/catalog/cn/albums/album-1/tracks?offset=1"
+        }
+      }
+    }
+  ]
+}

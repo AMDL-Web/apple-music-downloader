@@ -7,13 +7,15 @@ import (
 	"strings"
 
 	"amdl/internal/applemusic"
-	"amdl/internal/config"
+	"amdl/internal/logging"
 )
 
+// QualityRequest asks which qualities the tracks behind URL are offered in.
 type QualityRequest struct {
 	URL string `json:"url"`
 }
 
+// QualitySong identifies one track of a quality query.
 type QualitySong struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -22,6 +24,7 @@ type QualitySong struct {
 	HasLyrics bool   `json:"has_lyrics"`
 }
 
+// QualityOption is one codec of a track and whether it is offered.
 type QualityOption struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
@@ -35,6 +38,7 @@ type QualityOption struct {
 	Description string `json:"description,omitempty"`
 }
 
+// QualityResult answers a QualityRequest, one QualityTrack per track.
 type QualityResult struct {
 	Input      string         `json:"input"`
 	Storefront string         `json:"storefront"`
@@ -43,23 +47,26 @@ type QualityResult struct {
 	Tracks     []QualityTrack `json:"tracks"`
 }
 
+// QualityTrack lists one track's quality options.
 type QualityTrack struct {
 	Song      QualitySong     `json:"song"`
 	Qualities []QualityOption `json:"qualities"`
 }
 
+// QualityService answers quality queries from the master playlists, without
+// downloading media.
 type QualityService struct {
 	downloader *Downloader
 }
 
+// NewQualityService answers quality queries with downloader's catalog,
+// wrapper and request gate.
 func NewQualityService(downloader *Downloader) *QualityService {
 	return &QualityService{downloader: downloader}
 }
 
-func NewQualityServiceWithCatalog(cfg config.Config, catalog downloaderCatalog, wrapperClient downloaderWrapper) *QualityService {
-	return NewQualityService(&Downloader{cfg: cfg, catalog: catalog, wrapper: wrapperClient, http: newHTTPClient()})
-}
-
+// QueryQuality resolves req.URL into tracks and reports every enhanced codec
+// each one is offered in. One track's failure fails the query.
 func (s *QualityService) QueryQuality(ctx context.Context, req QualityRequest) (QualityResult, error) {
 	if s.downloader == nil {
 		return QualityResult{}, fmt.Errorf("quality downloader is not configured")
@@ -73,7 +80,7 @@ func (s *QualityService) QueryQuality(ctx context.Context, req QualityRequest) (
 		Raw: req.URL, Storefront: validated.Storefront, Type: applemusic.URLType(validated.Type), ID: validated.ID,
 	}
 	resolved, _, err := retryValue(ctx, downloader.cfg.Download.MaxAttempts, retryBackoff, func(int) (resolvedCollection, error) {
-		return downloader.resolveCollection(ctx, parsed)
+		return downloader.resolveCollection(ctx, parsed, false)
 	}, nil)
 	if err != nil {
 		return QualityResult{}, err
@@ -91,11 +98,14 @@ func (s *QualityService) QueryQuality(ctx context.Context, req QualityRequest) (
 	}, nil
 }
 
+// queryTrackQualities probes every track concurrently. The response fails as a
+// whole on one track's error, so the first error cancels the probes still
+// running instead of letting each spend its retry budget for nothing.
 func (d *Downloader) queryTrackQualities(ctx context.Context, parsed applemusic.ParsedURL, songs []applemusic.Song) ([]QualityTrack, error) {
 	tracks := make([]QualityTrack, len(songs))
 	metadata := newTrackMetadataResolver(d, parsed.Storefront)
 	finished := make([]bool, len(songs))
-	err := runTrackTasks(ctx, len(songs), finished, func(trackCtx context.Context, i int) error {
+	err := runTrackTasks(ctx, logging.FromContext(ctx, d.logger), len(songs), finished, true, func(trackCtx context.Context, i int) error {
 		song, _, err := retryValue(trackCtx, d.cfg.Download.MaxAttempts, retryBackoff, func(int) (applemusic.Song, error) {
 			return metadata.song(trackCtx, songs[i], parsed.Type)
 		}, nil)
@@ -117,12 +127,24 @@ func (d *Downloader) queryTrackQualities(ctx context.Context, parsed applemusic.
 
 func (d *Downloader) querySongQualities(ctx context.Context, storefront string, song applemusic.Song) ([]QualityOption, error) {
 	variants, _, err := retryValue(ctx, d.cfg.Download.MaxAttempts, retryBackoff, func(int) ([]variant, error) {
-		master, err := d.resolveEnhancedHLS(ctx, storefront, song)
+		// The inventory lists ALAC among the codecs, so it reads the master
+		// playlist an ALAC download would.
+		master, _, err := d.resolveEnhancedHLS(ctx, storefront, song, "alac")
 		if err != nil {
 			return nil, err
 		}
-		return fetchMasterVariants(ctx, d.http, master, d.requestGate)
+		variants, err := fetchMasterVariants(ctx, d.http, master, d.requestGate)
+		if err != nil {
+			// The next attempt asks the wrapper again.
+			d.deviceManifests.forget(deviceManifestKey{storefront: storefront, songID: song.ID})
+		}
+		return variants, err
 	}, nil)
+	if errors.Is(err, applemusic.ErrNoEnhancedHLS) {
+		// amp-api lists no Enhanced HLS master for this song: it is offered in
+		// none of the enhanced codecs, not a failed query.
+		variants, err = nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

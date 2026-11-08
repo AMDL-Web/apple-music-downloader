@@ -1,0 +1,32 @@
+# The happy path against a backend: a link starts a job, --wait follows it
+# to the end and prints its summary with each track's file. The demo backend
+# seeds seven jobs (demo-0001 to demo-0007), so this one is demo-0008.
+demo-backend
+
+exec amdl download https://music.apple.com/us/album/salt-static/920004 --wait
+stdout '"id":"demo-0008"'
+stdout '"status":"completed"'
+stdout '"album_progress":\{"total":9,"finished":9,"done":9,"failed":0,"percent":100\}'
+stdout '"output_path":"/volume1/music/library/Nightjar Coast/Salt & Static/01\. [^"]+\.m4a"'
+
+# The finished job is listed, --fields keeps only the named keys, and
+# jobs wait on it returns at once.
+exec amdl jobs list --status completed --fields id,status
+stdout '\{"id":"demo-0008","status":"completed"\}'
+! stdout '"title"'
+exec amdl jobs wait demo-0008
+stdout '"status":"completed"'
+
+# A job that failed is exit 7, and the hint is the retry.
+exits 7 amdl jobs wait demo-0003
+stdout '"status":"failed"'
+stderr '"code":"job_failed"'
+stderr '"hint":"amdl jobs retry demo-0003"'
+
+# config set echoes only the keys it set; a misspelled key is not found
+# (3) and names the key meant.
+exec amdl config set logging.level=debug
+stdout '^\{"config":\{"logging.level":"debug"\},("pending_restart":\[\],)?"persisted":true\}$'
+exits 3 amdl config set simulate.enable=true
+stderr '"code":"config_key_not_found"'
+stderr '"did_you_mean":\["simulate.enabled"\]'

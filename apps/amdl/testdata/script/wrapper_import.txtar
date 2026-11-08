@@ -1,0 +1,33 @@
+# wrapper import installs a guest from local files; after wrapper uninstall
+# nothing is installed, so the result leaves out "enabled" and "installed".
+#
+# The guest files below are not real archives. The disk already in the
+# wrapper's directory keeps the install on QEMU (a native install would
+# unpack the manager from the initramfs), and neither command starts it.
+[!linux] [!darwin] skip 'the wrapper directory is under XDG_CONFIG_HOME or HOME here'
+exec amdl wrapper import guest
+stdout '"enabled":true'
+stdout '"next":"amdl service install'
+exec amdl wrapper uninstall
+! stdout '"enabled"'
+! stdout '"installed"'
+
+# Outside a terminal, uninstall --purge asks for --yes; with it, the result
+# names no log (it went with the wrapper's directory) and says what next.
+exec amdl wrapper import guest
+exits 10 amdl wrapper uninstall --purge
+stderr '"code":"confirmation_required"'
+exec amdl wrapper uninstall --purge --yes
+! stdout '"log"'
+stdout '"next"'
+
+-- guest/vmlinuz-lite-qemu --
+kernel
+-- guest/wrapper-manager-initramfs.cpio.gz --
+initramfs
+-- guest/data.img --
+disk
+-- home/.config/AMDL/wrapper/data.img --
+an earlier install's disk
+-- home/Library/Application Support/AMDL/wrapper/data.img --
+an earlier install's disk

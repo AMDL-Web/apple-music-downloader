@@ -1,0 +1,569 @@
+package demo
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"reflect"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"amdl/internal/buildinfo"
+	"amdl/internal/client"
+	"amdl/internal/config"
+	"amdl/internal/domain"
+)
+
+// keepalive spaces the comments a quiet stream sends, as the real streams
+// do, well inside client.Client's watchdog.
+const keepalive = 15 * time.Second
+
+func (b *Backend) handler() http.Handler {
+	m := http.NewServeMux()
+	m.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, client.Health{Status: "ok"})
+	})
+	m.HandleFunc("GET /api/v1/system", b.system)
+	m.HandleFunc("POST /api/v1/system/restart", b.restart)
+	m.HandleFunc("GET /api/v1/wrapper/status", b.wrapperStatus)
+	m.HandleFunc("POST /api/v1/wrapper/login", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "needs_2fa", "login_id": "demo-login"})
+	})
+	m.HandleFunc("POST /api/v1/wrapper/login/{id}/2fa", b.twoStep)
+	m.HandleFunc("POST /api/v1/wrapper/logout", func(w http.ResponseWriter, r *http.Request) {
+		b.mu.Lock()
+		b.signedIn = false
+		b.mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
+	})
+	m.HandleFunc("GET /api/v1/accounts", func(w http.ResponseWriter, r *http.Request) {
+		b.mu.Lock()
+		in := b.signedIn
+		b.mu.Unlock()
+		list := client.AccountList{Accounts: []client.Account{}}
+		if in {
+			list.Accounts = append(list.Accounts, client.Account{ID: demoAccountID, Name: "demo@example.com", Region: "us", Default: true,
+				LibrarySync: true, AppleLibrary: true, State: client.AccountActive, AddedAt: b.now()})
+		}
+		writeJSON(w, http.StatusOK, list)
+	})
+	m.HandleFunc("GET /api/v1/stats", b.stats)
+	m.HandleFunc("GET /api/v1/library-sync", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, demoLibrarySync)
+	})
+	m.HandleFunc("POST /api/v1/library-sync/reset", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, client.LibrarySyncReset{Account: demoAccountID, Cleared: true, Status: demoLibrarySync})
+	})
+	m.HandleFunc("GET /api/v1/hooks", b.listHooks)
+	m.HandleFunc("PUT /api/v1/hooks", b.setHooksEnabled)
+	m.HandleFunc("GET /api/v1/hooks/presets", b.hookPresets)
+	m.HandleFunc("PUT /api/v1/hooks/{name}", b.putHook)
+	m.HandleFunc("DELETE /api/v1/hooks/{name}", b.deleteHook)
+	m.HandleFunc("POST /api/v1/hooks/{name}/test", b.testHook)
+	m.HandleFunc("GET /api/v1/logs", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"logs": []any{}})
+	})
+	m.HandleFunc("GET /api/v1/config", b.getConfig)
+	m.HandleFunc("PUT /api/v1/config", b.putConfig)
+	m.HandleFunc("POST /api/v1/config/reload", b.getConfig)
+	m.HandleFunc("GET /api/v1/downloads", b.list)
+	m.HandleFunc("POST /api/v1/downloads", b.submit)
+	m.HandleFunc("GET /api/v1/downloads/events", b.feedStream)
+	m.HandleFunc("GET /api/v1/downloads/{id}", b.detail)
+	m.HandleFunc("GET /api/v1/downloads/{id}/events", b.jobStream)
+	m.HandleFunc("POST /api/v1/downloads/{id}/cancel", b.act(func(j *job, now time.Time) error {
+		if j.Status.IsTerminal() {
+			return errNotCancellable
+		}
+		// A record's run is cancelled by pausing the record.
+		b.paused[j.album.id] = true
+		b.cancel(j, now)
+		return nil
+	}))
+	m.HandleFunc("POST /api/v1/downloads/{id}/retry", b.retryJob)
+	m.HandleFunc("POST /api/v1/downloads/{id}/move", b.moveJob)
+	m.HandleFunc("DELETE /api/v1/downloads/{id}", b.remove)
+	m.HandleFunc("POST /api/v1/lookup", b.lookup)
+	m.HandleFunc("GET /api/v1/search", b.search)
+	m.HandleFunc("GET /api/v1/artists/{id}/albums", b.artistAlbums)
+	m.HandleFunc("GET /api/v1/albums/{id}", b.album)
+	m.HandleFunc("GET /api/v1/playlists/{id}", b.playlist)
+	m.HandleFunc("GET /art/{id}/{size}", b.cover)
+	b.libraryRoutes(m)
+	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "not_found", "the demo has no "+r.Method+" "+r.URL.Path)
+	})
+	return m
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	// The answer goes to a client in this process; a failed write means it
+	// stopped reading.
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	writeErrorDetails(w, status, code, message, nil)
+}
+
+func writeErrorDetails(w http.ResponseWriter, status int, code, message string, details any) {
+	writeJSON(w, status, map[string]any{"error": map[string]any{"code": code, "message": message, "details": details}})
+}
+
+func (b *Backend) system(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	c := b.counts()
+	b.mu.Unlock()
+	info := client.SystemInfo{
+		Version: buildinfo.Get().Version, OS: "linux", Arch: "amd64", GoVersion: "go1.27",
+		StartedAt: b.now().Add(-26 * time.Hour), UptimeSeconds: 26 * 3600, DefaultStorefront: "us",
+		Tools: []domain.Capability{{Name: "ffmpeg", Available: true, Path: "/usr/bin/ffmpeg"}},
+		Storage: []client.Storage{
+			{Name: "downloads_dir", Path: musicDir, FreeBytes: 1_870_000_000_000, TotalBytes: 3_840_000_000_000},
+			{Name: "temp_dir", Path: "/tmp/amdl", FreeBytes: 41_000_000_000, TotalBytes: 64_000_000_000},
+		},
+	}
+	info.Jobs.Workers, info.Jobs.Active, info.Jobs.QueueDepth, info.Jobs.QueueCapacity = maxRunning, c.Running, c.Queued, 200
+	info.Pools.Downloads, info.Pools.Decrypts, info.Pools.WrapperRequests = 4, 2, 4
+	b.mu.Lock()
+	info.PendingRestart = b.pendingRestart()
+	b.mu.Unlock()
+	writeJSON(w, http.StatusOK, info)
+}
+
+// demoAccountID is the one account the demo backend holds.
+const demoAccountID = "demo"
+
+var demoLibrarySync = client.LibrarySync{IntervalMinutes: 60, Accounts: []client.LibrarySyncAccount{
+	{AccountID: demoAccountID, Name: "demo@example.com", Region: "us"}}}
+
+func (b *Backend) wrapperStatus(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	in := b.signedIn
+	b.mu.Unlock()
+	s := client.WrapperStatus{Ready: true, LoggedIn: in, LoginSupported: true, Regions: []string{}}
+	if in {
+		s.Regions = []string{"us"}
+	}
+	writeJSON(w, http.StatusOK, s)
+}
+
+var sixDigits = regexp.MustCompile(`^[0-9]{6}$`)
+
+func (b *Backend) twoStep(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Code string `json:"two_step_code"`
+	}
+	if json.NewDecoder(r.Body).Decode(&body) != nil || !sixDigits.MatchString(body.Code) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "the code has six digits")
+		return
+	}
+	b.mu.Lock()
+	b.signedIn = true
+	b.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_in"})
+}
+
+func (b *Backend) stats(w http.ResponseWriter, r *http.Request) {
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	days = min(max(days, 1), 90)
+	s := client.Stats{GeneratedAt: b.now(), Days: days}
+	today := b.now().UTC()
+	for i := days - 1; i >= 0; i-- {
+		d := today.AddDate(0, 0, -i)
+		n := int(hash(d.Format("2006-01-02")) % 40)
+		s.Daily = append(s.Daily, client.StatsDay{Date: d.Format("2006-01-02"), TracksCompleted: n,
+			BytesWritten: int64(n) * 62_000_000, JobsCompleted: n / 10})
+		s.Totals.TracksCompleted += n
+		s.Totals.BytesWritten += int64(n) * 62_000_000
+		s.Totals.Jobs += n / 10
+	}
+	writeJSON(w, http.StatusOK, s)
+}
+
+func (b *Backend) getConfig(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"config": b.config, "persisted": true, "pending_restart": b.pendingRestart()})
+}
+
+// pendingRestart lists the restart keys saved since the last restart, sorted.
+// The caller holds mu.
+func (b *Backend) pendingRestart() []string {
+	keys := []string{}
+	for k := range b.pending {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// restart is POST /system/restart: the demo has nothing to stop, so the
+// saved restart keys simply apply.
+func (b *Backend) restart(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	b.pending = map[string]bool{}
+	b.mu.Unlock()
+	writeJSON(w, http.StatusAccepted, map[string]any{"restarting": true})
+}
+
+// putConfig merges the body's sections into the configuration, as PUT
+// /config does, without its validation: the demo keeps any value.
+func (b *Backend) putConfig(w http.ResponseWriter, r *http.Request) {
+	var body map[string]map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "the body is not a configuration: "+err.Error())
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for section, leaves := range body {
+		m, ok := b.config[section].(map[string]any)
+		if !ok {
+			m = map[string]any{}
+			b.config[section] = m
+		}
+		for k, v := range leaves {
+			if config.AppliesOnRestart(section+"."+k) && !reflect.DeepEqual(m[k], v) {
+				b.pending[section+"."+k] = true
+			}
+			m[k] = v
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"config": b.config, "persisted": true, "pending_restart": b.pendingRestart()})
+}
+
+func (b *Backend) list(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	q := r.URL.Query()
+	types, statuses := splitList(q["type"]), splitList(q["status"])
+	l := client.DownloadList{StatusCounts: b.counts(), Limit: client.SnapshotLimit, EventCursor: b.seq, Downloads: []domain.Job{}}
+	for _, j := range b.sortedJobs() {
+		if (len(types) > 0 && !slices.Contains(types, j.Type)) || (len(statuses) > 0 && !slices.Contains(statuses, string(j.Status))) ||
+			(q.Get("resource_kind") == "none" && j.ResourceID != "") ||
+			(q.Get("resource_id") != "" && (j.ResourceID != q.Get("resource_id") || string(j.ResourceKind) != q.Get("resource_kind"))) {
+			continue
+		}
+		l.Downloads = append(l.Downloads, j.snapshot())
+	}
+	l.Total = len(l.Downloads)
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	l.Downloads = l.Downloads[min(max(offset, 0), l.Total):]
+	if limit, _ := strconv.Atoi(q.Get("limit")); limit > 0 && limit < len(l.Downloads) {
+		l.Downloads = l.Downloads[:limit]
+	}
+	writeJSON(w, http.StatusOK, l)
+}
+
+func (b *Backend) detail(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	j := b.job(r.PathValue("id"))
+	if j == nil {
+		writeError(w, http.StatusNotFound, "job_not_found", "no such job")
+		return
+	}
+	writeJSON(w, http.StatusOK, client.DownloadDetail{Job: j.snapshot(), Items: append([]domain.JobItem(nil), j.items...),
+		Hooks: []domain.HookState{}, EventCursor: b.seq})
+}
+
+var (
+	errNotCancellable = &apiError{http.StatusConflict, "job_not_cancellable", "the job has already finished"}
+	errNotRetryable   = &apiError{http.StatusConflict, "job_not_retryable", "only a failed or cancelled job can be retried"}
+)
+
+type apiError struct {
+	status        int
+	code, message string
+}
+
+func (e *apiError) Error() string { return e.message }
+
+func (b *Backend) act(fn func(*job, time.Time) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		j := b.job(r.PathValue("id"))
+		if j == nil {
+			writeError(w, http.StatusNotFound, "job_not_found", "no such job")
+			return
+		}
+		if err := fn(j, b.now()); err != nil {
+			e := err.(*apiError)
+			writeError(w, e.status, e.code, e.message)
+			return
+		}
+		writeJSON(w, http.StatusOK, j.snapshot())
+	}
+}
+
+// moveJob answers POST /downloads/{id}/move with {job}, refusing what the
+// real route refuses.
+func (b *Backend) moveJob(w http.ResponseWriter, r *http.Request) {
+	var req domain.MoveRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "the body is not a move request: "+err.Error())
+		return
+	}
+	set := 0
+	for _, f := range []string{req.Before, req.After, req.To} {
+		if f != "" {
+			set++
+		}
+	}
+	if set != 1 || (req.To != "" && req.To != "first" && req.To != "last") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "set exactly one of before, after and to (first or last)")
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	j := b.job(r.PathValue("id"))
+	if j == nil {
+		writeError(w, http.StatusNotFound, "job_not_found", "no such job")
+		return
+	}
+	if err := b.move(j, req, b.now()); err != nil {
+		e := err.(*apiError)
+		writeError(w, e.status, e.code, e.message)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]domain.Job{"job": j.snapshot()})
+}
+
+// remove deletes a finished job, as DELETE /downloads/{id} does: one that
+// is queued or running is refused.
+func (b *Backend) remove(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	j := b.job(r.PathValue("id"))
+	switch {
+	case j == nil:
+		writeError(w, http.StatusNotFound, "job_not_found", "no such job")
+		return
+	case !j.Status.IsTerminal():
+		writeError(w, http.StatusConflict, "job_active", "the job is still queued or running; cancel it first")
+		return
+	}
+	b.drop(j)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// drop deletes a terminal job and tells the overview feeds. The caller
+// holds b.mu.
+func (b *Backend) drop(j *job) {
+	b.jobs = slices.DeleteFunc(b.jobs, func(x *job) bool { return x == j })
+	b.seq++
+	msg := domain.DownloadFeedMessage{Type: "download_deleted", JobID: j.ID, EventID: b.seq, StatusCounts: b.counts()}
+	for ch := range b.feeds {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
+// resolve finds what a link names in the catalog: an album, or a song of
+// one with ?i=. Any other Apple Music link stands for one of the albums, so
+// a pasted link of a real album still shows the demo at work.
+func resolve(link string) (*album, *song, bool) {
+	u, err := url.Parse(strings.TrimSpace(link))
+	if err != nil || !strings.HasSuffix(u.Hostname(), "music.apple.com") {
+		return nil, nil, false
+	}
+	if id := u.Query().Get("i"); id != "" {
+		if s, ok := findSong(id); ok {
+			return s.album, &s, true
+		}
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if a := findAlbum(parts[len(parts)-1]); a != nil {
+		return a, nil, true
+	}
+	return albums[hash(u.Path)%uint32(len(albums))], nil, true
+}
+
+func (b *Backend) submit(w http.ResponseWriter, r *http.Request) {
+	var req domain.DownloadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "the body is not a download request: "+err.Error())
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.now()
+	var res domain.BatchSubmitResponse
+	for _, link := range req.URLs {
+		a, one, ok := resolve(link)
+		if !ok {
+			res.Rejected++
+			res.Results = append(res.Results, domain.SubmitResult{URL: link, Status: domain.SubmitInvalid,
+				Error: &domain.SubmitError{Code: "invalid_url", Message: "not an Apple Music link"}})
+			continue
+		}
+		input := a.url()
+		if one != nil {
+			input = one.url()
+		}
+		if j := b.active(input); j != nil {
+			res.Rejected++
+			res.Results = append(res.Results, domain.SubmitResult{URL: link, Status: domain.SubmitDuplicateActive, ExistingJobID: j.ID,
+				Error: &domain.SubmitError{Code: domain.SubmitCodeDuplicateActive, Message: "already in the queue"}})
+			continue
+		}
+		j := b.newJob(a, one, now)
+		snap := j.snapshot()
+		b.feed(j)
+		res.Accepted++
+		res.Results = append(res.Results, domain.SubmitResult{URL: link, Status: domain.SubmitAccepted, Job: &snap})
+	}
+	if res.Accepted == 0 {
+		writeErrorDetails(w, http.StatusUnprocessableEntity, "no_urls_accepted", "no URL was accepted; see details.results", res)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, res)
+}
+
+// feedStream is GET /downloads/events: every message from now on. It
+// replays nothing: the demo's clients connect with the cursor of a
+// snapshot they just read.
+func (b *Backend) feedStream(w http.ResponseWriter, r *http.Request) {
+	ch := make(chan domain.DownloadFeedMessage, 256)
+	b.mu.Lock()
+	b.feeds[ch] = true
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		delete(b.feeds, ch)
+		b.mu.Unlock()
+	}()
+	s := openStream(w)
+	tick := time.NewTicker(keepalive)
+	defer tick.Stop()
+	for {
+		var err error
+		select {
+		case <-r.Context().Done():
+			return
+		case <-tick.C:
+			err = s.ping()
+		case msg := <-ch:
+			err = s.send(msg.EventID, msg.Type, msg)
+		}
+		if err != nil {
+			return // the client stopped reading
+		}
+	}
+}
+
+// jobStream is GET /downloads/{id}/events: the job's events after the
+// cursor, then each one as it happens. A finished job's stream ends once
+// it has replayed them, and answers 204 when there are none.
+func (b *Backend) jobStream(w http.ResponseWriter, r *http.Request) {
+	cursor, _ := strconv.ParseInt(r.URL.Query().Get("cursor"), 10, 64)
+	ch := make(chan domain.Event, 1024)
+	b.mu.Lock()
+	j := b.job(r.PathValue("id"))
+	if j == nil {
+		b.mu.Unlock()
+		writeError(w, http.StatusNotFound, "job_not_found", "no such job")
+		return
+	}
+	var backlog []domain.Event
+	for _, ev := range j.events {
+		if ev.ID > cursor {
+			backlog = append(backlog, ev)
+		}
+	}
+	done := j.Status.IsTerminal()
+	if !done {
+		j.subs[ch] = true
+	}
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		delete(j.subs, ch)
+		b.mu.Unlock()
+	}()
+	if done && len(backlog) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	s := openStream(w)
+	for _, ev := range backlog {
+		if s.send(ev.ID, string(ev.Type), ev) != nil {
+			return
+		}
+	}
+	if done {
+		return
+	}
+	tick := time.NewTicker(keepalive)
+	defer tick.Stop()
+	for {
+		var err error
+		select {
+		case <-r.Context().Done():
+			return
+		case <-tick.C:
+			err = s.ping()
+		case ev := <-ch:
+			if ev.ID <= cursor {
+				continue
+			}
+			err = s.send(ev.ID, string(ev.Type), ev)
+			switch ev.Type {
+			case domain.EventJobFinished, domain.EventJobFailed, domain.EventJobCancelled:
+				return
+			}
+		}
+		if err != nil {
+			return // the client stopped reading
+		}
+	}
+}
+
+// stream writes Server-Sent Events.
+type stream struct{ w http.ResponseWriter }
+
+func openStream(w http.ResponseWriter) stream {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.WriteHeader(http.StatusOK)
+	s := stream{w}
+	s.flush()
+	return s
+}
+
+func (s stream) send(id int64, name string, v any) error {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	if name != "" {
+		_, err = fmt.Fprintf(s.w, "id: %d\nevent: %s\ndata: %s\n\n", id, name, raw)
+	} else {
+		_, err = fmt.Fprintf(s.w, "id: %d\ndata: %s\n\n", id, raw)
+	}
+	s.flush()
+	return err
+}
+
+func (s stream) ping() error {
+	_, err := fmt.Fprint(s.w, ": keepalive\n\n")
+	s.flush()
+	return err
+}
+
+func (s stream) flush() {
+	if f, ok := s.w.(http.Flusher); ok {
+		f.Flush()
+	}
+}

@@ -1,0 +1,22 @@
+# amdl schema describes a command without asking a server: its flags, its
+# request and its exit codes. The default view is the golden file below; go
+# test ./apps/amdl -run TestScript/schema -update rewrites it.
+exec amdl schema download
+cmp stdout schema-download.json
+! stdout '"outputSchema"'
+! stdout '"body"'
+
+# --view full adds the request body and the output schema.
+exec amdl schema download --view full
+stdout '"outputSchema"'
+stdout '"body"'
+stdout '"operationId"'
+
+# A passthrough command names its operation, path, output and safety.
+exec amdl schema jobs list
+stdout '"path":"/api/v1/downloads"'
+stdout '"output":"DownloadList"'
+stdout '"safety":"read"'
+
+-- schema-download.json --
+{"args":["urls"],"command":"amdl download <url>...","examples":["amdl download https://music.apple.com/us/album/igor/1463409338 --wait --timeout 20m","amdl search igor --types albums | jq -r '.albums.items[].url' | amdl download -"],"exitCodes":[0,2,5,7,8,10],"flags":[{"flag":"--codec","usage":"codec order for this download, such as alac,aac (download.quality_priority)"},{"flag":"--codec-fallback","usage":"fall back to the next codec when one is unavailable (download.codec_alternative)"},{"flag":"--max-bit-depth","usage":"highest ALAC bit depth (download.alac_max_bit_depth)"},{"flag":"--max-sample-rate","usage":"highest ALAC sample rate in Hz (download.alac_max_sample_rate)"},{"flag":"--progress-interval","usage":"with --watch, the least time between two item_progress lines of one track; 0 prints all"},{"flag":"--timeout","usage":"how long --wait or --watch waits for all the jobs together, as a duration such as 90s, 20m or 2h (default 2h); 0 only looks once"},{"flag":"--wait","usage":"wait until every job finishes and print them"},{"flag":"--watch","usage":"stream the jobs' events as NDJSON until they finish"}],"operations":[{"operationId":"createDownload","method":"POST","path":"/api/v1/downloads","summary":"Add links (alias of POST /library/add)","output":"BatchSubmitResponse"},{"operationId":"streamDownloadEvents","method":"GET","path":"/api/v1/downloads/{job_id}/events","summary":"Subscribe to download job events","params":[{"name":"job_id","in":"path","required":true,"schema":{"type":"string"}},{"name":"cursor","in":"query","schema":{"format":"int64","minimum":0,"type":"integer"}}],"stream":true}],"safety":"write","summary":"Download songs, albums, playlists, stations or artists by link; --wait blocks until their jobs are done (a pending link has no job yet)","tool":"start_download"}

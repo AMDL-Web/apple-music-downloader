@@ -1,0 +1,56 @@
+// One record row on Activity: cover, title and artist, its flags, its state
+// badge and its last activity (when one of its runs last changed), as a
+// job row is drawn (the .job-row frame), linking to the record's drawer.
+
+import { html } from '../ui/preact.js';
+import { artPalette, paletteStyle, artWidths } from '../lib/format.js';
+import { recordTitle, recordSub, recordArt, recordPalette, recordView } from '../lib/records.js';
+import { Artwork, Badge, RelTime, Icon } from '../ui/components.js';
+import { RegionTag } from './region-tag.js';
+
+const ROW_ART = artWidths(40, 48);
+
+/**
+ * Props: record, href, selected, onSelect(e) (selection mode: a plain click
+ * selects), bare (no state badge, where the list already says it),
+ * runStatus (its active run's status, where the list knows it), region
+ * (a region tag leading the second line, views/region-tag.js).
+ */
+export function RecordRow({ record, href, selected, onSelect, bare = false, runStatus = '', region = '' }) {
+  const palette = artPalette(recordPalette(record));
+  const { view, flags } = recordView(record, runStatus);
+  const sub = recordSub(record);
+  const onClick = onSelect
+    ? (e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+        e.preventDefault();
+        onSelect(e);
+      }
+    : undefined;
+  return html`<a
+    class=${palette ? 'job-row record-row has-palette' : 'job-row record-row'}
+    href=${href}
+    data-row
+    data-progress="off"
+    data-state=${record.state}
+    data-selected=${selected ? '' : undefined}
+    style=${paletteStyle(palette)}
+    onClick=${onClick}
+  >
+    <${Artwork} url=${recordArt(record)} bg=${palette && palette.bg} px=${100} widths=${ROW_ART} sizes="48px" className="art-40" />
+    <span class="job-main">
+      <span class=${record.name ? 'job-title' : 'job-title is-unresolved'} dir="auto" title=${recordTitle(record)}>${recordTitle(record)}</span>
+      ${sub || flags.length || region
+        ? html`<span class=${region ? 'job-sub has-region' : 'job-sub'}>
+            <${RegionTag} region=${region} />
+            ${sub ? html`<span dir="auto">${sub}</span>` : null}
+            ${flags.map((f) => html`<span key=${f.key} class="record-flag" data-flag=${f.key}>${f.label}</span>`)}
+          </span>`
+        : null}
+    </span>
+    <span class="job-progress"></span>
+    <span class="job-status">${bare ? null : html`<${Badge} view=${view} />`}</span>
+    <span class="job-updated"><${RelTime} value=${record.activity_at || record.updated_at} /></span>
+    <span class="job-chevron"><${Icon} name="chevron-right" /></span>
+  </a>`;
+}

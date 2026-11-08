@@ -1,0 +1,247 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"amdl/internal/applemusic"
+	"amdl/internal/domain"
+	"amdl/internal/logging"
+)
+
+// CatalogService reads the Apple Music catalog metadata that POST /lookup
+// previews and GET /search, GET /artists/{id}/albums and GET /albums/{id}
+// browse. Each method is one light read (a song, album or playlist read pages
+// through its tracks); none reads motion artwork or Enhanced HLS.
+// *applemusic.CatalogClient implements it.
+type CatalogService interface {
+	SongMetadata(ctx context.Context, storefront, id string) (applemusic.Song, error)
+	Album(ctx context.Context, storefront, id string) (applemusic.Collection, error)
+	Playlist(ctx context.Context, storefront, id, mediaUserToken string) (applemusic.Collection, error)
+	Station(ctx context.Context, storefront, id string) (applemusic.StationInfo, error)
+	Artist(ctx context.Context, storefront, id string) (applemusic.Artist, error)
+	Search(ctx context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int, mediaUserToken string) (applemusic.SearchResults, error)
+	ArtistAlbumsPage(ctx context.Context, storefront, id string, limit, offset int) (applemusic.AlbumPage, error)
+}
+
+// lookupTimeout bounds one lookup: the album and playlist reads page through
+// their track lists, and a preview that takes longer is no longer a preview.
+const lookupTimeout = 15 * time.Second
+
+// lookupLinkFields is the parsed link: the LookupLink schema, also sent as
+// details.link when a lookup fails after the link parsed.
+type lookupLinkFields struct {
+	Input      string             `json:"input"`
+	Type       applemusic.URLType `json:"type"`
+	Storefront string             `json:"storefront"`
+	ID         string             `json:"id"`
+	TrackID    string             `json:"track_id,omitempty"`
+}
+
+// lookupResponse is the LookupResponse schema. The metadata fields carry the
+// names and meaning of the matching Job fields.
+type lookupResponse struct {
+	lookupLinkFields
+	Title               string   `json:"title"`
+	ArtistName          string   `json:"artist_name,omitempty"`
+	ArtistURL           string   `json:"artist_url,omitempty"`
+	CuratorName         string   `json:"curator_name,omitempty"`
+	AlbumName           string   `json:"album_name,omitempty"`
+	ArtworkURL          string   `json:"artwork_url,omitempty"`
+	ArtworkBgColor      string   `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1   string   `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2   string   `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3   string   `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4   string   `json:"artwork_text_color4,omitempty"`
+	ReleaseDate         string   `json:"release_date,omitempty"`
+	Genre               string   `json:"genre,omitempty"`
+	TrackCount          int      `json:"track_count,omitempty"`
+	DurationMS          int      `json:"duration_ms,omitempty"`
+	ContentRating       string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster  bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits         []string `json:"audio_traits,omitempty"`
+	NeedsMediaUserToken bool     `json:"needs_media_user_token,omitempty"`
+	// Resource is the record holding the link's album, playlist or song;
+	// absent when none does.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
+}
+
+func (r *lookupResponse) setArtwork(url string, colors applemusic.ArtworkColors) {
+	r.ArtworkURL = url
+	r.ArtworkBgColor = colors.BgColor
+	r.ArtworkTextColor1 = colors.TextColor1
+	r.ArtworkTextColor2 = colors.TextColor2
+	r.ArtworkTextColor3 = colors.TextColor3
+	r.ArtworkTextColor4 = colors.TextColor4
+}
+
+// notDownloadableError is a link that parses and resolves but that no job can
+// download (a live radio station); the lookup answers 400 with its message.
+type notDownloadableError struct{ message string }
+
+func (e notDownloadableError) Error() string { return e.message }
+
+// lookupLink previews one Apple Music link without creating a job: the link as
+// a submission would parse it, plus the catalog metadata a job row shows.
+func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL string `json:"url"`
+	}
+	if !decodeJSONBody(w, r, &req, true) {
+		return
+	}
+	input := strings.TrimSpace(req.URL)
+	if input == "" {
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "url is required")
+		return
+	}
+	cfg := s.currentConfig()
+	parsed, err := applemusic.ParseWithAlbumTrackMode(input, cfg.Catalog.AlbumTrackURLMode)
+	if err != nil {
+		// Same split as the submission validator: a bad mode is the server's
+		// config (validated at load, so unexpected), anything else the link.
+		if strings.Contains(err.Error(), "album_track_url_mode") {
+			writeError(w, http.StatusInternalServerError, CodeInternalError, err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "not a supported Apple Music link: "+err.Error())
+		return
+	}
+	link := lookupLinkFields{Input: input, Type: parsed.Type, Storefront: parsed.Storefront, ID: parsed.ID, TrackID: parsed.TrackID}
+	details := map[string]any{"link": link}
+	if parsed.Type == applemusic.TypeVideo {
+		writeErrorDetails(w, http.StatusBadRequest, CodeInvalidRequest, fmt.Sprintf("%s download is not implemented", parsed.Type), details)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), lookupTimeout)
+	defer cancel()
+	read := s.readStorefront(ctx, parsed)
+	resp, err := s.previewLink(ctx, read, s.tokens.TokenFor(cfg, read.Storefront).Value)
+	switch {
+	case err == nil:
+		resp.lookupLinkFields = link
+		resp.Resource = s.resourceMark(r.Context(), parsed.Type, parsed.ID)
+		writeJSON(w, http.StatusOK, resp)
+	case errors.As(err, new(notDownloadableError)):
+		writeErrorDetails(w, http.StatusBadRequest, CodeInvalidRequest, err.Error(), details)
+	default:
+		s.writeCatalogError(ctx, w, r, err, lookupTimeout, details, "lookup failed", "link", link.Input)
+	}
+}
+
+// readStorefront returns parsed with the storefront its download reads in,
+// so the preview shows what the run gets (or that it gets nothing): the
+// link's for a station, or when an account serves it; the default account's
+// for another song, album or playlist; the link's when that cannot be read.
+func (s *Server) readStorefront(ctx context.Context, parsed applemusic.ParsedURL) applemusic.ParsedURL {
+	if s.accountStorefront == nil || s.tokens.Serves(parsed.Storefront) {
+		return parsed
+	}
+	switch parsed.Type {
+	case applemusic.TypeSong, applemusic.TypeAlbum, applemusic.TypePlaylist:
+		if account, err := s.accountStorefront(ctx); err == nil && account != "" {
+			parsed.Storefront = account
+		}
+	}
+	return parsed
+}
+
+// writeCatalogError answers a failed catalog read bounded by ctx: 504
+// upstream_timeout when that bound ran out, 404 catalog_not_found when Apple
+// has no such id, else 502 upstream_error. The response carries only
+// err.Error(); a raw upstream body an Apple error holds stays in the log line,
+// which is skipped when the client has gone away (the console aborts a search
+// the person typed past). A missing id is the caller's input, not an upstream
+// fault, so it logs at Info.
+func (s *Server) writeCatalogError(ctx context.Context, w http.ResponseWriter, r *http.Request, err error, timeout time.Duration, details any, logMsg string, logAttrs ...any) {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		writeErrorDetails(w, http.StatusGatewayTimeout, CodeUpstreamTimeout,
+			fmt.Sprintf("the Apple Music catalog did not answer within %s", timeout), details)
+		return
+	}
+	notFound := applemusic.IsNotFound(err)
+	if r.Context().Err() == nil {
+		attrs := append(logAttrs, "error", err)
+		if body := logging.UpstreamBody(err); body != "" && !notFound {
+			attrs = append(attrs, "upstream_body", body)
+		}
+		logger := logging.FromContext(r.Context(), s.logger)
+		if notFound {
+			logger.Info(logMsg, attrs...)
+		} else {
+			logger.Warn(logMsg, attrs...)
+		}
+	}
+	if notFound {
+		writeErrorDetails(w, http.StatusNotFound, CodeCatalogNotFound, "read Apple Music catalog: "+err.Error(), details)
+		return
+	}
+	writeErrorDetails(w, http.StatusBadGateway, CodeUpstreamError, "read Apple Music catalog: "+err.Error(), details)
+}
+
+// previewLink reads the catalog metadata of parsed, filling the display fields
+// the way the job pipeline fills a job's (internal/media resolveCollection),
+// but from the lightest read that has them.
+func (s *Server) previewLink(ctx context.Context, parsed applemusic.ParsedURL, mediaUserToken string) (lookupResponse, error) {
+	var resp lookupResponse
+	switch parsed.Type {
+	case applemusic.TypeSong:
+		song, err := s.catalog.SongMetadata(ctx, parsed.Storefront, parsed.ID)
+		if err != nil {
+			return resp, err
+		}
+		resp.Title, resp.ArtistName, resp.ArtistURL, resp.AlbumName = song.Name, song.ArtistName, song.ArtistURL, song.AlbumName
+		resp.setArtwork(song.DisplayArtwork())
+		resp.ReleaseDate, resp.Genre = song.ReleaseDate, applemusic.PrimaryGenre(song.GenreNames)
+		resp.TrackCount, resp.DurationMS = 1, song.DurationInMillis
+		resp.ContentRating, resp.AppleDigitalMaster, resp.AudioTraits = song.ContentRating, song.AppleDigitalMaster, song.AudioTraits
+	case applemusic.TypeAlbum:
+		album, err := s.catalog.Album(ctx, parsed.Storefront, parsed.ID)
+		if err != nil {
+			return resp, err
+		}
+		resp.Title, resp.ArtistName, resp.ArtistURL = album.Name, album.Artist, album.ArtistURL
+		resp.setArtwork(album.ArtworkURL, album.ArtworkColors)
+		resp.ReleaseDate, resp.Genre = album.ReleaseDate, applemusic.PrimaryGenre(album.GenreNames)
+		resp.TrackCount = len(album.Tracks)
+		resp.ContentRating, resp.AppleDigitalMaster, resp.AudioTraits = album.ContentRating, album.AppleDigitalMaster, album.AudioTraits
+	case applemusic.TypePlaylist:
+		playlist, err := s.catalog.Playlist(ctx, parsed.Storefront, parsed.ID, mediaUserToken)
+		if err != nil {
+			return resp, err
+		}
+		resp.Title, resp.CuratorName = playlist.Name, playlist.Artist
+		resp.setArtwork(playlist.ArtworkURL, playlist.ArtworkColors)
+		resp.TrackCount = len(playlist.Tracks)
+	case applemusic.TypeStation:
+		// Station metadata only: the track list comes from next-tracks, a
+		// rolling feed that needs the media-user-token and that a preview
+		// must not advance.
+		station, err := s.catalog.Station(ctx, parsed.Storefront, parsed.ID)
+		if err != nil {
+			return resp, err
+		}
+		if !station.Downloadable() {
+			return resp, notDownloadableError{fmt.Sprintf("station %q is a live radio stream; only track-based stations download", station.Name)}
+		}
+		resp.Title, resp.CuratorName = station.Name, applemusic.StationCuratorName
+		resp.setArtwork(station.ArtworkURL, station.ArtworkColors)
+		resp.NeedsMediaUserToken = true
+	case applemusic.TypeArtist:
+		// The artist alone: counting its tracks would read every album.
+		artist, err := s.catalog.Artist(ctx, parsed.Storefront, parsed.ID)
+		if err != nil {
+			return resp, err
+		}
+		resp.Title, resp.ArtistName, resp.ArtistURL = artist.Name, artist.Name, artist.URL
+		resp.setArtwork(artist.ArtworkURL, artist.ArtworkColors)
+		resp.Genre = applemusic.PrimaryGenre(artist.GenreNames)
+	default:
+		return resp, notDownloadableError{fmt.Sprintf("%s links have no preview", parsed.Type)}
+	}
+	return resp, nil
+}

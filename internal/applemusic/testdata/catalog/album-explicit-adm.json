@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "1",
+      "type": "albums",
+      "attributes": {
+        "name": "A",
+        "artistName": "X",
+        "contentRating": "explicit",
+        "isMasteredForItunes": true,
+        "audioTraits": [
+          "lossy-stereo"
+        ],
+        "artwork": {
+          "url": "art"
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "s1",
+              "type": "songs",
+              "attributes": {
+                "name": "One"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

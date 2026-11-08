@@ -1,0 +1,416 @@
+# Installing amdl without Docker
+
+> Type: runbook
+
+`amdl` is one binary: the command line, the MCP server, the terminal interface and
+the backend with its web console. This page installs it on macOS, Linux or Windows and
+runs the backend on the same machine. To run the backend in Docker instead, see
+[deployment.md](deployment.md); `amdl` installed here can still talk to it.
+
+Downloading needs three things on the machine that runs the backend:
+
+1. The `amdl` binary. Releases build it for macOS and Linux on amd64 and arm64 and
+   for Windows on amd64 (`DIST_TARGETS` in the `Makefile`).
+2. ffmpeg, which writes the final files ([ffmpeg](#ffmpeg)).
+3. A wrapper, the service that holds the Apple Music account. It runs natively only
+   on Linux, but there are ways to use it from any OS ([The wrapper](#the-wrapper)).
+
+## Install the binary
+
+### macOS and Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh | sh
+```
+
+The script (`deploy/install/install.sh`) downloads the latest release's archive for
+the machine, checks it against the release's `SHA256SUMS`, and installs `amdl` into
+`~/.local/bin`. It prints the line to add to `PATH` when that directory is not on it,
+and the command that installs ffmpeg when ffmpeg is missing. Options go after
+`sh -s --`:
+
+| Option | Effect |
+| --- | --- |
+| `--version v2.0.0` | Install that release instead of the latest; `2.0.0` works too |
+| `--system` | Install into `/usr/local/bin`; the script says so before it runs `sudo` |
+| `--bin-dir DIR` | Install into `DIR` |
+| `--service` | Run `amdl service install` afterwards ([Run the backend](#run-the-backend)) |
+| `--wrapper URL` | The wrapper address for `--service` |
+| `--force` | Reinstall even when that version is already installed |
+| `--dry-run` | Print the plan and change nothing |
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh | sh -s -- --service --wrapper http://nas:30020
+```
+
+### Windows
+
+In PowerShell. The first statement turns on TLS 1.2, which Windows PowerShell 5.1 may
+not offer by default and GitHub requires:
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.ps1 | iex
+```
+
+The script (`deploy/install/install.ps1`) does the same as the shell script, installs
+`amdl.exe` into `%LOCALAPPDATA%\Programs\amdl` and adds that directory to the user's
+`PATH`; terminals opened afterwards find it. To pass options, run it as a script block:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.ps1))) -Service -Wrapper http://nas:30020
+```
+
+Its options are `-Version`, `-InstallDir`, `-Service`, `-Wrapper`, `-Force` and
+`-DryRun`. Windows on ARM runs the amd64 build under emulation.
+
+### Homebrew and Scoop
+
+Each release renders a Homebrew formula and a Scoop manifest that install `amdl` with
+ffmpeg as a dependency (`deploy/packaging/`). They reach users through a tap and a bucket
+from 2.0.1 on; 2.0.0 installs with the scripts above or Docker. Once they are published:
+
+```bash
+brew install amdl-web/tap/amdl
+```
+
+```powershell
+scoop bucket add amdl https://github.com/AMDL-Web/scoop-bucket
+scoop install amdl/amdl
+```
+
+Until then, `amdl.rb` and `amdl.json` are attached to each release.
+
+### By hand
+
+Download `amdl_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) and `SHA256SUMS` from
+the [releases](https://github.com/AMDL-Web/apple-music-downloader/releases), check the
+archive with `sha256sum -c SHA256SUMS --ignore-missing` (`shasum -a 256` on macOS,
+`Get-FileHash` on Windows), and put `amdl` from it on your `PATH`.
+
+## The desktop app
+
+Each release also attaches the desktop app (`apps/desktop`), named after the release's
+version. A prerelease's Debian package is versioned with its suffix after a `~`, as
+`2.0.0~rc.4`, and GitHub shows that `~` as a `.` in the file's name,
+`amdl-desktop_2.0.0.rc.4_amd64.deb`; install the file by the name you downloaded:
+
+| System | File | Install |
+| --- | --- | --- |
+| macOS, Apple silicon or Intel | `amdl-desktop-<version>-arm64.dmg` or `-amd64.dmg` | Open the disk image and drag AMDL to Applications |
+| Windows | `amdl-desktop-setup-<version>-amd64.exe` | Run it: it installs for the current user in `%LOCALAPPDATA%\Programs\AMDL Desktop`, apart from the command line's `Programs\amdl` |
+| Debian, Ubuntu | `amdl-desktop_<version>_amd64.deb` | `sudo apt install ./amdl-desktop_<version>_amd64.deb`, which brings GTK 3 |
+| Other Linux | `amdl-desktop-<version>-linux-amd64.tar.gz` | Unpack it and run `amdl-desktop`; it needs GTK 3 |
+
+The packages are not signed yet, so each system stops the first launch once:
+
+- **macOS** says it cannot check AMDL for malicious software. Open System Settings ›
+  Privacy & Security, choose Open Anyway beside the line about AMDL, and confirm. Or
+  clear the quarantine flag the browser set, before or after that first try:
+  `xattr -dr com.apple.quarantine /Applications/AMDL.app`.
+- **Windows** SmartScreen says it protected the PC: choose More info, then Run anyway.
+
+On its first launch the app asks where downloads run: a server on your network, or this
+computer, whose setup screen checks and installs what that needs (see
+[A wrapper amdl runs](#a-wrapper-amdl-runs)). Afterwards Settings › Connection shows
+that wrapper, offers its update when a newer guest is pinned, and stops or uninstalls
+it, optionally with the account's disk. The packages carry neither ffmpeg nor
+QEMU. The app keeps its settings beside the backend's files ([Where files go](#where-files-go)),
+which uninstalling the app leaves in place.
+
+`make desktop` builds the packages from a clone, for this machine or the
+`DESKTOP_PLATFORMS` given, into `apps/desktop/build/`. It needs Node.js, which MyGo's
+CLI reads `apps/desktop/mygo.config.ts` with; disk images are made on macOS only, and the
+Windows installer where NSIS is installed.
+
+## ffmpeg
+
+The backend runs ffmpeg for every track; simulate mode is the one exception. `amdl doctor`
+reports whether the machine has it, which version, and the command that installs it
+with the package manager it finds:
+
+| System | Command |
+| --- | --- |
+| macOS | `brew install ffmpeg` |
+| Debian, Ubuntu | `sudo apt-get install ffmpeg` |
+| Fedora | `sudo dnf install ffmpeg-free` (or `ffmpeg` from RPM Fusion) |
+| Arch | `sudo pacman -S ffmpeg` |
+| Alpine | `sudo apk add ffmpeg` |
+| Windows | `winget install --id Gyan.FFmpeg -e`, or `scoop install ffmpeg` |
+
+Use ffmpeg 8 or later (`internal/media#RecommendedFFmpegMajor`). The audio is the same
+with older ones, but ffmpeg 7.0.2 wrote a 24-bit/96 kHz ALAC track's duration without its
+last, partial frame, about 16 ms short of the catalog's; `amdl doctor` says when the
+ffmpeg it finds is older. The Docker image ships a current one.
+
+`amdl service install` refuses to register the service while ffmpeg is missing, and
+records the full path of the one it finds as `tools.ffmpeg`, because a service starts
+with a shorter `PATH` than a terminal. The backend logs a warning at startup without
+ffmpeg, and each download fails with the same install hint.
+
+Without root, download a static build from [ffmpeg.org](https://ffmpeg.org/download.html)
+and put the binary in a directory of your own that is on `PATH`, such as `~/.local/bin`;
+`amdl service install` then records its full path. For a backend that already has a
+`config.yaml`, set `tools.ffmpeg` to the full path instead.
+
+## Try it without a wrapper
+
+Simulate mode reads the real catalog and selects real media, then fakes the transfer,
+decryption and file writes, so it needs neither a wrapper nor ffmpeg
+([configuration.md](configuration.md#simulate-mode)). In an empty directory:
+
+```bash
+amdl serve
+```
+
+The first start writes `configs/config.yaml` and `data/` into the current directory and
+serves the API and web console on `http://127.0.0.1:18080`; its ffmpeg warning does not
+apply to simulated downloads. In a second terminal:
+
+```bash
+export AMDL_URL=http://127.0.0.1:18080
+amdl config set simulate.enabled=true
+amdl download <album or song link> --wait
+```
+
+For another port, start it once with `amdl serve --init server.listen=127.0.0.1:18081`
+(it applies when `serve` creates the config) and set `AMDL_URL` to match. In PowerShell, set each variable on a line of its own, such as
+`$env:AMDL_URL = 'http://127.0.0.1:18080'`. `serve --listen` works with `--local` only;
+a plain `amdl serve` listens on `server.listen` from its config.
+Change other settings with `amdl config set` too. Stop it with Ctrl-C and delete the
+directory when done.
+
+## The wrapper
+
+The wrapper holds the Apple Music account session and serves what the backend needs to
+decrypt ([deployment.md](deployment.md#the-wrapper) describes it and wrapper-manager v2).
+amdl only needs its address. Four ways to get one:
+
+- **A wrapper on another machine**, such as a NAS or a Linux server, run as in
+  [deployment.md](deployment.md#the-wrapper). Pass its address to `--wrapper`. This is
+  the simplest setup for macOS and Windows.
+- **On Linux with user namespaces** (`unshare -Ur true` succeeds), run
+  `wrapper-lite-rootless` or wrapper-manager v2 natively on the same machine, then use
+  `--wrapper http://127.0.0.1:12340` (wrapper-lite's default port).
+- **Let amdl run it** on this machine, natively on Linux x86_64 and in a QEMU guest
+  elsewhere: [A wrapper amdl runs](#a-wrapper-amdl-runs).
+  This is the self-contained setup for macOS and Windows.
+- **On macOS, Windows, or Linux without user namespaces** (such as Synology DSM), run
+  upstream's `wrapper-lite-qemu` yourself, which boots wrapper-lite in a small QEMU guest
+  and forwards its port to the host; the
+  [wrapper-lite README](https://github.com/AMDL-Web/wrapper/tree/amdl#run-with-qemu)
+  describes it. wrapper-manager v2 has an equivalent,
+  `wrapper-manager-qemu`
+  ([its README](https://github.com/AMDL-Web/wrapper/tree/amdl/manager#run-on-any-os-via-qemu-wrapper-manager-qemu)).
+
+Notes on `wrapper-lite-qemu`, from its sources:
+
+- Its packages, with QEMU and its firmware bundled, are build artifacts of the
+  `build-lite` workflow on the `amdl` branch of AMDL-Web's fork
+  ([why](deployment.md#the-wrapper)), not GitHub releases:
+  `wrapper-lite-qemu-macos-aarch64`, `-windows-x86_64`, `-linux-x86_64` and
+  `-linux-aarch64`. There is none for Intel Macs. GitHub serves artifacts only to
+  signed-in users and deletes them after 90 days; nightly.link serves them without a
+  sign-in, for example
+  `https://nightly.link/AMDL-Web/wrapper/workflows/build-lite.yml/amdl/wrapper-lite-qemu-macos-aarch64.zip`.
+- The guest is x86_64. The launcher accelerates it with KVM on Linux and WHPX on
+  Windows, and falls back to TCG, software emulation, when those are unavailable. On
+  Apple Silicon it always uses TCG, since HVF cannot run an x86_64 guest
+  ([`wrapper-lite-qemu.cpp`](https://github.com/AMDL-Web/wrapper/blob/amdl/wrapper-lite-qemu.cpp), `autoAccel`).
+- Log in once, then serve, as the README shows:
+  `./wrapper-lite-qemu --login user:pass --code-from-file`, then `./wrapper-lite-qemu`.
+  It listens on `127.0.0.1:12340`, so `--wrapper http://127.0.0.1:12340`.
+
+### A wrapper amdl runs
+
+```bash
+amdl wrapper install          # the wrapper-manager guest, and QEMU where it needs one
+amdl service install          # runs the backend, which runs the wrapper
+amdl wrapper login            # asks for the Apple ID, password and any two-step code
+```
+
+On Linux x86_64 where `unshare -Ur true` succeeds, a new install needs no QEMU: amdl
+copies the `wrapper-manager` binary out of the guest's initramfs, the same pinned and
+checked build, and runs it as a process of this machine, which starts wrapper-lite with
+its rootless launcher. See [The native manager](#the-native-manager). An install that
+already runs in QEMU, with its accounts on `data.img`, stays in QEMU.
+
+Everywhere else, `amdl wrapper install` needs QEMU (`qemu-system-x86_64`). Without it, it offers to run
+`brew install qemu` on macOS or `winget install --id SoftwareFreedomConservancy.QEMU -e`
+on Windows (pass `--yes` when no one can answer), and prints the package command on
+Linux, where it needs `sudo`; `--qemu PATH` names one elsewhere. It then downloads
+the guest: the kernel, manager initramfs and empty ext4 disk of the
+`manager-qemu-guest` artifact from the `manager.yml` workflow on the `amdl` branch
+of `internal/wrapperhost#GuestRepo`. The manager guest is defined in
+[manager/guest](https://github.com/AMDL-Web/wrapper/tree/amdl/manager/guest).
+That repository's `publish` workflow puts each successful build on `amdl` up as a
+release asset, `guest-<commit12>/manager-qemu-guest.zip`, byte for byte the
+artifact's zip; amdl downloads it from there, over several connections that resume
+after an interruption, and installs it only if its sha256 matches
+`internal/wrapperhost#Builtin` or the newer pin at `internal/wrapperhost#ManifestURL`.
+Release assets do not expire. When no pin is downloadable, fetch the asset and run
+`amdl wrapper import <zip|dir>`; bare-lite guest packages are refused.
+Guest files are downloaded at install time, rather than shipped with amdl. The
+guest does not contain wrapper-lite: amdl pins that payload too, as `lite` in the
+same pin: the `wrapper-lite-linux-x86_64` artifact of one successful `build-lite` run
+on `amdl` (the guest is x86_64 on every host), published as
+`lite-<commit12>/wrapper-lite-linux-x86_64.zip`. `amdl wrapper install` and `update`
+download it with the guest, and the backend downloads it before a boot when it is
+missing, with progress in `managed.download`. The host serves it to the guest on a
+loopback port for the boot; the manager installs it into its disk on first boot and
+whenever the pin changes, checks it against the sha256 it is given
+(`-payload-sha256`), and refuses a mismatch. An imported guest takes the payload pin
+built into amdl.
+Running `amdl wrapper install` again replaces a guest whose sha256 differs from the pin.
+
+The desktop app's setup screen does the same in standalone mode, row by row (no QEMU
+row where the manager runs natively): it shows the QEMU or ffmpeg package command and runs it after Run (it only shows a command that
+needs `sudo`), downloads and checks the guest with progress and Cancel, starts the
+backend and takes the Apple ID and two-step code.
+
+The backend runs the guest whenever it runs on the local files with this machine's
+wrapper installed (the service, `amdl serve --local` and the desktop app; not a
+per-command `--server embedded`), points `wrapper.address` at it, restarts it after a
+crash and stops it with itself. Its port is on `127.0.0.1` only. Log in from the
+console's Account page, the terminal interface's `/login`, or `amdl wrapper login`;
+`amdl wrapper status` shows its `managed` state, `amdl wrapper logs` its console with
+secrets redacted, and `amdl wrapper stop` / `start` turn it off and on.
+
+While the guest is installed, a `--wrapper` address given to that backend is ignored,
+with a line in its log, and `amdl config set wrapper.address=...` is refused. That
+lasts until the backend's process starts again, which `amdl system restart` does not
+do. To use another wrapper instead, run `amdl wrapper uninstall`, then
+`amdl service install --wrapper <address>`; or restart the service (or reopen the
+desktop app), then `amdl config set wrapper.address=<address>` and
+`amdl system restart`.
+
+| Host | Acceleration |
+| --- | --- |
+| Linux x86_64 with user namespaces | none needed: the manager runs natively (`accel` is `native`) |
+| Other Linux | KVM when `/dev/kvm` opens for you (the `kvm` group), else TCG |
+| Windows x64 | WHPX, which needs the *Windows Hypervisor Platform* feature, else TCG |
+| Intel Mac | HVF |
+| Apple Silicon Mac | TCG: the guest is x86_64, which HVF cannot run there |
+| Windows on ARM | not supported |
+
+TCG is plain emulation. Memory is sized at each guest restart as a base plus
+one allocation per logged-in account, capped by `internal/wrapperhost#MaxAccounts`.
+`internal/wrapperhost#GuestMemoryMB` contains the provisional figures; account
+changes do not hot-resize a running guest.
+
+The manager starts in /data on the persistent ext4 disk. Its registry is
+/data/data/instances.json; account directories are under
+/data/data/wrapper/rootfs/data/instances/. The whole manager state and payload
+stay in the owner-only data.img across updates and uninstall without purge. /data
+mounts with `commit=1,nodelalloc`, and amdl stops the guest by asking the manager to
+sync and power off (`POST /shutdown`), killing QEMU only after 10 seconds without
+it, so a stop or a crash of the host loses no installed payload or login.
+Accounts are discovered through GET /status's data.instances; each token is read
+through GET /token?instance=<id>, and logout removes just that id. Credentials
+travel over the loopback HTTP login API, never boot arguments.
+
+#### The native manager
+
+A native install keeps the manager binary in `assets/<id>/wrapper-manager` and runs it
+with `native/` under the wrapper directory as its working directory, so its registry
+is `native/data/instances.json`, account directories are under
+`native/data/wrapper/rootfs/data/instances/`, and the payload is in
+`native/data/wrapper/`. It listens on `127.0.0.1` at the port kept in `native.json`,
+which, like `native/`, survives an uninstall without purge. amdl stops it with SIGTERM,
+which stops each account's wrapper-lite, and kills it after 10 seconds; on Linux the
+kernel sends it SIGTERM when the backend dies. Memory is not reserved: each account's
+wrapper-lite is an ordinary process. To move a QEMU install to the native manager, run
+`amdl wrapper uninstall --purge` (which logs every account out), then
+`amdl wrapper install` and log in again.
+
+Updating a bare-lite guest preserves its entire disk as an owner-only
+`data-lite-*.img` backup beside data.img, recorded in installed.json's legacy_disk.
+The old disk has no Apple ID registry to derive the manager's instance ids from,
+so no login state is guessed or copied. Log in again through the setup screen's
+Apple ID row or the Account page; an empty manager reports logged_in=false and
+login_supported=true, so the existing login form appears. Explicit uninstall with
+purge also deletes the preserved disk. Updates stop the guest before replacing
+files and keep a manually stopped guest stopped.
+
+The underlying wrapper-lite does not verify Apple's TLS certificates
+([upstream issue #75](https://github.com/WorldObservationLog/wrapper/issues/75)).
+
+## Run the backend
+
+As a background service that starts at login, the usual choice on a desktop:
+
+```bash
+amdl service install --wrapper http://127.0.0.1:12340
+amdl service status
+```
+
+`service install --dry-run` prints what it would register and writes nothing.
+`status` prints the URL of the web console and API; the command line, the MCP server and
+the terminal interface find the service without `--server`. The service, how it restarts
+and how to stop it: [cli.md](cli.md#background-service).
+
+Or in the foreground, in a directory of its own, which holds its config and data as in
+[Try it without a wrapper](#try-it-without-a-wrapper):
+
+```bash
+amdl serve --init wrapper.address=http://127.0.0.1:12340
+```
+
+Or for one command at a time, without a service: `amdl --server embedded <command>`
+([cli.md](cli.md#running-the-backend-in-amdl)).
+
+Then check everything at once:
+
+```bash
+amdl doctor
+```
+
+It checks the server, its ffmpeg and its wrapper, and ffmpeg on this machine, and prints
+a hint for each failure.
+
+## Where files go
+
+| | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Config, database, log | `~/Library/Application Support/AMDL/server` | `~/.config/AMDL/server` | `%AppData%\AMDL\server` |
+| [A wrapper amdl runs](#a-wrapper-amdl-runs), with the account's disk | `~/Library/Application Support/AMDL/wrapper` | `~/.config/AMDL/wrapper` | `%AppData%\AMDL\wrapper` |
+| Scratch files | `~/Library/Caches/AMDL` | `~/.cache/AMDL` | `%LocalAppData%\AMDL` |
+| Downloads | `~/Music/AMDL` | `~/Music/AMDL` | `%UserProfile%\Music\AMDL` |
+| Saved servers (`amdl context`) | `~/Library/Application Support/amdl/cli.yaml` | `~/.config/amdl/cli.yaml` | `%AppData%\amdl\cli.yaml` |
+
+These follow `internal/local#DefaultDirs`; Linux honours `XDG_CONFIG_HOME` and
+`XDG_CACHE_HOME`. The desktop app uses the same files. `download.downloads_dir` in the
+config moves the downloads. `data.img` in `wrapper/` holds the Apple Music account's
+tokens.
+
+## Upgrade
+
+Run the install script again. It replaces the binary only when the version differs (or
+with `--force` / `-Force`). A service that was running is stopped for the swap and
+started on the new binary; if that fails, the script puts the previous binary back,
+starts the service on it and exits with an error. A service you stopped stays stopped.
+The service runs the stable path, `opt/amdl` for Homebrew and `current` for Scoop, so
+package-manager upgrades keep it valid. With Homebrew
+or Scoop, `brew upgrade amdl` or `scoop update amdl`, then
+`amdl service stop` and `amdl service start`.
+
+## Uninstall
+
+```bash
+amdl service uninstall
+amdl wrapper uninstall --purge
+```
+
+The first stops the backend, and with it the wrapper amdl runs, and removes the
+registration. The second, needed only with [A wrapper amdl runs](#a-wrapper-amdl-runs),
+deletes its directory, the account's disk included, which logs the account out for
+good; without `--purge` it keeps `data.img` for a later `amdl wrapper install`. A
+backend still running keeps the guest stopped until that install, which it boots, and
+keeps its console log open, so on Windows the logs folder stays until the next purge.
+
+Then delete the binary: `~/.local/bin/amdl` (or `/usr/local/bin/amdl`), or
+`%LOCALAPPDATA%\Programs\amdl` on Windows, where you also remove that directory from the
+user `PATH`. With Homebrew or Scoop, `brew uninstall amdl` or `scoop uninstall amdl`.
+QEMU stays installed when `amdl wrapper install` installed it; remove it with
+`brew uninstall qemu` or `winget uninstall --id SoftwareFreedomConservancy.QEMU -e` if
+nothing else uses it. The rest of [Where files go](#where-files-go) stays too; delete
+those directories to remove the download history and settings.

@@ -1,0 +1,195 @@
+package api
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"testing"
+
+	"amdl/internal/config"
+	"amdl/internal/usertoken"
+	"amdl/internal/wrapper"
+)
+
+func TestWrapperStatusEndpoint(t *testing.T) {
+	fake := &fakeWrapperService{statusResult: wrapper.Status{
+		Ready: true, LoggedIn: true, Regions: []string{"us"},
+		Instances: []wrapper.Instance{{ID: "a", Region: "us", Name: "user@example.com"}}, Listed: true,
+	}}
+	server := newServer(t, Deps{Wrapper: fake})
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	want := `{"ready":true,"logged_in":true,"regions":["us"],"login_supported":false,"token_set":false}` + "\n"
+	if recorder.Body.String() != want {
+		t.Fatalf("body = %s, want %s", recorder.Body.String(), want)
+	}
+}
+
+// GET /wrapper/status never carries a media-user-token, masked or not.
+func TestWrapperStatusCarriesNoToken(t *testing.T) {
+	token := strings.Repeat("A", 196) + "wxyz"
+	server := newServer(t, Deps{Config: config.NewStore(config.Default()), Tokens: usertoken.NewReading(func(string) (string, error) { return token, nil }),
+		Wrapper: &fakeWrapperService{statusResult: wrapper.Status{Ready: true}}})
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if body := recorder.Body.String(); strings.Contains(body, "wxyz") || strings.Contains(body, "media_user_token") {
+		t.Fatalf("the response mentions a token: %s", body)
+	}
+}
+
+func TestWrapperStatusUnavailable(t *testing.T) {
+	server := newServer(t, Deps{Wrapper: &fakeWrapperService{statusErr: errors.New("offline")}})
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "wrapper_unavailable")
+}
+
+// A gateway that refuses wrapper.token is wrapper_unauthorized; a set token
+// shows as token_set, never its value.
+func TestWrapperStatusReportsTheKey(t *testing.T) {
+	refused := newServer(t, Deps{Wrapper: &fakeWrapperService{statusErr: fmt.Errorf("wrapper /status: %w", wrapper.ErrUnauthorized)}})
+	recorder := requestJSON(t, refused.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "wrapper_unauthorized")
+	if !strings.Contains(recorder.Body.String(), "wrapper.token") {
+		t.Fatalf("the error does not point at wrapper.token: %s", recorder.Body.String())
+	}
+	cfg := config.Default()
+	cfg.Wrapper.Token = "static-key-value"
+	set := newServer(t, Deps{Config: config.NewStore(cfg), Wrapper: &fakeWrapperService{statusResult: wrapper.Status{Ready: true, Regions: []string{}}}})
+	recorder = requestJSON(t, set.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"token_set":true`) || strings.Contains(recorder.Body.String(), "static-key") {
+		t.Fatalf("token set: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestWrapperLoginResponses(t *testing.T) {
+	tests := []struct {
+		name   string
+		result wrapper.LoginResult
+		err    error
+		status int
+		code   ErrorCode
+	}{
+		{name: "logged in", result: wrapper.LoginResult{Status: wrapper.LoginStatusLoggedIn}, status: http.StatusOK},
+		{name: "needs two step", result: wrapper.LoginResult{Status: wrapper.LoginStatusNeedsTwoStep, LoginID: "login-1"}, status: http.StatusAccepted},
+		{name: "authentication failed", err: wrapper.ErrAuthenticationFailed, status: http.StatusUnauthorized, code: "authentication_failed"},
+		{name: "already logged in", err: wrapper.ErrAlreadyLoggedIn, status: http.StatusConflict, code: "already_logged_in"},
+		{name: "login pending", err: wrapper.ErrLoginPending, status: http.StatusConflict, code: "login_pending"},
+		{name: "timeout", err: wrapper.ErrLoginTimeout, status: http.StatusGatewayTimeout, code: "upstream_timeout"},
+		{name: "unsupported", err: wrapper.ErrLoginUnsupported, status: http.StatusNotImplemented, code: "login_unsupported"},
+		{name: "upstream", err: errors.New("connection refused"), status: http.StatusBadGateway, code: "upstream_error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeWrapperService{startResult: tt.result, startErr: tt.err}
+			server := newServer(t, Deps{Wrapper: fake})
+			recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/wrapper/login", `{"username":" user ","password":" p@ss "}`)
+			if tt.code != "" {
+				assertErrorCode(t, recorder, tt.status, tt.code)
+			} else if recorder.Code != tt.status {
+				t.Fatalf("status = %d, want %d, body = %s", recorder.Code, tt.status, recorder.Body.String())
+			}
+			// The username is trimmed; the password reaches the wrapper as
+			// typed, because spaces can be part of it.
+			if fake.username != "user" || fake.password != " p@ss " {
+				t.Fatalf("credentials forwarded as %q %q, want %q %q", fake.username, fake.password, "user", " p@ss ")
+			}
+		})
+	}
+}
+
+func TestWrapperLoginValidatesRequiredFields(t *testing.T) {
+	tests := []struct {
+		body string
+		code ErrorCode
+	}{
+		{body: `{"username":"","password":"secret"}`, code: "invalid_request"},
+		{body: `{"username":"user","password":" "}`, code: "invalid_request"},
+		{body: `{"username":"user","password":""}`, code: "invalid_request"},
+		{body: `{`, code: "invalid_json"},
+	}
+	for _, tt := range tests {
+		fake := &fakeWrapperService{}
+		recorder := requestJSON(t, newServer(t, Deps{Wrapper: fake}).Routes(), http.MethodPost, "/api/v1/wrapper/login", tt.body)
+		assertErrorCode(t, recorder, http.StatusBadRequest, tt.code)
+		if fake.username != "" || fake.password != "" {
+			t.Fatalf("body %s reached the wrapper", tt.body)
+		}
+	}
+}
+
+func TestWrapperTwoStepResponses(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   ErrorCode
+	}{
+		{name: "success", status: http.StatusOK},
+		{name: "failed", err: wrapper.ErrAuthenticationFailed, status: http.StatusUnauthorized, code: "authentication_failed"},
+		{name: "not found", err: wrapper.ErrLoginSessionNotFound, status: http.StatusNotFound, code: "login_not_found"},
+		{name: "busy", err: wrapper.ErrLoginSessionBusy, status: http.StatusConflict, code: "login_pending"},
+		{name: "timeout", err: wrapper.ErrLoginTimeout, status: http.StatusGatewayTimeout, code: "upstream_timeout"},
+		{name: "upstream", err: errors.New("stream failed"), status: http.StatusBadGateway, code: "upstream_error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeWrapperService{verifyResult: wrapper.LoginResult{Status: wrapper.LoginStatusLoggedIn}, verifyErr: tt.err}
+			server := newServer(t, Deps{Wrapper: fake})
+			recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/wrapper/login/login-1/2fa", `{"two_step_code":" 123456 "}`)
+			if tt.code != "" {
+				assertErrorCode(t, recorder, tt.status, tt.code)
+			} else if recorder.Code != tt.status {
+				t.Fatalf("status = %d, want %d, body = %s", recorder.Code, tt.status, recorder.Body.String())
+			}
+			if fake.loginID != "login-1" || fake.twoStepCode != "123456" {
+				t.Fatalf("unexpected verification input: %q %q", fake.loginID, fake.twoStepCode)
+			}
+		})
+	}
+}
+
+func TestWrapperTwoStepValidatesCode(t *testing.T) {
+	server := newServer(t, Deps{Wrapper: &fakeWrapperService{}})
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/wrapper/login/login-1/2fa", `{"two_step_code":" "}`)
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
+}
+
+func TestWrapperLogoutResponses(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   ErrorCode
+	}{
+		{name: "success", status: http.StatusOK},
+		{name: "not found", err: wrapper.ErrAccountNotFound, status: http.StatusNotFound, code: "account_not_found"},
+		{name: "unsupported", err: wrapper.ErrLoginUnsupported, status: http.StatusNotImplemented, code: "login_unsupported"},
+		{name: "upstream", err: errors.New("unavailable"), status: http.StatusBadGateway, code: "upstream_error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeWrapperService{logoutErr: tt.err}
+			server := newServer(t, Deps{Wrapper: fake})
+			recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/wrapper/logout", `{"username":" user "}`)
+			if tt.code != "" {
+				assertErrorCode(t, recorder, tt.status, tt.code)
+			} else if recorder.Code != tt.status {
+				t.Fatalf("status = %d, want %d", recorder.Code, tt.status)
+			}
+			if fake.username != "user" {
+				t.Fatalf("username = %q", fake.username)
+			}
+		})
+	}
+}
+
+func TestWrapperLogoutValidatesUsername(t *testing.T) {
+	server := newServer(t, Deps{Wrapper: &fakeWrapperService{}})
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/wrapper/logout", `{"username":" "}`)
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
+}

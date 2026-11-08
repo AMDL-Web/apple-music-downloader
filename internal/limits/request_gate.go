@@ -3,6 +3,8 @@ package limits
 import (
 	"context"
 	"io"
+	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +13,14 @@ import (
 
 	"golang.org/x/time/rate"
 )
+
+// maxCooldown caps the process-wide pause a single 429 can impose. The
+// cooldown holds back every Apple request, interactive API calls included, so
+// one oversized or malformed Retry-After (from Apple, or a proxy or CDN in
+// front of the manifest hosts) must not stall the whole service for minutes.
+// A caller still throttled after the cap gets another 429 and another bounded
+// wait, so the cap never turns into a request storm.
+const maxCooldown = 60 * time.Second
 
 // RequestGate combines a shared request-concurrency limit, a token bucket for
 // rate-limited endpoints, and a process-wide cooldown after an upstream 429.
@@ -23,6 +33,9 @@ type RequestGate struct {
 	cooldownUntil time.Time
 }
 
+// NewRequestGate returns a gate admitting maxParallel concurrent requests and,
+// for rate-limited ones, requestsPerSecond with the given burst. Non-positive
+// values behave as 1.
 func NewRequestGate(maxParallel, requestsPerSecond, burst int) *RequestGate {
 	if requestsPerSecond <= 0 {
 		requestsPerSecond = 1
@@ -95,7 +108,10 @@ func (g *RequestGate) Do(ctx context.Context, client *http.Client, req *http.Req
 // DoWith429Retry behaves like Do, but a 429 penalizes every caller through
 // the shared cooldown and is retried once. The first response body is closed
 // before waiting so it cannot retain a concurrency permit or transport
-// connection. retryDelay is injectable for callers' deterministic tests.
+// connection. The first attempt consumes a request body, so the retry sends a
+// fresh one from req.GetBody; a request with a body and no GetBody gets the
+// 429 back instead of a retry with an empty body. retryDelay is injectable for
+// callers' deterministic tests.
 func (g *RequestGate) DoWith429Retry(ctx context.Context, client *http.Client, req *http.Request, rateLimited bool, retryDelay func(http.Header) time.Duration) (*http.Response, error) {
 	if retryDelay == nil {
 		retryDelay = DefaultRetryDelay
@@ -112,15 +128,40 @@ func (g *RequestGate) DoWith429Retry(ctx context.Context, client *http.Client, r
 		if attempt == 1 {
 			return resp, nil
 		}
+		next, ok := rewound(req)
+		if !ok {
+			return resp, nil
+		}
 		if resp.Body != nil {
 			_ = resp.Body.Close()
 		}
+		req = next
 	}
+}
+
+// rewound returns req ready to be sent again: req itself when it has no body,
+// otherwise a clone with a fresh body from GetBody. It reports false when the
+// body cannot be produced again.
+func rewound(req *http.Request) (*http.Request, bool) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return req, true
+	}
+	if req.GetBody == nil {
+		return nil, false
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, false
+	}
+	next := req.Clone(req.Context())
+	next.Body = body
+	return next, true
 }
 
 // DefaultRetryDelay parses Retry-After as either delta-seconds or an HTTP
 // date. Apple sometimes omits it, so the fallback is one second plus up to
-// 250ms of jitter to keep concurrent retries from forming another burst.
+// 250ms of random jitter to keep concurrent retries from forming another
+// burst. The result is not capped here; Penalize caps the cooldown it causes.
 func DefaultRetryDelay(header http.Header) time.Duration {
 	if raw := strings.TrimSpace(header.Get("Retry-After")); raw != "" {
 		if seconds, err := strconv.ParseInt(raw, 10, 64); err == nil && seconds >= 0 {
@@ -133,15 +174,20 @@ func DefaultRetryDelay(header http.Header) time.Duration {
 			return 0
 		}
 	}
-	jitter := time.Duration(time.Now().UnixNano() % int64(250*time.Millisecond))
-	return time.Second + jitter
+	return time.Second + rand.N(250*time.Millisecond)
 }
 
-// Penalize extends the shared cooldown. A shorter concurrent penalty never
-// reduces a longer one already in force.
+// Penalize extends the shared cooldown by delay, capped at maxCooldown with a
+// warning through slog.Default (the gate has no logger of its own). A shorter
+// concurrent penalty never reduces a longer one already in force.
 func (g *RequestGate) Penalize(delay time.Duration) {
 	if delay <= 0 {
 		return
+	}
+	if delay > maxCooldown {
+		slog.Default().Warn("upstream retry delay exceeds the cooldown cap; clamping",
+			"component", "limits", "requested", delay, "applied", maxCooldown)
+		delay = maxCooldown
 	}
 	until := time.Now().Add(delay)
 	g.cooldownMu.Lock()

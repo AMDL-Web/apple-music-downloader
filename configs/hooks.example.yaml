@@ -1,0 +1,169 @@
+# Download job hooks: run a webhook call or a local command when a download
+# job is queued (job_queued) or reaches a terminal state
+# (completed/failed/cancelled). This file is loaded independently from
+# configs/config.yaml, so hooks can be added, removed, or toggled without
+# touching the main backend configuration.
+# Missing this file entirely is not an error: hooks are simply disabled.
+#
+# Config reload: hooks.yaml is read at backend startup, so a hand edit takes
+# effect after a restart. The API's hook routes (PUT /api/v1/hooks and
+# PUT/DELETE /api/v1/hooks/{name}, which the desktop app's Hooks settings use)
+# change the master switch and webhook entries by editing this file in place,
+# keeping its comments and other entries, and apply at once. Exec entries are
+# never written through the API: they change only here.
+
+# bool: master switch for all hooks. true/false. When false, no hook entry
+# runs regardless of its own `enabled` value. Default false.
+enabled: false
+
+# list: hook definitions. Evaluated independently for every job queued and
+# terminal job event; every entry whose `enabled`, `events`, and `job_types`
+# all match runs, at most 2 executions at once across all jobs and entries,
+# and each attempt is cut off after 30 seconds (neither limit is a key). Add a
+# list item to create a new hook, delete one to remove it, or flip `enabled` to
+# pause it without losing its configuration. A download submission cannot
+# choose among the entries: every enabled matching entry runs for every job.
+#
+# To enable a hook, uncomment one of the example list items below (remove the
+# leading "# " from each of its lines) and edit the values. With every item
+# commented out, `entries` is empty and no hooks run.
+entries:
+  # --- webhook example: trigger a media server library refresh ---
+  # - # string, required, unique: hook name. Shown in hook_started/hook_succeeded/
+  #   # hook_failed events and in logs.
+  #   name: "media-server-refresh"
+  #   # bool: per-hook on/off switch. Omit or true = enabled, false = disabled.
+  #   # Default true.
+  #   enabled: true
+  #   # enum: webhook, exec.
+  #   #   webhook: sends an HTTP request to `url`.
+  #   #   exec: runs a local command via `command`.
+  #   type: "webhook"
+  #   # list enum, required, at least one: job_queued, job_finished,
+  #   # job_failed, job_cancelled.
+  #   #   job_queued: job was just created and queued. Fires before any track
+  #   #     is resolved, so the payload has no `items` and total_items
+  #   #     is 0; the job status is "queued". Cannot be combined with any
+  #   #     terminal event in the same entry (that would run the entry twice
+  #   #     for one job and collapse in the hook status summary) — put creation
+  #   #     and terminal hooks in separate entries, which may share a url/command.
+  #   #   job_finished: job completed with zero failed items.
+  #   #   job_failed: job completed with at least one failed item, or aborted
+  #   #     with an error; job.will_retry is true while every failed track
+  #   #     waits for an automatic retry (notification presets skip those).
+  #   #   job_cancelled: job was cancelled via the API.
+  #   # A job that was running when the backend stopped fires none of these
+  #   # then: it resumes on the next start and fires its terminal event when it
+  #   # finishes.
+  #   events: ["job_finished"]
+  #   # list enum: song, album, playlist, artist, station. Empty list or
+  #   # omitted = all job types match. A job is one run of an album or
+  #   # playlist record, or a station; song also matches an album whose
+  #   # tracks were added one by one, artist the runs an artist link started.
+  #   job_types: ["album"]
+  #   # string, required for type webhook: target URL of the request.
+  #   # Must be an absolute http:// or https:// URL with a host; anything else
+  #   # fails backend startup with an error naming this entry.
+  #   url: "http://media-server.local/Library/Refresh"
+  #   # enum, type webhook only: GET, POST, PUT. Omitted = POST. A GET sends no
+  #   # body.
+  #   method: "POST"
+  #   # map of string to string: extra HTTP headers sent with the request. A
+  #   # Content-Type here replaces the default application/json.
+  #   headers:
+  #     X-Api-Key: "replace-with-your-api-key"
+  #   # string, type webhook only: the preset the hooks API built this
+  #   # request from (GET /api/v1/hooks/presets lists them: ntfy, bark,
+  #   # telegram, plex, jellyfin, emby, custom), for clients to show. The
+  #   # request itself is in url, method, headers and body; an unknown preset
+  #   # fails backend startup with an error naming this entry. Omitted = none.
+  #   preset: ""
+  #   # string, type webhook only: the request body, a Go text/template
+  #   # rendered over the JSON payload (see below) as its JSON reads, e.g.
+  #   # {{.job.title}}, {{.job.completed_items}}, {{.event}}; the json function
+  #   # writes a value as a JSON literal: {"text": {{json .job.title}}}.
+  #   # Omitted = the JSON payload itself; an endpoint that ignores the body,
+  #   # such as a library refresh, just ignores it. A template that does not
+  #   # parse fails backend startup with an error naming this entry.
+  #   body: ""
+  #   # integer: maximum total attempts including the first. Values <= 0 behave
+  #   # as 1 (single attempt, no retry). Retries wait 1 second between attempts.
+  #   # When the backend shuts down, retries stop at once and an attempt still
+  #   # running after a short drain is cancelled and recorded as hook_failed.
+  #   max_attempts: 2
+  #
+  # --- exec example: run a local script for post-processing ---
+  # - name: "post-process"
+  #   type: "exec"
+  #   events: ["job_finished", "job_failed"]
+  #   # string, required for type exec: command executed via `sh -c`. The JSON
+  #   # payload (see below) is written to the command's stdin. The command
+  #   # inherits the backend's environment (PATH, HOME, TZ, ...) WITHOUT any
+  #   # AMDL_* variable: those are the backend's own settings, and one left
+  #   # over from an older install may hold a secret, so pass what a script
+  #   # needs explicitly. These variables are set instead:
+  #   #   AMDL_EVENT           - job_queued | job_finished | job_failed | job_cancelled
+  #   #   AMDL_JOB_ID          - job ID
+  #   #   AMDL_JOB_TYPE        - song | album | playlist | artist | station
+  #   #   AMDL_JOB_STATUS      - queued | completed | failed | cancelled
+  #   #   AMDL_JOB_INPUT       - original Apple Music URL
+  #   #   AMDL_STOREFRONT      - storefront code, e.g. "us", "cn"
+  #   #   AMDL_TOTAL_ITEMS     - total track count
+  #   #   AMDL_COMPLETED_ITEMS - tracks this job wrote
+  #   #   AMDL_SKIPPED_ITEMS   - tracks already at their path, or not offered
+  #   #                          in the asked quality
+  #   #   AMDL_FAILED_ITEMS    - failed tracks
+  #   #   AMDL_CANCELLED_ITEMS - tracks cancelled before they finished
+  #   #   AMDL_OUTPUT_PATHS    - newline-separated absolute paths of every
+  #   #                          downloaded track's output file
+  #   #   AMDL_JOB_TRIGGER     - manual | library_sync | artist | retry | reset | import_1x
+  #   #   AMDL_JOB_WILL_RETRY  - true when a failed job's tracks all wait for
+  #   #                          an automatic retry
+  #   #   AMDL_RESOURCE_KIND   - album | playlist (empty for a station)
+  #   #   AMDL_RESOURCE_ID     - the record's catalog id (empty for a station)
+  #   # A failing command records the last 4 KiB of its stderr in its
+  #   # hook_failed event.
+  #   command: "/opt/amdl/hooks/on-complete.sh"
+  #   # string: working directory for the command. Empty (default) uses the
+  #   # backend process's working directory.
+  #   workdir: ""
+
+# JSON payload sent as the webhook request body (unless `body` replaces it)
+# and written to an exec hook's stdin. The job counters are the API's job
+# counters; "title" and "artist_name" are present once the link has resolved
+# (never for job_queued), "error" only when the job has an error, "started_at"
+# and "finished_at" (RFC 3339) only once set, and "items" is absent for
+# job_queued.
+# Every "output_path" is absolute.
+#
+# {
+#   "event": "job_finished",
+#   "timestamp": "2026-07-04T10:30:00Z",
+#   "job": {
+#     "id": "job_abc123",
+#     "input": "https://music.apple.com/us/album/...",
+#     "type": "album",
+#     "storefront": "us",
+#     "title": "Album Name",
+#     "artist_name": "Artist Name",
+#     "status": "completed",
+#     "total_items": 12,
+#     "completed_items": 11,
+#     "skipped_items": 1,
+#     "failed_items": 0,
+#     "cancelled_items": 0,
+#     "started_at": "2026-07-04T10:28:41Z",
+#     "finished_at": "2026-07-04T10:30:00Z"
+#   },
+#   "items": [
+#     {
+#       "id": "item_1",
+#       "title": "Song 1",
+#       "artist": "Artist Name",
+#       "album": "Album Name",
+#       "status": "completed",
+#       "codec": "alac",
+#       "output_path": "/app/data/downloads/albums/Album Name/01. Song 1.m4a"
+#     }
+#   ]
+# }

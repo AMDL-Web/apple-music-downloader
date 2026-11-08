@@ -1,11 +1,11 @@
 package logging
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
-	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +25,6 @@ func TestSystemCapturesFiltersAndRedacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer system.Close()
 
 	logger := system.Logger.With("component", "jobs", "job_id", "job-1")
 	logger.Debug("hidden")
@@ -118,6 +117,32 @@ func TestSystemUpdatesLevel(t *testing.T) {
 	}
 }
 
+// A config write that commits while an older writer applies its level wins:
+// FollowLevel re-reads after applying and settles on the newest value.
+func TestFollowLevelSettlesOnTheNewestSnapshot(t *testing.T) {
+	system, err := New(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := 0
+	current := func() string {
+		reads++
+		if reads == 1 {
+			return "debug" // the older writer's snapshot
+		}
+		return "warn" // a newer write committed after that read
+	}
+	if err := system.FollowLevel(current); err != nil {
+		t.Fatal(err)
+	}
+	if got := system.level.Level(); got != slog.LevelWarn {
+		t.Fatalf("level = %v, want warn from the newest snapshot", got)
+	}
+	if err := system.FollowLevel(func() string { return "trace" }); err == nil {
+		t.Fatal("an invalid level must fail")
+	}
+}
+
 func TestStoreEvictionAndFilteredSubscription(t *testing.T) {
 	store := NewStore(2)
 	store.append(Entry{Time: time.Now(), Level: "info", Message: "one", Attributes: map[string]any{"component": "api"}})
@@ -176,58 +201,126 @@ func TestStoreDisconnectsSlowSubscriberAndMarksDisabledHistory(t *testing.T) {
 	}
 }
 
-func TestFileOutput(t *testing.T) {
+func TestConsoleOutputRedacts(t *testing.T) {
 	cfg := testConfig()
-	cfg.FileEnabled = true
-	cfg.FilePath = filepath.Join(t.TempDir(), "nested", "amdl.log")
-	cfg.Format = "json"
-	system, err := New(cfg)
+	cfg.Console = true
+	var out bytes.Buffer
+	system, err := newSystem(cfg, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	system.Logger.InfoContext(context.Background(), "written", "component", "test", "payload", map[string]string{"token": "must-not-leak"})
-	if err := system.Close(); err != nil {
-		t.Fatal(err)
+	system.Logger.Info("grouped", slog.Group("authorization", "value", "group-secret"))
+	raw := out.String()
+	if !strings.Contains(raw, "msg=written") || !strings.Contains(raw, "msg=grouped") {
+		t.Fatalf("console output = %s", raw)
 	}
-	raw, err := os.ReadFile(cfg.FilePath)
-	if err != nil {
-		t.Fatal(err)
+	if strings.Contains(raw, "must-not-leak") || strings.Contains(raw, "group-secret") {
+		t.Fatalf("console output was not redacted: %s", raw)
 	}
-	if !strings.Contains(string(raw), `"msg":"written"`) {
-		t.Fatalf("file output = %s", raw)
-	}
-	if strings.Contains(string(raw), "must-not-leak") || !strings.Contains(string(raw), "[REDACTED]") {
-		t.Fatalf("file output was not redacted: %s", raw)
+	if !strings.Contains(raw, "authorization.value=[REDACTED]") {
+		t.Fatalf("sensitive group not redacted as a whole: %s", raw)
 	}
 }
 
-func TestFileOutputRedactsSensitiveGroup(t *testing.T) {
-	cfg := testConfig()
-	cfg.FileEnabled = true
-	cfg.FilePath = filepath.Join(t.TempDir(), "amdl.log")
-	cfg.Format = "json"
-	system, err := New(cfg)
+func TestConsoleOffWritesNothing(t *testing.T) {
+	var out bytes.Buffer
+	system, err := newSystem(testConfig(), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	system.Logger.Info("written", slog.Group("authorization", "value", "group-secret"))
-	if err := system.Close(); err != nil {
-		t.Fatal(err)
+	system.Logger.Info("kept in memory only")
+	if out.Len() != 0 {
+		t.Fatalf("console off still wrote: %s", out.String())
 	}
-	raw, err := os.ReadFile(cfg.FilePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "group-secret") || !strings.Contains(string(raw), `"authorization":{"value":"[REDACTED]"}`) {
-		t.Fatalf("sensitive group leaked to file output: %s", raw)
+	if page := system.Store.List(Filter{Limit: 10}); len(page.Entries) != 1 {
+		t.Fatalf("buffer entries = %d, want 1", len(page.Entries))
 	}
 }
 
-func TestFileOutputFailsFastForUnwritableTarget(t *testing.T) {
-	cfg := testConfig()
-	cfg.FileEnabled = true
-	cfg.FilePath = t.TempDir()
-	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "open log file") {
-		t.Fatalf("New() error = %v, want log-file probe failure", err)
+func appendMessages(store *Store, messages ...string) {
+	for _, message := range messages {
+		store.append(Entry{Time: time.Now(), Level: "info", Message: message})
+	}
+}
+
+func sequences(entries []Entry) []uint64 {
+	out := []uint64{}
+	for _, entry := range entries {
+		out = append(out, entry.Sequence)
+	}
+	return out
+}
+
+// After the ring wraps, List and Subscribe still see the newest records in
+// order, and cursors, truncation and paging behave as on an unwrapped ring.
+func TestStoreRingWraparound(t *testing.T) {
+	store := NewStore(3)
+	appendMessages(store, "one", "two", "three", "four", "five", "six", "seven")
+
+	page := store.List(Filter{})
+	if got := sequences(page.Entries); !slices.Equal(got, []uint64{5, 6, 7}) || page.OldestSequence != 5 || page.NextCursor != 7 || page.Truncated {
+		t.Fatalf("full page = %v oldest=%d next=%d truncated=%v, want [5 6 7] 5 7 false", got, page.OldestSequence, page.NextCursor, page.Truncated)
+	}
+	if page.Entries[0].Message != "five" || page.Entries[2].Message != "seven" {
+		t.Fatalf("messages = %q..%q, want five..seven", page.Entries[0].Message, page.Entries[2].Message)
+	}
+	if page := store.List(Filter{Limit: 2}); !slices.Equal(sequences(page.Entries), []uint64{6, 7}) {
+		t.Fatalf("tail page = %v, want [6 7]", sequences(page.Entries))
+	}
+	if page := store.List(Filter{After: 2, Limit: 10}); !page.Truncated || !slices.Equal(sequences(page.Entries), []uint64{5, 6, 7}) {
+		t.Fatalf("cursor before the ring = %+v, want truncated [5 6 7]", page)
+	}
+	if page := store.List(Filter{After: 4, Limit: 10}); page.Truncated {
+		t.Fatalf("cursor just before the oldest record must not be truncated: %+v", page)
+	}
+	page = store.List(Filter{After: 5, Limit: 1})
+	if got := sequences(page.Entries); !slices.Equal(got, []uint64{6}) || page.NextCursor != 6 {
+		t.Fatalf("cursor page = %v next=%d, want [6] next=6", got, page.NextCursor)
+	}
+	page = store.List(Filter{After: page.NextCursor, Limit: 1})
+	if got := sequences(page.Entries); !slices.Equal(got, []uint64{7}) || page.NextCursor != 7 {
+		t.Fatalf("last cursor page = %v next=%d, want [7] next=7", got, page.NextCursor)
+	}
+	if page := store.List(Filter{After: 7, Limit: 5}); len(page.Entries) != 0 || page.Entries == nil || page.NextCursor != 7 {
+		t.Fatalf("caught-up page = %+v, want an empty non-nil page at 7", page)
+	}
+
+	backlog, _, stop := store.Subscribe(Filter{Limit: 2})
+	stop()
+	if got := sequences(backlog); !slices.Equal(got, []uint64{6, 7}) {
+		t.Fatalf("subscribe tail backlog = %v, want [6 7]", got)
+	}
+	backlog, _, stop = store.Subscribe(Filter{After: 5, Limit: 1})
+	stop()
+	if got := sequences(backlog); !slices.Equal(got, []uint64{6, 7}) {
+		t.Fatalf("subscribe cursor backlog = %v, want every match after 5: [6 7]", got)
+	}
+}
+
+// Query matches the message and the attribute JSON case-insensitively, for
+// records that wrapped around the ring as well as live ones.
+func TestStoreQueryMatchesMessageAndAttributes(t *testing.T) {
+	store := NewStore(2)
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "evicted", Attributes: map[string]any{"user": "Alice"}})
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "Login", Attributes: map[string]any{"user": "Alice"}})
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "logout", Attributes: map[string]any{"user": "bob"}})
+	if page := store.List(Filter{Query: "ALICE"}); len(page.Entries) != 1 || page.Entries[0].Message != "Login" {
+		t.Fatalf("attribute query = %#v, want only the retained Login record", page.Entries)
+	}
+	if page := store.List(Filter{Query: "log"}); len(page.Entries) != 2 {
+		t.Fatalf("message query = %#v, want Login and logout", page.Entries)
+	}
+	_, live, stop := store.Subscribe(Filter{After: 3, Query: "Carol"})
+	defer stop()
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "skip", Attributes: map[string]any{"user": "dave"}})
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "hit", Attributes: map[string]any{"user": "carol"}})
+	select {
+	case entry := <-live:
+		if entry.Message != "hit" || entry.Sequence != 5 {
+			t.Fatalf("live entry = %#v, want hit with sequence 5", entry)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the matching live entry")
 	}
 }

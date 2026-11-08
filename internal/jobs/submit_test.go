@@ -1,0 +1,382 @@
+package jobs
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"amdl/internal/config"
+	"amdl/internal/db"
+	"amdl/internal/domain"
+	"amdl/internal/events"
+	"amdl/internal/hooks"
+)
+
+func TestSubmitBatchStoresOverridesOnEveryJob(t *testing.T) {
+	manager := newTestManager(t)
+	force := true
+	overrides := &config.DownloadOverrides{CodecAlternative: &force}
+	resp := manager.SubmitBatch(context.Background(), []string{
+		"station|us|ra.1",
+		"playlist|us|pl.u-private",
+		"station|us|1",
+	}, overrides)
+	if resp.Accepted != 3 {
+		t.Fatalf("accepted = %d, want 3: %+v", resp.Accepted, resp.Results)
+	}
+	for _, result := range resp.Results {
+		job, err := manager.store.GetJob(context.Background(), result.Job.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.Overrides == nil || job.Overrides.CodecAlternative == nil || !*job.Overrides.CodecAlternative {
+			t.Fatalf("job %s (%s) overrides = %+v, want codec_alternative", result.Job.ID, result.URL, job.Overrides)
+		}
+	}
+}
+
+func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T) {
+	manager := newTestManager(t)
+	ctx := context.Background()
+
+	first := manager.SubmitBatch(ctx, []string{"station|us|222"}, nil)
+	if first.Accepted != 1 {
+		t.Fatalf("first submit = %+v, want 1 accepted", first)
+	}
+	jobID := first.Results[0].Job.ID
+
+	second := manager.SubmitBatch(ctx, []string{"station|us|222"}, nil)
+	if second.Results[0].Status != domain.SubmitDuplicateActive || second.Results[0].ExistingJobID != jobID ||
+		second.Results[0].Error == nil || second.Results[0].Error.Code != "duplicate_active" {
+		t.Fatalf("second submit = %+v, want duplicate_active for %s", second.Results[0], jobID)
+	}
+
+	done, err := manager.store.GetJob(ctx, jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done.Status = domain.JobCompleted
+	if err := manager.store.UpdateJob(ctx, done); err != nil {
+		t.Fatal(err)
+	}
+
+	// A one-off run is never queued twice: the input gets a new run.
+	third := manager.SubmitBatch(ctx, []string{"station|us|222"}, nil)
+	if got := third.Results[0]; got.Status != domain.SubmitAccepted || got.Job == nil || got.Job.ID == jobID {
+		t.Fatalf("third submit = %+v, want a new run after %s completed", got, jobID)
+	}
+}
+
+// SubmitBatch answers each URL of a batch on its own: a URL the batch already
+// named, a full queue, an invalid URL and a store failure each reject only
+// their own entry, with the status and error code clients switch on. A store
+// failure is not a verdict on the URL: it is status error with store_error,
+// which tells the client to retry, never invalid.
+func TestSubmitBatchRejectsEntries(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		setup    func(t *testing.T, m *Manager)
+		urls     []string
+		statuses []domain.SubmitStatus
+		codes    []string
+		accepted int
+	}{
+		{
+			name:     "duplicate in request",
+			urls:     []string{"album|us|111", "station|us|222", "album|us|111"},
+			statuses: []domain.SubmitStatus{domain.SubmitAccepted, domain.SubmitAccepted, domain.SubmitDuplicateInRequest},
+			codes:    []string{"", "", "duplicate_in_request"}, accepted: 2,
+		},
+		{
+			name:     "queue full keeps the accepted entry",
+			setup:    func(_ *testing.T, m *Manager) { m.capacity = 1 },
+			urls:     []string{"station|us|1", "station|us|2", "station|us|3"},
+			statuses: []domain.SubmitStatus{domain.SubmitAccepted, domain.SubmitQueueFull, domain.SubmitQueueFull},
+			codes:    []string{"", "queue_full", "queue_full"}, accepted: 1,
+		},
+		{
+			name:     "invalid url",
+			urls:     []string{"bad:not-a-url"},
+			statuses: []domain.SubmitStatus{domain.SubmitInvalid},
+			codes:    []string{"invalid_url"},
+		},
+		{
+			name: "store failure",
+			setup: func(t *testing.T, m *Manager) {
+				if err := m.store.Close(); err != nil {
+					t.Fatal(err)
+				}
+			},
+			urls:     []string{"station|us|1"},
+			statuses: []domain.SubmitStatus{domain.SubmitServerError},
+			codes:    []string{"store_error"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := newTestManager(t)
+			if tt.setup != nil {
+				tt.setup(t, manager)
+			}
+			resp := manager.SubmitBatch(context.Background(), tt.urls, nil)
+			if len(resp.Results) != len(tt.urls) {
+				t.Fatalf("results = %+v, want %d", resp.Results, len(tt.urls))
+			}
+			for i, got := range resp.Results {
+				code := ""
+				if got.Error != nil {
+					code = got.Error.Code
+				}
+				if got.Status != tt.statuses[i] || code != tt.codes[i] {
+					t.Errorf("result %d = %s/%q, want %s/%q", i, got.Status, code, tt.statuses[i], tt.codes[i])
+				}
+			}
+			if resp.Accepted != tt.accepted || resp.Rejected != len(tt.urls)-tt.accepted {
+				t.Fatalf("resp = %d accepted / %d rejected, want %d / %d", resp.Accepted, resp.Rejected, tt.accepted, len(tt.urls)-tt.accepted)
+			}
+		})
+	}
+}
+
+// An invalid URL carries the processor's own code and message.
+func TestSubmitBatchInvalidURLReportsError(t *testing.T) {
+	manager := newTestManager(t)
+	resp := manager.SubmitBatch(context.Background(), []string{"bad:not-a-url"}, nil)
+	got := resp.Results[0]
+	if got.Status != domain.SubmitInvalid || got.Error == nil || got.Error.Code != "invalid_url" || got.Error.Message != "bad test url" || got.Error.Details != nil {
+		t.Fatalf("result = %+v, want invalid with the processor's code and message", got)
+	}
+}
+
+// TestSubmitBatchStoresThreeSegmentKey pins the key a one-off run writes: the
+// dedup identity is what is downloaded, type, storefront and adam id. Record
+// runs dedup by their record instead and store no key.
+func TestSubmitBatchStoresThreeSegmentKey(t *testing.T) {
+	manager := newTestManager(t)
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|111"}, nil)
+	if resp.Accepted != 1 || resp.Results[0].Job == nil {
+		t.Fatalf("submit = %+v, want one accepted job", resp)
+	}
+	job, err := manager.store.GetJob(context.Background(), resp.Results[0].Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.CanonicalKey != "station:us:111" {
+		t.Fatalf("canonical key = %q, want station:us:111", job.CanonicalKey)
+	}
+}
+
+func TestRequestErrorSubmitErrorCarriesStorefrontDetails(t *testing.T) {
+	err := &RequestError{Code: "unsupported_storefront", Message: "storefront \"jp\" is not supported", Storefront: "jp", SupportedStorefronts: []string{"us", "cn"}}
+	got := err.SubmitError()
+	raw, marshalErr := json.Marshal(got)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	want := `{"code":"unsupported_storefront","message":"storefront \"jp\" is not supported","details":{"storefront":"jp","supported_storefronts":["us","cn"]}}`
+	if string(raw) != want {
+		t.Fatalf("submit error = %s, want %s", raw, want)
+	}
+}
+
+func TestJobQueuedDispatchesHook(t *testing.T) {
+	var calls int32
+	var mu sync.Mutex
+	var gotEvent, gotStatus string
+	var gotTotal, gotItems int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Event string `json:"event"`
+			Job   struct {
+				Status     string `json:"status"`
+				TotalItems int    `json:"total_items"`
+			} `json:"job"`
+			Items []struct{} `json:"items"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		mu.Lock()
+		gotEvent = payload.Event
+		gotStatus = payload.Job.Status
+		gotTotal = payload.Job.TotalItems
+		gotItems = len(payload.Items)
+		mu.Unlock()
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	hooksCfg := hooks.Config{Enabled: true, Entries: []hooks.Entry{
+		{Name: "on-queued", Type: "webhook", Events: []string{"job_queued"}, URL: server.URL},
+	}}
+	manager := NewManager(store, events.NewHub(), keyedProcessor{}, 1, slog.Default())
+	dispatcher := hooks.NewDispatcher(hooksCfg, manager.Event, slog.Default())
+	manager.SetHooks(dispatcher)
+
+	// Deliberately do NOT start workers: the creation hook fires from
+	// SubmitBatch itself, so the job stays queued and only job_queued can fire.
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
+	if resp.Accepted != 1 {
+		t.Fatalf("submit = %+v, want 1 accepted", resp)
+	}
+
+	// SubmitBatch dispatched the hook before it returned; draining the
+	// dispatcher waits for the call.
+	dispatcher.Shutdown(context.Background())
+
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("webhook calls = %d, want 1 after job creation", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if gotEvent != "job_queued" {
+		t.Fatalf("event = %q, want job_queued", gotEvent)
+	}
+	if gotStatus != string(domain.JobQueued) {
+		t.Fatalf("job status = %q, want %q", gotStatus, domain.JobQueued)
+	}
+	if gotTotal != 0 || gotItems != 0 {
+		t.Fatalf("creation payload total_items=%d items=%d, want 0 and 0 (no tracks resolved yet)", gotTotal, gotItems)
+	}
+}
+
+func TestRetryRefusesActiveCompletedMissingAndDuplicateJobs(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
+
+	for i, status := range []domain.JobStatus{domain.JobQueued, domain.JobRunning, domain.JobCompleted} {
+		job := domain.Job{ID: "job-" + string(status), Input: "in", Type: "song", CanonicalKey: "song:cn:" + strconv.Itoa(i), Status: status, CreatedAt: now, UpdatedAt: now}
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+		if err := manager.Retry(ctx, job.ID); !errors.Is(err, ErrJobNotRetryable) {
+			t.Fatalf("Retry(%s job) = %v, want ErrJobNotRetryable", status, err)
+		}
+	}
+
+	if err := manager.Retry(ctx, "no-such-job"); !errors.Is(err, db.ErrJobNotFound) {
+		t.Fatalf("Retry(missing job) = %v, want ErrJobNotFound", err)
+	}
+
+	// The same canonical key already has an active job (resubmitted by the
+	// user): retrying the old failed job must be refused, not trip the
+	// partial unique index.
+	failed := domain.Job{ID: "job-old-failed", Input: "in", Type: "song", CanonicalKey: "song:cn:dup", Status: domain.JobFailed, CreatedAt: now, UpdatedAt: now}
+	active := domain.Job{ID: "job-new-active", Input: "in", Type: "song", CanonicalKey: "song:cn:dup", Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now}
+	for _, job := range []domain.Job{failed, active} {
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := manager.Retry(ctx, failed.ID); !errors.Is(err, db.ErrDuplicateActive) {
+		t.Fatalf("Retry(failed job with active duplicate) = %v, want ErrDuplicateActive", err)
+	}
+	if depth := manager.QueueStats().QueueDepth; depth != 0 {
+		t.Fatalf("queue depth = %d, want 0 after refused retries", depth)
+	}
+}
+
+// A run of no record whose link names an album, as the 1.x history the
+// upgrade imports, is retried as an add of that link: the album becomes a
+// record and the new run is its run, so what it downloads counts.
+func TestRetryOfARunOfNoRecordAddsItsRecord(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
+	old := domain.Job{ID: "job-1x", Input: "https://music.apple.com/cn/album/x/555", Type: "album", CanonicalKey: "album:cn:555",
+		Status: domain.JobCancelled, Trigger: domain.TriggerImport1x, CreatedAt: now, UpdatedAt: now}
+	if err := store.CreateJob(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	res, err := manager.RetryRun(ctx, old.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Job == nil || res.Job.ResourceKind != domain.ResourceAlbum || res.Job.ResourceID != "555" {
+		t.Fatalf("retry = %+v, want a run of album record 555", res.Job)
+	}
+	if _, err := store.GetAlbum(ctx, "555"); err != nil {
+		t.Fatalf("album record 555 after the retry: %v", err)
+	}
+}
+
+// holdProcessor reports every ProcessJob entry and blocks it until release is
+// closed, so a test can see whether a second worker also entered the job.
+type holdProcessor struct {
+	keyedProcessor
+	entered chan string
+	release chan struct{}
+}
+
+func (p *holdProcessor) ProcessJob(ctx context.Context, job domain.Job, _ Reporter) error {
+	p.entered <- job.ID
+	select {
+	case <-p.release:
+	case <-ctx.Done():
+	}
+	return nil
+}
+
+// A job cancelled while queued and retried is one queued job again: two idle
+// workers must not both run it.
+func TestRetryOfQueuedCancelledJobRunsItOnce(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	processor := &holdProcessor{entered: make(chan string, 4), release: make(chan struct{})}
+	manager := NewManager(store, events.NewHub(), processor, 2, slog.Default())
+	ctx := context.Background()
+
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
+	if resp.Accepted != 1 {
+		t.Fatalf("submit = %+v, want 1 accepted", resp)
+	}
+	jobID := resp.Results[0].Job.ID
+	if err := manager.Cancel(ctx, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Retry(ctx, jobID); err != nil {
+		t.Fatal(err)
+	}
+
+	manager.Start(ctx)
+	select {
+	case <-processor.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no worker started the retried job")
+	}
+	close(processor.release)
+	waitTerminal(t, manager, jobID)
+	// Shutdown waits for both workers, so any second entry is in the
+	// channel by now.
+	shutdown(t, manager)
+	if len(processor.entered) != 0 {
+		t.Errorf("job %s entered ProcessJob a second time", <-processor.entered)
+	}
+}

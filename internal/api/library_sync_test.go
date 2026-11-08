@@ -6,45 +6,16 @@ import (
 	"net/http"
 	"testing"
 
+	"amdl/internal/db"
 	"amdl/internal/librarysync"
 )
 
-type fakeLibrarySync struct {
-	status     librarysync.Status
-	cleared    int64
-	resetCalls int
-}
-
-func (f *fakeLibrarySync) Status() librarysync.Status { return f.status }
-
-func (f *fakeLibrarySync) ResetAnchor(context.Context) (int64, error) {
-	f.resetCalls++
-	f.status.AnchorSize = 0
-	return f.cleared, nil
-}
-
-// Both endpoints must answer rather than panic when the watcher was never
-// wired — a Server built without it is the shape every existing test uses.
-func TestLibrarySyncEndpointsWithoutWatcher(t *testing.T) {
-	server := &Server{}
-	routes := server.Routes()
-	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/api/v1/library-sync"},
-		{http.MethodPost, "/api/v1/library-sync/reset"},
-	} {
-		recorder := requestJSON(t, routes, tc.method, tc.path, "")
-		if recorder.Code != http.StatusServiceUnavailable {
-			t.Fatalf("%s %s status = %d, want 503", tc.method, tc.path, recorder.Code)
-		}
-	}
-}
-
 func TestLibrarySyncStatusReportsWatcherState(t *testing.T) {
 	watcher := &fakeLibrarySync{status: librarysync.Status{
-		Enabled: true, IntervalMinutes: 15, AnchorSize: 50, TotalSubmitted: 3,
+		Enabled: true, IntervalMinutes: 15,
+		Accounts: []librarysync.AccountStatus{{AccountID: "a1", Region: "jp", Enabled: true, AnchorSize: 50, TotalSubmitted: 3}},
 	}}
-	server := &Server{}
-	server.SetLibrarySync(watcher)
+	server := newServer(t, Deps{LibrarySync: watcher})
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/library-sync", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
@@ -53,38 +24,49 @@ func TestLibrarySyncStatusReportsWatcherState(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !got.Enabled || got.IntervalMinutes != 15 || got.AnchorSize != 50 || got.TotalSubmitted != 3 {
+	if !got.Enabled || got.IntervalMinutes != 15 || len(got.Accounts) != 1 || got.Accounts[0].AnchorSize != 50 || got.Accounts[0].TotalSubmitted != 3 {
 		t.Fatalf("status = %+v, want the watcher's own values", got)
 	}
 }
 
 // Reset reports how much it forgot and hands back the post-reset status, so a
-// client does not need a second request to refresh its view.
+// client does not need a second request to refresh its view. It names an
+// account, else resets the default's; an unknown account is not found.
 func TestLibrarySyncResetClearsAnchor(t *testing.T) {
 	watcher := &fakeLibrarySync{
-		status:  librarysync.Status{Enabled: true, IntervalMinutes: 15, AnchorSize: 50},
+		status:  librarysync.Status{Enabled: true, IntervalMinutes: 15, Accounts: []librarysync.AccountStatus{{AccountID: "jp", AnchorSize: 50}}},
 		cleared: 50,
 	}
-	server := &Server{}
-	server.SetLibrarySync(watcher)
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/library-sync/reset", "")
+	server := newServer(t, Deps{LibrarySync: watcher})
+	if _, err := server.store.SyncAccounts(context.Background(), db.AccountDiscovery{
+		Seen: []db.SeenAccount{{ID: "us", Region: "us"}, {ID: "jp", Region: "jp"}}, Complete: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/library-sync/reset", `{"account":"jp"}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 	var got struct {
+		Account string             `json:"account"`
 		Cleared int64              `json:"cleared"`
 		Status  librarysync.Status `json:"status"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Cleared != 50 {
-		t.Fatalf("cleared = %d, want 50", got.Cleared)
+	if got.Cleared != 50 || got.Account != "jp" {
+		t.Fatalf("reset = %+v, want 50 cleared for jp", got)
 	}
-	if got.Status.AnchorSize != 0 {
-		t.Fatalf("post-reset anchor_size = %d, want 0", got.Status.AnchorSize)
+	if got.Status.Accounts[0].AnchorSize != 0 {
+		t.Fatalf("post-reset anchor_size = %d, want 0", got.Status.Accounts[0].AnchorSize)
 	}
-	if watcher.resetCalls != 1 {
-		t.Fatalf("reset called %d times, want 1", watcher.resetCalls)
+	if len(watcher.resetCalls) != 1 || watcher.resetCalls[0] != "jp" {
+		t.Fatalf("reset calls = %v, want [jp]", watcher.resetCalls)
+	}
+	assertErrorCode(t, requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/library-sync/reset", `{"account":"kr"}`),
+		http.StatusNotFound, CodeAccountNotFound)
+	if recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/library-sync/reset", ""); recorder.Code != http.StatusOK {
+		t.Fatalf("reset without a body = %d %s", recorder.Code, recorder.Body)
 	}
 }

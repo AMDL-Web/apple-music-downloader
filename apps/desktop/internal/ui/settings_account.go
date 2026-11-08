@@ -1,0 +1,225 @@
+package ui
+
+import (
+	"github.com/egoist/mygo/ui"
+
+	"amdl/apps/desktop/internal/store"
+)
+
+// loginForm is what the Account section's form holds between frames. The
+// password stays only until its answer is in: what was typed stays on screen
+// until then, so a step that answers within a frame moves nothing.
+type loginForm struct {
+	user, pass, code string
+	// sent is set when a step left, and ends with its answer (settle).
+	sent bool
+	// logout is the Apple ID typed to log out an account the wrapper does
+	// not name; logoutOpen shows its dialog.
+	logout     string
+	logoutOpen bool
+	// adding shows the login while accounts are logged in, until one more
+	// is.
+	adding bool
+}
+
+// settle forgets the password and the code once the step they went with has
+// its answer, and closes Add account once the login is through. The view
+// calls it every frame, so one that is no longer on screen forgets them
+// too.
+func (f *loginForm) settle(l store.Login) {
+	if f.sent && !l.Busy {
+		if l.Err == "" && l.LoginID == "" {
+			f.adding = false
+		}
+		f.pass, f.code, f.sent = "", "", false
+	}
+}
+
+// accountSession is the Account section's accounts and sign-in: the list
+// of accounts, then the login form and its two-step code where the wrapper
+// logs in over the API, for the first account or one more. A backend
+// without the list offers log out by Apple ID; otherwise the next step is
+// on the wrapper's machine.
+func (a *App) accountSession(c *ui.Context, k *Tokens) {
+	sv := &a.Store.Server
+	w := sv.Wrapper
+	if w == nil {
+		return
+	}
+	st := accountState(w, sv.WrapperErr)
+	l := &a.Store.Login
+	f := &a.set.login
+	listed := len(sv.Accounts) > 0
+	adding := f.adding && w.LoginSupported && !st.signIn
+	if listed {
+		a.accountList(c, k, w.LoginSupported && l.LoginID == "" && !adding && !st.signIn)
+	}
+	unlisted := !listed && w.LoggedIn && w.LoginSupported
+	// A local wrapper that is not serving has no step here: the head says
+	// what it does and the command that fixes it.
+	if l.LoginID == "" && !st.signIn && !adding && !unlisted && l.Err == "" {
+		return
+	}
+	card(c.Key("session"), k).Gap(12).Children(func() {
+		switch {
+		case l.LoginID != "":
+			a.codeStep(c, k)
+		case st.signIn || adding:
+			a.credentials(c, k, adding)
+		case unlisted:
+			a.signedIn(c, k)
+		}
+		if l.Err != "" {
+			ui.Text(c, loginError(l.Code, l.Err)).FontSize(12.5).TextColor(k.Bad).LineHeight(1.45)
+		}
+	})
+	a.logoutDialog(c, k)
+}
+
+// credentials is the login's first step; another names a login while
+// accounts are logged in, which Cancel closes.
+func (a *App) credentials(c *ui.Context, k *Tokens, another bool) {
+	f := &a.set.login
+	l := &a.Store.Login
+	wait := waited(c, l.Busy, l.Since)
+	ui.Text(c, "Log in with the Apple ID that has the Apple Music subscription").FontSize(13).FontWeight(600)
+	ui.Row(c).Gap(8).Children(func() {
+		user := field(c, k, "apple-id", &f.user, "Apple ID", false).Disabled(wait)
+		box, pass := fieldBox(c, k, "password", &f.pass, "Password", false)
+		pass.Password().Disabled(wait)
+		box.Grow(1)
+		filled := f.user != "" && f.pass != ""
+		// Cancel stops a login on its way, which frees the account for the
+		// next one, or closes the form for one more account. Like the
+		// button's text, it shows once the step is slow, so an answer within
+		// a frame moves nothing; it sits before the button, which stays put.
+		if (wait || another) && button(c, k, buttonGhost, "Cancel", nil).Height(32).Clicked() {
+			if l.Busy {
+				a.Store.CancelLogin()
+			} else {
+				f.adding, f.user, f.pass = false, "", ""
+				l.Err, l.Code = "", ""
+			}
+		}
+		text := "Log in"
+		if wait {
+			text = "Logging in…"
+		}
+		if (buttonRoom(c, k, buttonPrimary, text, "Logging in…", nil, !filled || wait).Height(32).Clicked() || pass.Submitted() || user.Submitted()) && filled && !l.Busy {
+			a.Store.StartLogin(f.user, f.pass)
+			f.sent = true
+		}
+	})
+}
+
+func (a *App) codeStep(c *ui.Context, k *Tokens) {
+	f := &a.set.login
+	l := &a.Store.Login
+	wait := waited(c, l.Busy, l.Since)
+	ui.Text(c, "Enter the code Apple sent to your devices").FontSize(13).FontWeight(600)
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		box, in := fieldBox(c, k, "code", &f.code, "6-digit code", true)
+		box.Grow(0).Width(160)
+		in.Disabled(wait)
+		text := "Verify"
+		if wait {
+			text = "Verifying…"
+		}
+		ready := sixDigits(f.code)
+		if (buttonRoom(c, k, buttonPrimary, text, "Verifying…", nil, !ready || wait).Height(32).Clicked() || in.Submitted()) && ready && !l.Busy {
+			a.Store.SubmitCode(f.code)
+			f.sent = true
+		}
+		// While the code is checked, Cancel ends that check; either way the
+		// next login starts from the password.
+		again := "Start over"
+		if wait {
+			again = "Cancel"
+		}
+		if buttonRoom(c, k, buttonGhost, again, "Start over", nil, false).Height(32).Clicked() {
+			a.Store.CancelLogin()
+			f.code = ""
+		}
+	})
+}
+
+// signedIn is a logged-in wrapper's log out where the backend does not list
+// the accounts: the Apple ID is typed.
+func (a *App) signedIn(c *ui.Context, k *Tokens) {
+	f := &a.set.login
+	l := &a.Store.Login
+	wait := waited(c, l.Busy, l.Since)
+	ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "An account is logged in.").FontSize(13).Grow(1)
+		if buttonOff(c, k, buttonPlain, "Log out…", nil, wait).Clicked() {
+			f.logout, f.logoutOpen = "", true
+		}
+	})
+}
+
+// logoutDialog confirms a log out; the wrapper names no account, so the
+// Apple ID is typed when it is not known.
+func (a *App) logoutDialog(c *ui.Context, k *Tokens) {
+	f := &a.set.login
+	if !f.logoutOpen {
+		return
+	}
+	named := f.logout != ""
+	ui.DialogBase(c.Key("logout"), &f.logoutOpen, func(back, panel ui.Element) {
+		back.Background(ui.RGBA(0, 0, 0, 0.45))
+		panel.Width(440).Padding(padCard).Gap(12).Radius(radiusCard).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
+		title := "Log out of Apple Music?"
+		if named {
+			title = "Log out " + f.logout + "?"
+		}
+		ui.Text(c, title).FontSize(15).FontWeight(650)
+		ui.Text(c, "Downloads stop until an account logs in again.").FontSize(12.5).TextColor(k.Muted)
+		if !named {
+			field(c, k, "logout-id", &f.logout, "Apple ID", false)
+		}
+		ui.Row(c).Gap(8).Justify(ui.End).Padding(6, 0, 0, 0).Children(func() {
+			if button(c, k, buttonPlain, "Cancel", nil).Clicked() {
+				f.logoutOpen = false
+			}
+			ok := buttonOff(c, k, buttonPrimary, "Log out", nil, f.logout == "")
+			ok.Background(k.Bad)
+			if ok.Clicked() && f.logout != "" {
+				a.Store.Logout(f.logout)
+				f.logoutOpen = false
+			}
+		})
+	})
+}
+
+// loginError says why a login step failed, in the user's terms where the
+// backend's code says enough.
+func loginError(code, reason string) string {
+	switch code {
+	case "authentication_failed":
+		return "Apple did not accept the Apple ID, the password or the code."
+	case "already_logged_in":
+		return "This account is already logged in."
+	case "login_pending":
+		return "A login for this account is already under way."
+	case "login_not_found":
+		return "The login expired. Start again."
+	case "login_unsupported":
+		return "This wrapper logs in only on its own machine."
+	case "wrapper_unavailable":
+		return "The local wrapper is stopped. Start it with amdl wrapper start."
+	}
+	return reason
+}
+
+// sixDigits reports a two-step code as Apple sends it.
+func sixDigits(s string) bool {
+	if len(s) != 6 {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}

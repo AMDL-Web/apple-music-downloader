@@ -1,0 +1,125 @@
+/*
+ * Skin-neutral tokens: the color-scheme switch, the type scale, spacing,
+ * sizes and motion under the skin. Colors, radii, shadows, font
+ * stacks and display type belong to a skin (css/skins/<name>.css), which
+ * must declare every token the base stylesheets (css/*.css) use that is not
+ * declared here; a Go test checks that. Color literals are allowed only here and in css/skins/*.css.
+ * The contract is DESIGN.md "Skin".
+ */
+
+:root {
+  /* light-dark() in the skin resolves against this; the skin never sets it. */
+  color-scheme: light dark;
+
+  /* Text over Apple artwork when its own palette fails 4.5:1 (lib/format.js artTextColor). */
+  --on-art-light: #ffffff;
+  --on-art-dark: #000000;
+
+  /* System font fallbacks; a skin sets --font-sans, --font-display and --font-mono. */
+  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
+    "PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", sans-serif;
+  --font-system-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale (size / line height). The skin adds display roles (--fs-page-title, --fs-kpi, ...). */
+  --fs-11: 11px;
+  --lh-11: 16px;
+  --fs-12: 12px;
+  --lh-12: 16px;
+  --lh-mono-12: 18px;
+  --fs-13: 13px;
+  --lh-13: 20px;
+  --fs-14: 14px;
+  --lh-14: 20px;
+  --fs-15: 15px;
+  --lh-15: 22px;
+  --fs-16: 16px;
+  --lh-16: 24px;
+  --fs-20: 20px;
+  --lh-20: 28px;
+  --fs-24: 24px;
+  --lh-24: 32px;
+  --fs-32: 32px;
+  --lh-32: 40px;
+  --w-regular: 400;
+  --w-medium: 500;
+  --w-semibold: 600;
+  --w-bold: 700;
+  --w-heavy: 800;
+
+  /* Spacing (4px base) */
+  --s-0_5: 2px;
+  --s-1: 4px;
+  --s-1_5: 6px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  --r-full: 999px;
+
+  /* Sizes */
+  --sidebar-w: 232px;
+  --rail-w: 56px;
+  --topbar-h: 48px;
+  --tabbar-h: 56px;
+  --control-h: 32px;
+  --control-h-sm: 28px;
+  --touch: 44px;
+  /* A toast's first line: its buttons' height, which a one-line message is
+     padded to (css/responsive.css raises it to --touch on a phone). */
+  --toast-row: var(--control-h-sm);
+  --icon: 16px;
+  --icon-sm: 14px;
+  --icon-nav: 20px;
+  --drawer-w: 520px;
+  --content-max: 1600px;
+  /* New download's compose field (css/download-form.css): the widest it
+     gets, its one-line height and the inset of what it holds. The dock
+     shares the inset. */
+  --compose-w: 800px;
+  --compose-h: 72px;
+  --compose-pad: var(--s-2);
+  /* The circles inside it (the glyph, Clear). */
+  --compose-in: calc(var(--compose-h) - 2 * var(--compose-pad));
+  --dock-h: 64px;
+  /* New download's results run wider than the field, up to this. */
+  --stage-max: 1240px;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  /* How long a loading placeholder stays transparent: an answer faster than
+     this replaces it before it is ever seen. */
+  --skel-delay: 180ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@media (min-width: 1680px) {
+  :root {
+    --compose-w: 880px;
+    --compose-h: 80px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --compose-w: 100%;
+    --compose-h: 60px;
+    --compose-pad: var(--s-1_5);
+    --dock-h: 56px;
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}

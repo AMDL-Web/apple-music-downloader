@@ -76,3 +76,34 @@ func readPIDFile(t *testing.T, path string) int {
 	t.Fatalf("pid file %s not written in time", path)
 	return 0
 }
+
+// A failing script that floods stderr must not put megabytes into the
+// hook_failed message; the end of its output, where the reason usually is,
+// survives.
+func TestExecHookFailureKeepsOnlyTheStderrTail(t *testing.T) {
+	entry := Entry{Name: "noisy", Type: "exec", Events: []string{"job_finished"},
+		Command: "i=0; while [ $i -lt 2000 ]; do echo 'noise noise noise noise noise noise noise' >&2; i=$((i+1)); done; echo 'the real reason' >&2; exit 3"}
+	err := (&execRunner{}).Run(context.Background(), entry, Payload{Event: "job_finished"})
+	if err == nil {
+		t.Fatal("Run returned nil for a command that exits 3")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "the real reason") {
+		t.Errorf("error does not end with the last stderr line: %.200q", msg)
+	}
+	if len(msg) > stderrTailBytes+256 {
+		t.Errorf("error message is %d bytes, want at most the %d-byte stderr tail plus the exit status", len(msg), stderrTailBytes)
+	}
+}
+
+// The backend's own AMDL_* variables, secrets included, never reach a hook
+// process.
+func TestExecHookDoesNotInheritBackendVariables(t *testing.T) {
+	t.Setenv("AMDL_CATALOG_MEDIA_USER_TOKEN", "secret")
+	t.Setenv("HOOK_TEST_INHERITED", "kept")
+	entry := Entry{Name: "env", Type: "exec", Events: []string{"job_finished"},
+		Command: `test -z "${AMDL_CATALOG_MEDIA_USER_TOKEN+set}" && test "$HOOK_TEST_INHERITED" = kept && test "$AMDL_JOB_ID" = job_1`}
+	if err := (&execRunner{}).Run(context.Background(), entry, Payload{Event: "job_finished", Job: JobPayload{ID: "job_1"}}); err != nil {
+		t.Fatalf("hook environment check failed: %v", err)
+	}
+}

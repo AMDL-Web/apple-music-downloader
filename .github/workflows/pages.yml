@@ -1,0 +1,72 @@
+name: Pages
+
+# Build the website (make site) and publish it on GitHub
+# Pages at its custom domain. It follows the branch build.mjs#REF
+# names: dev until a release, main from then on
+# (apps/site/README.md#release-day).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/site/**
+      - Makefile
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      # The page's install commands and repository links follow build.mjs#REF,
+      # so a page must be built from the branch it points at.
+      - name: Check the site describes this branch
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: node --input-type=module -e "import { REF } from './apps/site/build.mjs'; if (REF !== process.env.BRANCH) { console.error('apps/site/build.mjs#REF is ' + REF + ', not ' + process.env.BRANCH); process.exit(1); }"
+
+      # og.mjs draws the Open Graph card with the runner's Chrome; Inter is
+      # the card's typeface.
+      - name: Install the card's font
+        run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends fonts-inter
+
+      - name: Build
+        run: make site SITE_OUT=_site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

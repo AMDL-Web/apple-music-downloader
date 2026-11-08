@@ -1,0 +1,236 @@
+package applemusic
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"strings"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"amdl/internal/config"
+	"amdl/internal/limits"
+)
+
+type closeTrackingBody struct {
+	io.Reader
+	closed bool
+}
+
+func (b *closeTrackingBody) Close() error {
+	b.closed = true
+	return nil
+}
+
+// The gate tests run on a RoundTripper fake inside a synctest bubble: the
+// behavior is the gate's timing and its handling of the response objects, so
+// virtual time makes the delays exact and a real listener would add nothing.
+
+func okResponse() *http.Response {
+	return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}
+}
+
+func TestAppleRequestRetries429OnceAndClosesFirstBody(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := newTestCatalogClient(config.CatalogConfig{MaxParallelRequests: 2}, slog.Default())
+		firstBody := &closeTrackingBody{Reader: strings.NewReader("limited")}
+		calls := 0
+		client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls++
+			if calls == 1 {
+				return &http.Response{StatusCode: http.StatusTooManyRequests, Status: "429 Too Many Requests", Header: make(http.Header), Body: firstBody}, nil
+			}
+			return okResponse(), nil
+		})}
+		client.retryDelay = func(http.Header) time.Duration { return 30 * time.Millisecond }
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.music.apple.com/test", nil)
+		started := time.Now()
+		resp, err := client.doAppleRequest(context.Background(), req, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if calls != 2 {
+			t.Fatalf("calls = %d, want exactly one retry", calls)
+		}
+		if !firstBody.closed {
+			t.Fatal("first 429 body was not closed before retry")
+		}
+		if elapsed := time.Since(started); elapsed < 30*time.Millisecond {
+			t.Fatalf("retry began after %v, want the 30ms shared cooldown", elapsed)
+		}
+	})
+}
+
+func TestAppleRequestReturnsSecond429(t *testing.T) {
+	client := newTestCatalogClient(config.CatalogConfig{MaxParallelRequests: 2}, slog.Default())
+	calls := 0
+	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: http.StatusTooManyRequests, Status: "429 Too Many Requests", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("limited"))}, nil
+	})}
+	client.retryDelay = func(http.Header) time.Duration { return 0 }
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.music.apple.com/test", nil)
+	resp, err := client.doAppleRequest(context.Background(), req, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests || calls != 2 {
+		t.Fatalf("status=%d calls=%d, want second 429 returned after 2 calls", resp.StatusCode, calls)
+	}
+}
+
+func TestAppleRequestRateAppliesOnlyToAuthenticatedAPI(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := newTestCatalogClient(config.CatalogConfig{MaxParallelRequests: 2}, slog.Default())
+		client.gate = limits.NewRequestGate(2, 1, 1)
+		client.http = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return okResponse(), nil })}
+		send := func(url string, rateLimited bool, timeout time.Duration) error {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			resp, err := client.doAppleRequest(ctx, req, rateLimited)
+			if err == nil {
+				resp.Body.Close()
+			}
+			return err
+		}
+
+		// The first authenticated request takes the bucket's one token.
+		if err := send("https://api.music.apple.com/first", true, time.Second); err != nil {
+			t.Fatal(err)
+		}
+		if err := send("https://is1-ssl.mzstatic.com/cover", false, 100*time.Millisecond); err != nil {
+			t.Fatalf("non-authenticated Apple request was incorrectly rate limited: %v", err)
+		}
+		if err := send("https://api.music.apple.com/second", true, 500*time.Millisecond); err == nil {
+			t.Fatal("second authenticated request bypassed the exhausted rate bucket")
+		}
+	})
+}
+
+func TestRetryAfterParsing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		// The bubble's clock starts on a whole second, so an HTTP date is exact.
+		future := time.Now().Add(2 * time.Second).UTC().Format(http.TimeFormat)
+		for _, tt := range []struct {
+			header   http.Header
+			min, max time.Duration
+		}{
+			{http.Header{"Retry-After": []string{"3"}}, 3 * time.Second, 3 * time.Second},
+			{http.Header{"Retry-After": []string{future}}, 2 * time.Second, 2 * time.Second},
+			{make(http.Header), time.Second, 1250*time.Millisecond - 1},
+		} {
+			if got := defaultRetryDelay(tt.header); got < tt.min || got > tt.max {
+				t.Errorf("defaultRetryDelay(%v) = %v, want [%v, %v]", tt.header, got, tt.min, tt.max)
+			}
+		}
+	})
+}
+
+func TestReadLimitedRejectsOversizedUpstreamResponse(t *testing.T) {
+	if _, err := readLimited(strings.NewReader("12345"), 4); err == nil {
+		t.Fatal("readLimited accepted an upstream response larger than its limit")
+	}
+}
+
+func TestCatalogRequestErrorClassificationAndRetryAfter(t *testing.T) {
+	if !(catalogRequestError{statusCode: http.StatusNotFound}).NonRetryable() {
+		t.Fatal("404 should be non-retryable")
+	}
+	if (catalogRequestError{statusCode: http.StatusTooManyRequests}).NonRetryable() {
+		t.Fatal("429 should remain retryable")
+	}
+	now := time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC)
+	if got := parseRetryAfter("3", now); got != 3*time.Second {
+		t.Fatalf("delta Retry-After=%s, want 3s", got)
+	}
+	if got := parseRetryAfter(now.Add(5*time.Second).Format(http.TimeFormat), now); got != 5*time.Second {
+		t.Fatalf("date Retry-After=%s, want 5s", got)
+	}
+}
+
+// A catalogRequestError is what job rows and API responses show, so Error()
+// must read like a sentence and never quote Apple's raw JSON; the body is
+// reachable for logs through UpstreamBody (logging.UpstreamBody unwraps to it).
+func TestCatalogRequestErrorMessage(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		err  catalogRequestError
+		want string
+	}{
+		{"404 names the resource", catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/us/albums/123"},
+			"Apple Music has no album 123 in storefront us (404)"},
+		{"type without id names both", catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/zz/albums"},
+			"Apple Music catalog albums request in storefront zz failed: 404 Not Found"},
+		{"unparseable path names the path", catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/zz"},
+			"Apple Music request /v1/catalog/zz failed: 404 Not Found"},
+		{"429 keeps the status", catalogRequestError{statusCode: 429, status: "429 Too Many Requests", path: "/v1/catalog/us/albums/123"},
+			"Apple Music request for album 123 in storefront us failed: 429 Too Many Requests"},
+		{"non-catalog path names the path", catalogRequestError{statusCode: 401, status: "401 Unauthorized", path: "/v1/me/library/songs"},
+			"Apple Music request /v1/me/library/songs failed: 401 Unauthorized"},
+		{"empty path falls back to status", catalogRequestError{statusCode: 503, status: "503 Service Unavailable"},
+			"Apple Music request failed: 503 Service Unavailable"},
+		{"missing status synthesizes one", catalogRequestError{statusCode: 404, path: "/v1/catalog/us/songs/9"},
+			"Apple Music has no song 9 in storefront us (404)"},
+		{"plural unknown type stays plural", catalogRequestError{statusCode: 404, path: "/v1/catalog/us/widgets/7"},
+			"Apple Music has no widgets 7 in storefront us (404)"},
+	} {
+		if got := tt.err.Error(); got != tt.want {
+			t.Errorf("%s: Error() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	raw := `{"errors":[{"id":"E1","status":"404","title":"Resource Not Found"}]}`
+	err := catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/us/albums/123", body: raw}
+	if strings.Contains(err.Error(), raw) || strings.Contains(err.Error(), "Resource Not Found") {
+		t.Fatalf("Error() leaks the upstream body: %q", err.Error())
+	}
+	wrapped := fmt.Errorf("resolve tracks: %w", err)
+	var carrier interface{ UpstreamBody() string }
+	if !errors.As(wrapped, &carrier) || carrier.UpstreamBody() != raw {
+		t.Fatal("UpstreamBody() did not reach the body through wrapping")
+	}
+}
+
+// decodeCatalogResponse records the request path so the message can name the
+// resource; a synthetic response without a Request still yields a clean error.
+func TestDecodeCatalogResponseKeepsRequestPath(t *testing.T) {
+	req, _ := http.NewRequest(http.MethodGet, "https://api.music.apple.com/v1/catalog/zz/albums/abc", nil)
+	resp := &http.Response{StatusCode: 404, Status: "404 Not Found", Request: req, Body: io.NopCloser(strings.NewReader(`{"errors":[]}`)), Header: make(http.Header)}
+	var out struct{}
+	err := decodeCatalogResponse(resp, &out)
+	if err == nil || err.Error() != "Apple Music has no album abc in storefront zz (404)" {
+		t.Fatalf("decodeCatalogResponse() error = %v", err)
+	}
+	var requestErr catalogRequestError
+	if !errors.As(err, &requestErr) || requestErr.UpstreamBody() != `{"errors":[]}` {
+		t.Fatalf("decodeCatalogResponse() error = %#v, want the body kept for logs", err)
+	}
+	resp = &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("oops")), Header: make(http.Header)}
+	err = decodeCatalogResponse(resp, &out)
+	if err == nil || err.Error() != "Apple Music request failed: 500 Internal Server Error" {
+		t.Fatalf("decodeCatalogResponse() without Request error = %v", err)
+	}
+}
+
+func TestIsNotFound(t *testing.T) {
+	missing := fmt.Errorf("get album: %w", catalogRequestError{statusCode: http.StatusNotFound, path: "/v1/catalog/us/albums/1"})
+	if !IsNotFound(missing) {
+		t.Fatalf("IsNotFound(%v) = false, want true for a wrapped 404", missing)
+	}
+	for _, err := range []error{
+		catalogRequestError{statusCode: http.StatusBadRequest},
+		catalogRequestError{statusCode: http.StatusInternalServerError},
+		errors.New("Apple Music has no album 1 in storefront us (404)"),
+		nil,
+	} {
+		if IsNotFound(err) {
+			t.Fatalf("IsNotFound(%v) = true, want false", err)
+		}
+	}
+}

@@ -1,18 +1,28 @@
 .DS_Store
 .worktrees/
 .claude/worktrees/
-
-# Reference projects and old app snapshots used for analysis only.
-explore/
+# Personal Claude Code settings.
+.claude/settings.local.json
 
 # Runtime data produced by the rewritten backend.
 data/
-/amdl-api
+# make build output.
+/bin/
+# make cover output.
+/build/cover/
+/dist/
+# make desktop and make desktop-web output.
+/apps/desktop/build/
+# make tui-web output.
+/apps/amdl/build/
+# node apps/site/build.mjs output.
+/apps/site/dist/
+/apps/site/build/
 
 test/
 
 # docs/ holds the reference documentation the README links to, so it is
-# tracked. Agent plans and design scratch stay local.
+# tracked. Plans and design scratch stay local.
 /docs/superpowers/
 
 *.p8
@@ -30,9 +40,13 @@ coverage.txt
 # Live config file: bootstrapped from the example file on first start and
 # rewritten by PUT /api/v1/config. It is not tracked.
 configs/config.yaml
+configs/hooks.yaml
 # Legacy split runtime file and the one-time archive created after merging it.
 configs/runtime.yaml
 configs/runtime.yaml.pre-merge.bak*
 # Backup created by the previous single-to-split migration may still contain
 # runtime secrets in upgraded workspaces.
 configs/config.yaml.pre-split.bak
+# What deploy/docker-compose.yml creates beside itself when run from a clone
+# (data/ above already matches at any depth).
+/deploy/configs/

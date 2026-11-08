@@ -1,0 +1,42 @@
+{
+  "data": [
+    {
+      "id": "pl.u-1",
+      "type": "playlists",
+      "attributes": {
+        "name": "Private",
+        "artwork": {
+          "url": ""
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "song-1",
+              "type": "songs",
+              "attributes": {
+                "name": "One",
+                "artistName": "Artist"
+              }
+            }
+          ]
+        },
+        "library": {
+          "data": [
+            {
+              "id": "p.lib1",
+              "type": "library-playlists",
+              "attributes": {
+                "name": "Private",
+                "artwork": {
+                  "url": "https://blob.example/image?sig=abc"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

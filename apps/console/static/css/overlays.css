@@ -1,0 +1,695 @@
+/* ---- Overlays ------------------------------------------------------ */
+
+.palette,
+.sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: 64vh;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-overlay);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  animation: rise var(--dur-base) var(--ease-out);
+}
+
+.sheet {
+  width: min(480px, 100%);
+  gap: var(--s-4);
+  padding: var(--s-5);
+  overflow: auto;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.palette-input {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 48px;
+  padding: 0 var(--s-4);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.palette-input:focus-within {
+  box-shadow: inset 0 -2px 0 var(--focus);
+}
+
+.palette-input input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  outline: none;
+}
+
+.palette-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  list-style: none;
+  margin: 0;
+  padding: var(--s-1);
+  overflow: auto;
+}
+
+.palette-group {
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--w-medium);
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+.palette-item[aria-selected="true"] {
+  background: var(--bg-selected);
+}
+
+.palette-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette-sub {
+  /* Only the room the label leaves: on a narrow screen the label wins. */
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette-keys {
+  margin-left: auto;
+}
+
+.palette-empty {
+  padding: var(--s-4) var(--s-3);
+  color: var(--text-secondary);
+}
+
+.palette-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  padding: var(--s-2) var(--s-4);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* Touch screens: a visible Cancel (no Escape key), no keyboard hints, and
+   44 px rows with the sub line under the label (views/palette.js also drops
+   the Navigate group there: the tab bar does that). */
+.palette-close {
+  display: none;
+}
+
+@media (hover: none) {
+  .palette-close {
+    display: inline-flex;
+  }
+
+  .palette-keys,
+  .palette-foot {
+    display: none;
+  }
+
+  .palette-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: center;
+    column-gap: var(--s-3);
+    min-height: var(--touch);
+    padding-block: var(--s-1);
+  }
+
+  .palette-item > .icon {
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .palette-sub {
+    grid-column: 2;
+  }
+}
+
+.toasts {
+  position: fixed;
+  right: var(--s-6);
+  bottom: var(--s-6);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  pointer-events: none;
+}
+
+/* Items sit on the first line (--toast-row): the icon and buttons stay
+   beside a long message's first line instead of its middle. */
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-width: 240px;
+  max-width: 400px;
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  pointer-events: auto;
+  animation: rise var(--dur-base) var(--ease-out);
+}
+
+.toast-msg {
+  flex: 1;
+  min-width: 0;
+  padding-block: calc((var(--toast-row) - 1lh) / 2);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.toast > .icon {
+  flex-shrink: 0;
+  margin-top: calc((var(--toast-row) - var(--icon)) / 2);
+}
+
+.toast > .btn {
+  margin-top: calc((var(--toast-row) - var(--control-h-sm)) / 2);
+}
+
+/* Dialog panels (ui/dialogs.js) take focus only when they hold no control. */
+[data-dialog]:focus {
+  outline: none;
+}
+
+/* Phone sheets (Dialog placement="bottom": Qualities, confirmations)
+   share one look: full width, resting on the tab bar (down to the screen
+   edge, past the safe area, over the full-screen drawer), rounded top
+   corners, a grabber, and scrolling that stays inside. The scrim and
+   Escape close them. */
+.overlay-host[data-placement="bottom"] {
+  align-items: flex-end;
+  padding: var(--s-8) 0 calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+}
+
+:root.has-overlay .overlay-host[data-placement="bottom"] {
+  padding-bottom: 0;
+}
+
+.overlay-host[data-placement="bottom"] > [data-dialog] {
+  width: 100%;
+  max-height: 100%;
+  padding-top: var(--s-6);
+  border-radius: var(--r-overlay) var(--r-overlay) 0 0;
+  overscroll-behavior: contain;
+}
+
+:root.has-overlay .overlay-host[data-placement="bottom"] > [data-dialog] {
+  padding-bottom: calc(var(--s-5) + env(safe-area-inset-bottom));
+}
+
+.overlay-host[data-placement="bottom"] > [data-dialog]::before {
+  content: "";
+  position: absolute;
+  top: var(--s-2);
+  left: calc(50% - 18px);
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--border-control);
+}
+
+.dialog-confirm {
+  width: min(420px, 100%);
+}
+
+.dialog-body {
+  color: var(--text-secondary);
+}
+
+/* New download's questions (views/download-ask.js): a label over each choice. */
+.ask {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.ask-row {
+  display: grid;
+  gap: var(--s-2);
+}
+
+/* Each choice spans the dialog, as the buttons under it do. */
+.ask .seg {
+  display: flex;
+}
+
+.ask .seg-btn {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.ask-label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.ask-note {
+  margin: 0;
+}
+
+/* Another quality replaces nothing; the line keeps its room so the dialog does not move. */
+.ask-note[data-hidden] {
+  visibility: hidden;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+.dialog-actions > .btn {
+  flex: 0 0 auto;
+}
+
+/* Three choices sit in one row in macOS order: the destructive one alone on
+   the left, Cancel and the primary on the right. */
+.dialog-confirm:has(> .dialog-actions[data-choices="3"]) {
+  width: min(520px, 100%);
+}
+
+.dialog-actions[data-choices="3"] {
+  flex-wrap: nowrap;
+}
+
+.dialog-actions[data-choices="3"] > .dialog-confirm-btn {
+  margin-right: auto;
+}
+
+/* On a phone sheet the choices stack full width: the primary first, then
+   the destructive one, Cancel last (ConfirmDialog renders them in that order). */
+[data-placement="bottom"] > .dialog-confirm > .dialog-actions {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+[data-placement="bottom"] > .dialog-confirm > .dialog-actions > .btn {
+  width: 100%;
+  margin: 0;
+}
+
+/* A menu behind a button (ui/menu.js): from 640 px a small panel over a
+   clear scrim, placed from the button (style top or bottom, and right); on
+   a phone a sheet of full-width rows under the job's name. Items fill on
+   hover and on keyboard focus, in the panel's shape less its padding. */
+.overlay-host[data-placement="anchor"] {
+  display: block;
+  padding: 0;
+}
+
+.overlay-host[data-placement="anchor"] > .scrim {
+  background: transparent;
+  animation: none;
+}
+
+.menu {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-width: 176px;
+  max-width: calc(100vw - var(--s-4));
+  padding: var(--s-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: calc(var(--r-control) + var(--s-1));
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  animation: fade-in var(--dur-fast) var(--ease-out);
+}
+
+.menu:focus {
+  outline: none;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h);
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: var(--s-1) var(--s-2);
+  background: var(--border-subtle);
+}
+
+.menu-sheet {
+  gap: 0;
+  padding: var(--s-6) var(--s-2) var(--s-3);
+}
+
+.menu-heading {
+  margin: 0;
+  padding: 0 var(--s-3) var(--s-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-regular);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-sheet > .menu-item {
+  min-height: var(--touch);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+}
+
+@media (pointer: coarse) {
+  .menu-item {
+    min-height: var(--touch);
+  }
+}
+
+/* The shortcut sheet: opens near the top, its head stays while the groups
+   scroll, two columns from 640 px. Keys are keycaps; the words around them
+   ("then", "in a field") are plain text. */
+.overlay-host:has(> .sheet-shortcuts)[data-placement="center"] {
+  padding-top: 6vh;
+}
+
+.sheet-shortcuts {
+  width: min(760px, 100%);
+  max-height: calc(94vh - var(--s-2));
+  overflow: hidden;
+}
+
+.shortcut-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Two flowing columns, not a grid: a group follows the one above it in its
+   column instead of waiting for the row's tallest group. */
+.shortcut-group {
+  break-inside: avoid;
+}
+
+.shortcut-group + .shortcut-group {
+  margin-top: var(--s-5);
+}
+
+@media (min-width: 640px) {
+  .shortcut-groups {
+    columns: 2;
+    column-gap: var(--s-8);
+  }
+}
+
+.shortcut-group-title {
+  margin: 0 0 var(--s-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-semibold);
+}
+
+.shortcut-keys {
+  color: var(--text-secondary);
+}
+
+.shortcut-keys kbd {
+  min-width: 20px;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+/* ---- States -------------------------------------------------------- */
+
+/* Placeholders fade in after --skel-delay, so a fast load shows the data
+   where they stood without a flash of grey first; they still hold the room. */
+.skel-badge {
+  animation: skel-in var(--dur-base) var(--ease-out) var(--skel-delay) both;
+}
+
+.skel {
+  display: block;
+  border-radius: var(--r-badge);
+  corner-shape: round;
+  background: var(--bg-hover);
+  animation:
+    skel-in var(--dur-base) var(--ease-out) var(--skel-delay) both,
+    skel 1.2s ease-in-out calc(var(--skel-delay) + var(--dur-base)) infinite alternate;
+}
+
+.skel-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--card-pad-x);
+}
+
+.skel-text {
+  width: 60%;
+  height: 12px;
+}
+
+/* One line of the text it stands in for: inside a title, as tall as the title's line. */
+.skel-lh {
+  box-sizing: border-box;
+  width: min(60%, 14em);
+  height: 1lh;
+  border-block: 0.2lh solid transparent;
+  background-clip: padding-box;
+}
+
+/* A line of text to be: it holds a no-break space, so it has the baseline a
+   word would have there (rows aligned on baselines keep their height), and
+   draws its bar across the middle of the line. */
+.skel-text {
+  display: inline-block;
+  width: min(60%, 14em);
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)) 0 50% / 100% 0.6lh no-repeat;
+}
+
+.skel-badge > .icon {
+  visibility: hidden;
+}
+
+.skel-badge > .skel-text {
+  width: 5em;
+  height: 1lh;
+}
+
+.skel-short {
+  width: min(35%, 8em);
+}
+
+.job-row.is-skel {
+  pointer-events: none;
+}
+
+.skel-line {
+  height: 20px;
+}
+
+.skel-row,
+.skel-track {
+  height: 48px;
+}
+
+.skel-log {
+  height: 14px;
+}
+
+.skel-kpi {
+  width: 64px;
+  height: 32px;
+  align-self: center;
+}
+
+.skel-tile {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-control);
+}
+
+.skel-chart {
+  height: 220px;
+}
+
+@keyframes skel-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes skel {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.5;
+  }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-12) var(--s-4);
+  text-align: center;
+}
+
+.empty-icon {
+  color: var(--text-secondary);
+}
+
+.empty-title {
+  font-weight: var(--w-medium);
+}
+
+.empty-body {
+  max-width: 48ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.error-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
+}
+
+.card-body > .error-note {
+  padding: 0;
+}
+
+.card-flush > .card-body > .error-note,
+.card-flush > .card-body > .empty {
+  padding-left: var(--card-pad-x);
+  padding-right: var(--card-pad-x);
+}
+
+.card-flush > .card-body > .error-note {
+  padding-top: var(--s-4);
+  padding-bottom: var(--s-4);
+}
+
+.error-msg {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  overflow-wrap: anywhere;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-notice);
+  background: var(--role-tint, var(--neutral-tint));
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.notice > .icon {
+  margin-top: var(--s-0_5);
+}
+
+.notice-body {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Motion -------------------------------------------------------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+

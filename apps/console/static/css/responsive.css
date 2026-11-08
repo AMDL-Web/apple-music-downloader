@@ -1,0 +1,689 @@
+/* ---- Responsive ---------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  .span-8 {
+    grid-column: span 8;
+  }
+
+  .span-6 {
+    grid-column: span 6;
+  }
+
+  .span-4 {
+    grid-column: span 4;
+  }
+}
+
+@media (max-width: 1279px) {
+  .job-row {
+    grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 152px) 148px 72px var(--job-trail, 16px);
+  }
+}
+
+@media (max-width: 1023px) {
+  .shell {
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  }
+
+  .sidebar {
+    align-items: center;
+    padding: 0 var(--s-1_5) var(--s-3);
+  }
+
+  .brand {
+    padding: 0;
+  }
+
+  .brand-text,
+  .nav-label,
+  .sidebar-new-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .nav-item {
+    justify-content: center;
+    width: var(--touch);
+    height: 40px;
+    padding: 0;
+  }
+
+  .sidebar .nav-item .icon-nav {
+    width: var(--icon-nav);
+    height: var(--icon-nav);
+  }
+
+  .sidebar .sidebar-new {
+    width: var(--touch);
+    height: 40px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 0 var(--s-1);
+    border-radius: var(--r-badge);
+    corner-shape: round;
+    background: var(--info-tint);
+    color: var(--text-primary);
+    font-size: var(--fs-11);
+    line-height: var(--lh-11);
+  }
+
+  .topbar,
+  .main {
+    padding-left: var(--s-5);
+    padding-right: var(--s-5);
+  }
+
+  .main {
+    padding-top: var(--s-5);
+  }
+
+  .search-trigger {
+    width: auto;
+  }
+
+  .search-trigger-text,
+  .search-trigger-kbd {
+    display: none;
+  }
+
+  .job-row {
+    grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 128px) 148px var(--job-trail, 16px);
+  }
+
+  .job-updated {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .topbar {
+    gap: var(--s-2);
+    padding: 0 var(--s-4);
+  }
+
+  /* Retry moves under the text so the title keeps the row's width. */
+  .attention-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "title"
+      "detail"
+      "action";
+  }
+
+  .attention-row > .btn {
+    justify-self: start;
+    margin-top: var(--s-2);
+  }
+
+  .topbar-right {
+    gap: var(--s-1);
+  }
+
+  .search-trigger {
+    width: var(--touch);
+    height: var(--touch);
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .conn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .main {
+    padding: var(--s-4) var(--s-4) calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-4));
+  }
+
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: var(--chrome-border);
+    background: var(--bg-chrome);
+  }
+
+  .tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-0_5);
+    min-height: var(--touch);
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .tab-label {
+    font-size: var(--fs-11);
+    line-height: var(--lh-11);
+  }
+
+  .tab[aria-current="page"] {
+    color: var(--text-primary);
+    font-weight: var(--w-medium);
+  }
+
+  .tab[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 24px;
+    height: 2px;
+    border-radius: var(--r-badge);
+    corner-shape: round;
+    background: var(--ink);
+  }
+
+  /* New download, the middle of five equal tabs, is the primary action: one
+     large mark with no label. The whole tab stays the hit target. */
+  .tab-new-mark {
+    display: grid;
+    place-items: center;
+    width: calc(var(--touch) + var(--s-3));
+    height: calc(var(--touch) - var(--s-1));
+    border-radius: var(--r-control);
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .tab-new-mark .icon {
+    width: calc(var(--icon-nav) + var(--s-1));
+    height: calc(var(--icon-nav) + var(--s-1));
+  }
+
+  .tab-new[aria-current="page"]::before {
+    content: none;
+  }
+
+  .toolbar {
+    gap: var(--s-2);
+  }
+
+  .toolbar-filters {
+    flex-basis: 100%;
+  }
+
+  .search {
+    max-width: none;
+  }
+
+  .seg {
+    width: 100%;
+  }
+
+  .seg-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0 var(--s-2);
+  }
+
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi {
+    min-height: 80px;
+  }
+
+  .kpi-icon {
+    top: var(--s-3);
+    right: var(--s-3);
+  }
+
+  .job-row,
+  .job-list-compact .job-row {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "art main status"
+      "prog prog prog";
+    row-gap: var(--s-2);
+    min-height: 72px;
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .job-row > .art {
+    grid-area: art;
+  }
+
+  .job-main {
+    grid-area: main;
+  }
+
+  .job-status {
+    grid-area: status;
+  }
+
+  .job-progress {
+    grid-area: prog;
+  }
+
+  /* The live cards' time left drops its filler word. */
+  .jprog-rate-word {
+    display: none;
+  }
+
+  .job-row[data-progress="off"],
+  .job-list-compact .job-row[data-progress="off"] {
+    grid-template-areas: "art main status";
+  }
+
+  .job-row[data-progress="off"] > .job-progress {
+    display: none;
+  }
+
+  /* Selecting, the checkbox leads the row and the cover gives its room to
+     the title, the status and the reason. */
+  .job-list.is-selecting .job-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "main status"
+      "prog prog";
+  }
+
+  .job-list.is-selecting .job-row[data-progress="off"] {
+    grid-template-areas: "main status";
+  }
+
+  .job-list.is-selecting .job-row > .art {
+    display: none;
+  }
+
+  .job-updated,
+  .job-chevron {
+    display: none;
+  }
+
+  .drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .drawer-bar {
+    padding: 0 var(--s-2);
+  }
+
+  .drawer-back {
+    display: inline-flex;
+    width: auto;
+    padding: 0 var(--s-2);
+  }
+
+  .drawer-close {
+    display: none;
+  }
+
+  /* Actions fill their rows evenly, except Remove: it keeps its own width
+     at the row's end, away from where a thumb reaches for the others. */
+  .drawer-actions-row > .btn {
+    flex: 1 1 auto;
+  }
+
+  .drawer-actions .drawer-delete {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .drawer-actions .confirm {
+    flex-basis: 100%;
+  }
+
+  /* A notice's action goes under its text, which keeps the full width. */
+  .drawer-actions .notice {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .drawer-actions .notice > .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  /* The selection bar keeps select-all, the count and the actions on one row:
+     the buttons give up their icons. */
+  .bulk-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+  }
+
+  .bulk-action > .icon {
+    display: none;
+  }
+
+  .drawer-body {
+    padding: var(--s-4);
+  }
+
+  /* The last column is as wide as on a desktop: a size replacing a stage
+     percentage would otherwise move the length above it. */
+  .track {
+    grid-template-columns: 24px minmax(0, 1fr) auto 64px;
+    grid-template-areas:
+      "idx main main len"
+      "idx stages stages stages"
+      "idx status codec size"
+      "idx note note note";
+  }
+
+  .log-view {
+    max-height: max(320px, calc(100dvh - 340px));
+  }
+
+  .log-line {
+    grid-template-columns: 64px 36px minmax(0, 1fr);
+  }
+
+  .log-comp {
+    display: none;
+  }
+
+  .log-line {
+    flex-basis: 100%;
+  }
+
+  .log-chips {
+    padding: 0 0 var(--s-1) var(--s-3);
+  }
+
+  .filters-toggle {
+    display: inline-flex;
+  }
+
+  .log-filters {
+    display: none;
+  }
+
+  .log-filters.is-open {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-2);
+    flex-basis: 100%;
+  }
+
+  .log-detail {
+    padding-left: var(--s-3);
+  }
+
+  .toolbar-right {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table th,
+  .table td {
+    display: block;
+  }
+
+  .table tr {
+    padding: var(--s-2) 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .table th,
+  .table td {
+    height: auto;
+    padding: var(--s-0_5) 0;
+    border: 0;
+    text-align: left;
+  }
+
+  .table td::before {
+    content: attr(data-label) ": ";
+    color: var(--text-secondary);
+  }
+
+  .table .num {
+    text-align: left;
+  }
+
+  .toasts {
+    left: var(--s-4);
+    right: var(--s-4);
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+  }
+
+  .toast {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .overlay-host {
+    padding-top: var(--s-2);
+  }
+
+  .palette {
+    max-height: calc(100dvh - var(--s-4));
+  }
+}
+
+/* Touch. A coarse pointer gets the phone's 44px targets at any width, so a
+   phone in landscape (844 wide, 390 tall) and a tablet match portrait.
+   Targets grow with min-height / min-width or an invisible hit area, never
+   the drawn size of a chip or a switch. */
+@media (max-width: 639px), (pointer: coarse) {
+  .toast {
+    --toast-row: var(--touch);
+  }
+
+  .toast > .btn {
+    margin-top: 0;
+  }
+
+  /* Text toggles that are the only way to their content: a full 44 px to tap. */
+  .drawer-details > summary,
+  .notice-more > summary {
+    padding-block: calc((var(--touch) - 1lh) / 2);
+  }
+
+  .wrap-switch {
+    min-height: var(--touch);
+  }
+
+  /* 16 px or more, or iOS Safari zooms the page into a focused field. */
+  :is(textarea, input, select, .select, .field-input, .search input) {
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+
+  .btn,
+  .select,
+  .search,
+  .seg-btn,
+  .level-chip,
+  .field-input,
+  .nav-item,
+  .check,
+  .conn,
+  .search-trigger,
+  .job-check,
+  .bulk-all {
+    min-height: var(--touch);
+  }
+
+  .btn,
+  .seg-btn,
+  .nav-item,
+  .job-check,
+  .bulk-all,
+  .search-trigger,
+  .sidebar .sidebar-new {
+    min-width: var(--touch);
+  }
+
+  .sidebar .sidebar-new {
+    min-height: var(--touch);
+  }
+
+  /* A skin sets its own min-height on these; data-skin outranks it. */
+  :root[data-skin] .settings-nav-list .settings-nav-item,
+  :root[data-skin] .log-row .log-line {
+    min-height: var(--touch);
+  }
+
+  .log-line {
+    align-content: center;
+  }
+
+  /* The dot stays at the chip's end, so it does not move when the words come. */
+  .conn {
+    min-width: var(--touch);
+    justify-content: flex-end;
+  }
+
+  .search-trigger {
+    justify-content: center;
+  }
+
+  /* A chip stays 20px drawn; its row is a full target tall, so the invisible
+     hit area below reaches 44px without a neighbouring row covering it. */
+  .log-chips {
+    align-items: center;
+    min-height: var(--touch);
+    padding-block: 0;
+  }
+
+  .attr-chip::after,
+  .field-switch::after {
+    content: "";
+    position: absolute;
+    inset: calc(-1 * var(--s-3)) calc(-1 * var(--s-1));
+  }
+
+  /* The chip's padding box is 18px tall (20 less its borders). */
+  .attr-chip::after {
+    inset: calc((18px - var(--touch)) / 2) calc(-1 * var(--s-1));
+  }
+
+  /* The switch is 26px tall: 100% is its own height. */
+  .field-switch::after {
+    inset: calc((100% - var(--touch)) / 2) calc(-1 * var(--s-1));
+  }
+
+  /* The remove button is a full target itself; the negative margin keeps the
+     chip as tall as before. */
+  .filter-chip-x {
+    width: var(--touch);
+    height: var(--touch);
+    margin: calc((20px - var(--touch)) / 2);
+  }
+
+  /* Links that stand alone on a line: the box itself is a full target. */
+  .health-strip-link,
+  .drawer-files-link,
+  .filter-chip-link {
+    display: inline-block;
+    min-width: var(--touch);
+    padding-block: calc((var(--touch) - 1lh) / 2);
+    margin-block: calc((1lh - var(--touch)) / 2);
+  }
+
+  /* Text links keep their line; padding grows the hit box up and down and
+     the negative margin gives the room back. */
+  .link,
+  .drawer-artist {
+    padding-block: var(--s-3);
+    margin-block: calc(-1 * var(--s-3));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .pulse::after {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .badge,
+  .chip,
+  .seg-btn[aria-pressed="true"],
+  .nav-item[aria-current="page"],
+  .level-chip[aria-pressed="true"],
+  .palette-item[aria-selected="true"] {
+    border: 1px solid CanvasText;
+  }
+
+  /* The skin draws a badge without padding; the border would touch the text. */
+  :root:root:root .badge {
+    padding-inline: var(--s-1_5);
+  }
+
+  .pbar,
+.pcell,
+.stage,
+.meter,
+.abar,
+.conn-dot,
+.log-dot,
+.pulse,
+.chart-bar {
+    border: 1px solid CanvasText;
+  }
+
+  /* A track that has an outcome stays filled; remaining cells are hollow. */
+  .pcell:not([data-state="remaining"]) {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .abar-run {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .abar-live {
+    forced-color-adjust: none;
+    background: GrayText;
+    opacity: 1;
+  }
+}

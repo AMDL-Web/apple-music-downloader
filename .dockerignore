@@ -1,5 +1,8 @@
-# 构建上下文只需要 Go 源码和示例配置;其余一律排除,
-# 避免把运行数据、密钥或本地产物打进镜像。
+# The build context is the repository root (docker build -f
+# deploy/server/Dockerfile .). It needs only the Go sources, the console's
+# static files, the example configs and the entrypoint; everything else is
+# excluded so runtime data, keys or local artifacts never end up in the image.
+# The classic builder reads this file only from the context root.
 .git
 .github
 .claude
@@ -8,33 +11,35 @@
 .vscode
 .DS_Store
 
-# 参考仓库与本地运行数据。
-explore/
+# Local runtime data, tests and docs.
 data/
 test/
 docs/
 
-# 密钥永远不进镜像,需要时用卷挂载。
+# Keys never go into the image; mount them as a volume when needed.
 keys/
 *.p8
 
-# 本地构建产物与覆盖率文件。
-/amdl-api
+# Local build output and coverage files.
+/bin
 *.out
 coverage.txt
 
-# 本地/运行时配置;镜像里只保留 config.example.yaml 和 hooks.yaml。
+# Local/runtime configs; the image keeps only config.example.yaml and
+# hooks.example.yaml.
 *.local.yaml
 configs/config.yaml
-# 旧版双文件运行时配置及其合并后留下的一次性备份。
+configs/hooks.yaml
+# The old two-file runtime config and the one-off backups left by merging it.
 configs/runtime.yaml
 configs/runtime.yaml.pre-merge.bak*
 configs/config.yaml.pre-split.bak
 
-# 发版脚本等与镜像无关的工具。
+# Release scripts and other tools unrelated to the image.
 tools/
 
-# Docker 自身的文件不需要进上下文。
-Dockerfile
-docker-compose.yml
+# Deployment files other than the entrypoint. This also keeps out the configs/
+# and data/ that compose creates beside itself when run from deploy/ in a clone.
+deploy/
+!deploy/server/docker-entrypoint.sh
 .dockerignore

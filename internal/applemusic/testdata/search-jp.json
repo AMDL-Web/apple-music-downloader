@@ -1,0 +1,247 @@
+{
+ "results": {
+  "albums": {
+   "href": "/v1/catalog/jp/search?l=ja&limit=2&term=%E6%98%9F%E8%A1%97%E3%81%99%E3%81%84%E3%81%9B%E3%81%84&types=albums",
+   "next": "/v1/catalog/jp/search?l=ja&offset=2&term=%E6%98%9F%E8%A1%97%E3%81%99%E3%81%84%E3%81%9B%E3%81%84&types=albums",
+   "data": [
+    {
+     "id": "6820056553",
+     "type": "albums",
+     "href": "/v1/catalog/jp/albums/6820056553?l=ja",
+     "attributes": {
+      "artistName": "星街すいせい",
+      "artwork": {
+       "bgColor": "b8dcf0",
+       "hasP3": false,
+       "height": 4000,
+       "textColor1": "000204",
+       "textColor2": "053845",
+       "textColor3": "252e33",
+       "textColor4": "295967",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/7f/a0/1e/7fa01eac-757e-97fb-c924-9731f52f18f7/4573623373906.jpg/{w}x{h}bb.jpg",
+       "width": 4000
+      },
+      "audioTraits": [
+       "lossless",
+       "lossy-stereo"
+      ],
+      "copyright": "℗ 2026 COVER Corp., Studio STELLAR",
+      "genreNames": [
+       "J-Pop",
+       "ミュージック"
+      ],
+      "isCompilation": false,
+      "isComplete": true,
+      "isMasteredForItunes": false,
+      "isPrerelease": false,
+      "isSingle": true,
+      "name": "ゾンビゾンビゾンビ - Single",
+      "playParams": {
+       "id": "6820056553",
+       "kind": "album"
+      },
+      "recordLabel": "COVER Corp., Studio STELLAR",
+      "releaseDate": "2026-10-24",
+      "trackCount": 1,
+      "upc": "4573623373906",
+      "url": "https://music.apple.com/jp/album/%E3%82%BE%E3%83%B3%E3%83%93%E3%82%BE%E3%83%B3%E3%83%93%E3%82%BE%E3%83%B3%E3%83%93-single/6820056553"
+     }
+    },
+    {
+     "id": "6800641659",
+     "type": "albums",
+     "href": "/v1/catalog/jp/albums/6800641659?l=ja",
+     "attributes": {
+      "artistName": "星街すいせい",
+      "artwork": {
+       "bgColor": "ece3d9",
+       "hasP3": false,
+       "height": 4000,
+       "textColor1": "161616",
+       "textColor2": "201236",
+       "textColor3": "403f3d",
+       "textColor4": "493c56",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/70/25/8c/70258cd8-92c8-1640-615a-afd3c9542f06/4547366834413.jpg/{w}x{h}bb.jpg",
+       "width": 4000
+      },
+      "audioTraits": [
+       "atmos",
+       "hi-res-lossless",
+       "lossless",
+       "lossy-stereo",
+       "spatial"
+      ],
+      "copyright": "℗ 2026 Studio STELLAR",
+      "genreNames": [
+       "J-Pop",
+       "ミュージック"
+      ],
+      "isCompilation": false,
+      "isComplete": true,
+      "isMasteredForItunes": false,
+      "isPrerelease": false,
+      "isSingle": true,
+      "name": "GUM&DROP - Single",
+      "playParams": {
+       "id": "6800641659",
+       "kind": "album"
+      },
+      "recordLabel": "Studio STELLAR",
+      "releaseDate": "2026-08-31",
+      "trackCount": 1,
+      "upc": "4547366834413",
+      "url": "https://music.apple.com/jp/album/gum-drop-single/6800641659"
+     }
+    }
+   ]
+  },
+  "artists": {
+   "href": "/v1/catalog/jp/search?l=ja&limit=2&term=%E6%98%9F%E8%A1%97%E3%81%99%E3%81%84%E3%81%9B%E3%81%84&types=artists",
+   "data": [
+    {
+     "id": "1503670948",
+     "type": "artists",
+     "href": "/v1/catalog/jp/artists/1503670948?l=ja",
+     "attributes": {
+      "artwork": {
+       "bgColor": "899dce",
+       "defaultCropCode": "bb",
+       "hasP3": false,
+       "height": 805,
+       "textColor1": "130d0d",
+       "textColor2": "191811",
+       "textColor3": "2a2a34",
+       "textColor4": "2f3336",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/AMCArtistImages221/v4/33/b7/12/33b71234-9a80-bb43-ba51-90957936aa67/ami-identity-e6d23ad47868d1a630f4c3d23676d80b-2024-11-14T13-08-57.789Z_cropped.png/{w}x{h}bb.jpg",
+       "width": 805
+      },
+      "genreNames": [
+       "J-Pop"
+      ],
+      "name": "星街すいせい",
+      "url": "https://music.apple.com/jp/artist/%E6%98%9F%E8%A1%97%E3%81%99%E3%81%84%E3%81%9B%E3%81%84/1503670948"
+     },
+     "relationships": {
+      "albums": {
+       "href": "/v1/catalog/jp/artists/1503670948/albums?l=ja",
+       "next": "/v1/catalog/jp/artists/1503670948/albums?l=ja&offset=25",
+       "data": [
+        {
+         "id": "1807029198",
+         "type": "albums",
+         "href": "/v1/catalog/jp/albums/1807029198?l=ja"
+        },
+        {
+         "id": "1760452190",
+         "type": "albums",
+         "href": "/v1/catalog/jp/albums/1760452190?l=ja"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "songs": {
+   "href": "/v1/catalog/jp/search?l=ja&limit=2&term=%E6%98%9F%E8%A1%97%E3%81%99%E3%81%84%E3%81%9B%E3%81%84&types=songs",
+   "next": "/v1/catalog/jp/search?l=ja&offset=2&term=%E6%98%9F%E8%A1%97%E3%81%99%E3%81%84%E3%81%9B%E3%81%84&types=songs",
+   "data": [
+    {
+     "id": "1760452193",
+     "type": "songs",
+     "href": "/v1/catalog/jp/songs/1760452193?l=ja",
+     "attributes": {
+      "albumArtistName": "星街すいせい",
+      "albumName": "ビビデバ - Single",
+      "artistName": "星街すいせい",
+      "artwork": {
+       "bgColor": "000000",
+       "hasP3": false,
+       "height": 3000,
+       "textColor1": "a0bfdc",
+       "textColor2": "5cade6",
+       "textColor3": "8098b0",
+       "textColor4": "498bb8",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/4e/da/19/4eda19dd-47fb-62ea-8e75-fb604ef8064d/4547366700749.jpg/{w}x{h}bb.jpg",
+       "width": 3000
+      },
+      "audioLocale": "ja",
+      "audioTraits": [
+       "lossless",
+       "lossy-stereo"
+      ],
+      "composerName": "ツミキ",
+      "discNumber": 1,
+      "durationInMillis": 165267,
+      "genreNames": [
+       "J-Pop",
+       "ミュージック"
+      ],
+      "hasLyrics": true,
+      "hasTimeSyncedLyrics": true,
+      "isAppleDigitalMaster": false,
+      "isMasteredForItunes": false,
+      "isVocalAttenuationAllowed": true,
+      "isrc": "JPV752408464",
+      "name": "ビビデバ",
+      "playParams": {
+       "id": "1760452193",
+       "kind": "song"
+      },
+      "releaseDate": "2024-03-23",
+      "trackNumber": 1,
+      "url": "https://music.apple.com/jp/album/%E3%83%93%E3%83%93%E3%83%87%E3%83%90/1760452190?i=1760452193"
+     }
+    },
+    {
+     "id": "1585332602",
+     "type": "songs",
+     "href": "/v1/catalog/jp/songs/1585332602?l=ja",
+     "attributes": {
+      "albumArtistName": "星街すいせい",
+      "albumName": "Still Still Stellar",
+      "artistName": "星街すいせい",
+      "artwork": {
+       "bgColor": "413b4c",
+       "hasP3": false,
+       "height": 3000,
+       "textColor1": "e5e3e5",
+       "textColor2": "9abfe4",
+       "textColor3": "c4c1c6",
+       "textColor4": "88a5c5",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/94/11/16/9411169d-6c98-3134-3e99-1c9cb93c4b77/JKT.png/{w}x{h}bb.jpg",
+       "width": 3000
+      },
+      "audioLocale": "ja",
+      "audioTraits": [
+       "atmos",
+       "lossless",
+       "lossy-stereo",
+       "spatial"
+      ],
+      "discNumber": 1,
+      "durationInMillis": 301453,
+      "genreNames": [
+       "J-Pop",
+       "ミュージック"
+      ],
+      "hasLyrics": true,
+      "hasTimeSyncedLyrics": true,
+      "isAppleDigitalMaster": false,
+      "isMasteredForItunes": false,
+      "isVocalAttenuationAllowed": true,
+      "isrc": "JPV752104954",
+      "name": "Stellar Stellar",
+      "playParams": {
+       "id": "1585332602",
+       "kind": "song"
+      },
+      "releaseDate": "2021-09-29",
+      "trackNumber": 1,
+      "url": "https://music.apple.com/jp/album/stellar-stellar/1585332601?i=1585332602"
+     }
+    }
+   ]
+  }
+ }
+}

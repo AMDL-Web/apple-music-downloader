@@ -1,0 +1,320 @@
+/* ---- Queue page (views/queue*.js) ------------------------------------ */
+
+/* The failed count is the one number on the tabs that asks for attention. */
+.seg-count .seg-count-danger {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+/* On the open tab's thumb (gray in dark) the red would fall under 4.5:1. */
+.seg-btn[aria-pressed="true"] .seg-count-danger {
+  color: var(--text-primary);
+}
+
+/* A row's region (views/region-tag.js), first on its second line (first on
+   a failed add's title line), while the accounts serve two regions or
+   more: the quality chip's look, shorter than the line so a row keeps its
+   height. */
+.region-tag {
+  flex: none;
+  height: 16px;
+  padding: 0 var(--s-1);
+}
+
+.job-sub.has-region,
+.held-title.has-region {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+}
+
+.job-sub-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A tab's count keeps the room of two digits, so a count that changes
+   (or arrives) moves nothing beside it. */
+.page-queue .seg-num {
+  display: inline-block;
+  min-inline-size: 2ch;
+}
+
+/* Until the counts arrive the toolbar is laid out but not drawn (QueuePage's hold). */
+.page-queue[data-held] > .toolbar {
+  visibility: hidden;
+}
+
+/* The head of the list, inside its card: "5 results" while the filter is
+   set, Retry all on the Failed tab. */
+.queue-list-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: var(--control-h);
+  padding: var(--s-2) var(--card-pad-x);
+  border-bottom: var(--row-divider);
+}
+
+.queue-list-bar > .queue-retry-all {
+  margin-inline-start: auto;
+}
+
+.queue-count {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2);
+}
+
+/* Buttons sit beside a row's link, since a button cannot live inside it:
+   Retry on a failed job, then the "…" menu (views/queue-menu.js) on every
+   row. The trailing slot is as wide on every row (--job-trail, the width of
+   Retry, then the menu button), so the status, the time, Retry and "…" line
+   up down the list; the link runs under an empty Retry slot. Selecting, a
+   row has no buttons and its link keeps the same room at its end. The item
+   takes over the hover fill, so it stays while the pointer is on a button.
+   The Queue has no chevron: "…" ends the row. */
+.page-queue {
+  --job-trail: 76px;
+}
+
+.page-queue .job-chevron {
+  display: none;
+}
+
+.job-item[data-action] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--job-trail) auto;
+  align-items: center;
+  column-gap: var(--s-2);
+  padding-inline-end: calc(var(--card-pad-x) - var(--s-2));
+}
+
+.job-item[data-action]:hover {
+  background: var(--bg-hover);
+}
+
+.job-item[data-action] > .job-row {
+  --job-trail: 0px;
+  margin-inline-end: calc(-1 * var(--card-pad-x));
+}
+
+.job-item[data-action] > .job-row:hover {
+  background: transparent;
+}
+
+.page-queue .job-list.is-selecting > li > .job-row {
+  --job-trail: calc(76px + var(--s-2) + var(--control-h));
+}
+
+.job-retry {
+  grid-row: 1;
+  grid-column: 2;
+  justify-self: end;
+}
+
+.job-menu-btn {
+  grid-row: 1;
+  grid-column: -2;
+  color: var(--text-secondary);
+}
+
+/* On a phone the button meets the card's edge: its ring is drawn inside. */
+.job-menu-btn:focus-visible {
+  outline-offset: -2px;
+}
+
+.job-item .job-menu-btn:hover,
+.job-item .job-menu-btn[aria-expanded="true"] {
+  background: var(--track);
+  color: var(--text-primary);
+}
+
+@media (max-width: 639px), (pointer: coarse) {
+  .job-menu-btn {
+    width: var(--touch);
+    height: var(--touch);
+  }
+
+  .page-queue .job-list.is-selecting > li > .job-row {
+    --job-trail: calc(76px + var(--s-2) + var(--touch));
+  }
+}
+
+@media (max-width: 639px) {
+  /* On a phone "…" closes the row, its glyph where the row's padding ends
+     and its 44 px target over the link's padding, and a failed job's Retry
+     goes under the text, in line with the title. */
+  .job-item[data-action] {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0;
+    padding-inline-end: 0;
+  }
+
+  .job-item[data-action] > .job-row {
+    margin-inline-end: calc(-1 * (var(--s-4) + var(--s-1)));
+  }
+
+  .job-retry {
+    grid-row: 2;
+    grid-column: 1;
+    justify-self: start;
+    margin: 0 0 var(--s-3) calc(var(--s-4) + 48px + var(--s-3));
+  }
+}
+
+@media (max-width: 639px) {
+  /* The status tabs are a chip row that scrolls sideways, a count on every chip. */
+  .page-queue .seg {
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .page-queue .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* While chips lie past an edge of the row, that edge fades out
+     (views/queue-chips.js sets data-fade); the mask carries no colour. */
+  .page-queue .seg[data-fade="end"] {
+    mask-image: linear-gradient(to right, black calc(100% - var(--s-8)), transparent);
+  }
+
+  .page-queue .seg[data-fade="start"] {
+    mask-image: linear-gradient(to left, black calc(100% - var(--s-8)), transparent);
+  }
+
+  .page-queue .seg[data-fade="both"] {
+    mask-image: linear-gradient(to right, transparent, black var(--s-8), black calc(100% - var(--s-8)), transparent);
+  }
+
+  /* The filter takes a row of its own, wide enough for its placeholder and
+     what is typed; the type and Select share the row under it. */
+  .page-queue .toolbar-filters {
+    display: contents;
+  }
+
+  .page-queue .search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .page-queue .queue-tools {
+    margin-left: auto;
+  }
+
+  /* Select and Done are words on a phone; the icon would only take room from the filter. */
+  .page-queue .queue-select > .icon {
+    display: none;
+  }
+
+  /* The selection bar docks above the tab bar, under the thumb; the page
+     leaves it room so the last row stays reachable. */
+  .page-queue .bulk-bar {
+    position: fixed;
+    top: auto;
+    right: var(--s-3);
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+    left: var(--s-3);
+    z-index: 19;
+  }
+
+  .page-queue[data-selecting] {
+    padding-bottom: calc(var(--control-h) + var(--s-6));
+  }
+}
+
+/* ---- Reordering the queue (views/queue-order.js) ------------------- */
+
+/* The grip over a queued row's cover, for a mouse: shown while the row is
+   hovered or holds focus, never on a touch screen (a long-press drags). */
+.job-grip {
+  position: absolute;
+  top: 50%;
+  left: var(--card-pad-x);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-control);
+  background: var(--bg-chrome);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  color: var(--text-primary);
+  cursor: grab;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.job-item[data-sortable]:hover .job-grip,
+.job-item[data-sortable]:focus-within .job-grip {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .job-grip {
+    display: none;
+  }
+}
+
+/* The held row's place: a dashed slot as tall as the row. */
+.job-list > .job-item[data-sort-slot],
+.job-list > .job-item[data-sort-slot]:hover {
+  background: transparent;
+}
+
+.job-item[data-sort-slot] > * {
+  visibility: hidden;
+}
+
+.job-item[data-sort-slot]::after {
+  content: "";
+  position: absolute;
+  inset: var(--s-1) var(--s-2);
+  border: 1px dashed var(--border-control);
+  border-radius: var(--r-control);
+  animation: sort-slot-in 180ms var(--ease-in) both;
+}
+
+/* The lifted copy (on <body>). */
+.sortable-ghost .job-item {
+  border-radius: var(--r-control);
+  background: var(--bg-surface);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.sortable-ghost[data-lifted] .job-item {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-float);
+}
+
+.sortable-ghost .job-grip {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .job-item[data-sort-slot]::after,
+  .sortable-ghost .job-item {
+    animation: none;
+    transition: none;
+  }
+
+  .sortable-ghost[data-lifted] .job-item {
+    transform: none;
+  }
+}

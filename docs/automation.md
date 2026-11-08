@@ -1,58 +1,98 @@
 # Automation
 
+> Type: reference
+
 Two features act without you asking each time: **job hooks** react to jobs you created,
 and **library sync** creates jobs of its own. Both are off by default.
 
 ## Job hooks
 
-[`configs/hooks.yaml`](../configs/hooks.yaml) — its comments are the reference; this is the
+[`configs/hooks.example.yaml`](../configs/hooks.example.yaml) — its comments are the reference; this is the
 summary. The file is loaded independently of `config.yaml`, so hooks can be added, removed
 or toggled without touching the main configuration. A missing file is not an error; hooks
-are simply disabled. **The file is read once at startup — changes need a restart.**
+are simply disabled. **The file is read at startup, so a hand edit needs a restart.** The
+master switch and webhook entries can also be changed through the API
+([api.md](api.md#config-and-hooks)) and the Hooks settings of the web console and the
+desktop app: those writes edit the file in place, keep its comments and other entries, and
+apply to the next job event.
+Command (`exec`) entries are never written or run that way; they change only in the file.
 
-Top-level keys:
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `enabled` | `false` | Master switch. When off, no entry runs regardless of its own flag. |
-| `timeout_seconds` | 30 | Default per-hook timeout, used when an entry sets none. |
-| `max_concurrent` | 2 | Maximum hook executions running at once across all jobs and entries. |
+The one top-level key is `enabled` (default `false`), the master switch: when off, no entry
+runs regardless of its own flag. Every attempt is cut off after 30 seconds, and at most two
+hook executions run at once across all jobs and entries; neither limit is a key.
 
 Each entry in `entries` needs a unique `name`, a `type` (`webhook` or `exec`), and at least
 one event from `job_queued`, `job_finished`, `job_failed`, `job_cancelled`. `job_types`
 filters by `song`, `album`, `playlist`, `artist`, `station`; empty or omitted matches all.
-Every entry whose `enabled`, `events` and `job_types` all match runs concurrently, bounded
-by `max_concurrent`.
+A job is one run of a record, so its type is the record's kind, `album` or `playlist`, or
+`station`; `song` also matches the runs of an album whose tracks were added one by one,
+and `artist` the runs an artist link started.
+Every entry whose `enabled`, `events` and `job_types` all match runs, within that limit of two.
 
-- `job_queued` fires right after creation, before any track is resolved — the payload's
-  `items` list is empty and `total_items` is 0. It **cannot** share an entry with a
-  terminal event; put creation and terminal hooks in separate entries, which may point at
-  the same URL or command.
+- `job_queued` fires right after creation, before any track is resolved — the payload has
+  no `items`, and `total_items` is 0. Every download of a record is a new job, so it fires
+  for a retry, an automatic retry (`job.trigger` `retry`) and a reset too, and an artist
+  link fires it once per album. It **cannot** share an entry with a terminal event;
+  put creation and terminal hooks in separate entries, which may point at the same URL or
+  command.
 - `job_finished` means zero failed items; `job_failed` means at least one failed item or an
-  aborted job; `job_cancelled` means cancelled through the API.
+  aborted job, with `job.will_retry` true when every failed track waits for an automatic
+  retry (`download.give_up_after_runs`). Hooks built from a notification preset (ntfy,
+  Bark, Telegram) skip those, so a phone hears about a failure once it is given up; a hook
+  written by hand gets every one and can filter on `will_retry`. `job_cancelled` means
+  cancelled through the API, or a record paused. A job that was running
+  when the backend stopped fires none of them then: it resumes on the next start and fires
+  its terminal hook when it finishes.
 
-**Webhook entries** POST to `url` with optional `headers`. `send_payload: false` sends an
-empty body, which suits refresh-style endpoints that ignore it. `max_attempts` counts the
-first try, and retries wait one second between attempts.
+**Webhook entries** send a request to `url`, which must be an absolute `http` or `https`
+URL (an invalid one fails startup and names the entry), with optional `headers`. `method`
+is `POST` (the default), `PUT` or `GET`; a `GET` has no body. The body is the JSON payload
+below, unless `body` sets one: a Go `text/template` rendered over the payload as its JSON
+reads (`.event`, `.job.title`, `.items`), where `json` writes a value as a JSON literal.
+The `Content-Type` is `application/json` unless `headers` names another. For example, a
+Telegram message:
 
-**Exec entries** run `command` through `sh -c` with the JSON payload on stdin, optionally
-in `workdir`. These environment variables are also set:
-
-```text
-AMDL_EVENT         job_queued | job_finished | job_failed | job_cancelled
-AMDL_JOB_ID        job ID
-AMDL_JOB_TYPE      song | album | playlist | artist | station
-AMDL_JOB_STATUS    queued | completed | failed | cancelled
-AMDL_JOB_INPUT     original Apple Music URL
-AMDL_STOREFRONT    storefront code, e.g. "us", "cn"
-AMDL_TOTAL_ITEMS   total track count
-AMDL_DONE_ITEMS    completed/skipped track count
-AMDL_FAILED_ITEMS  failed track count
-AMDL_OUTPUT_PATHS  newline-separated absolute output paths
+```yaml
+body: '{"chat_id": "123456", "text": {{json (printf "%s · %v of %v tracks" (or .job.title .job.input) .job.completed_items .job.total_items)}}}'
 ```
 
-The JSON payload — sent as the webhook body when `send_payload` is true, and written to an
-exec hook's stdin — looks like:
+`preset` names the service a webhook was built for through the hooks API
+(`GET /api/v1/hooks/presets` lists them); clients show it, and the request stays in the
+other keys. `max_attempts` counts the first try, and retries wait one second between attempts.
+
+**Exec entries** run `command` through `sh -c` with the JSON payload on stdin, optionally
+in `workdir`. The command inherits the backend's environment (`PATH`, `HOME`, `TZ`, …)
+**without** any `AMDL_*` variable: those are the backend's own settings, and one left
+over from an older install may hold a secret. Pass what a script needs explicitly. These
+variables are set instead:
+
+```text
+AMDL_EVENT            job_queued | job_finished | job_failed | job_cancelled
+AMDL_JOB_ID           job ID
+AMDL_JOB_TYPE         song | album | playlist | artist | station
+AMDL_JOB_STATUS       queued | completed | failed | cancelled
+AMDL_JOB_INPUT        original Apple Music URL
+AMDL_STOREFRONT       storefront code, e.g. "us", "cn"
+AMDL_TOTAL_ITEMS      total track count
+AMDL_COMPLETED_ITEMS  tracks this job wrote
+AMDL_SKIPPED_ITEMS    tracks already at their path, or not offered in the asked quality
+AMDL_FAILED_ITEMS     failed tracks
+AMDL_CANCELLED_ITEMS  tracks cancelled before they finished
+AMDL_OUTPUT_PATHS     newline-separated absolute output paths
+AMDL_JOB_TRIGGER      manual | library_sync | artist | retry | reset | import_1x
+AMDL_JOB_WILL_RETRY   true when a failed job's tracks all wait for an automatic retry
+AMDL_RESOURCE_KIND    album | playlist, empty for a station
+AMDL_RESOURCE_ID      the record's catalog id, empty for a station
+```
+
+A failing exec hook records the last 4 KiB of its stderr in its `hook_failed` event.
+
+The JSON payload — the webhook body unless `body` replaces it, and written to an
+exec hook's stdin — looks like this. The `job` counters are the API's (see
+[api.md](api.md#query-cancel-retry-move-delete)); `title` and `artist_name` are present once the
+link has resolved (never for `job_queued`), `error` only when the job has one, `started_at`
+and `finished_at` only once set, and `output_path` is absolute. `resource` is the job's
+record as it stands when the hook fires, absent for a station:
 
 ```json
 {
@@ -63,11 +103,26 @@ exec hook's stdin — looks like:
     "input": "https://music.apple.com/us/album/...",
     "type": "album",
     "storefront": "us",
+    "title": "Album Name",
+    "artist_name": "Artist Name",
     "status": "completed",
     "total_items": 12,
-    "done_items": 12,
+    "completed_items": 11,
+    "skipped_items": 1,
     "failed_items": 0,
-    "error": ""
+    "cancelled_items": 0,
+    "trigger": "manual",
+    "will_retry": false,
+    "started_at": "2026-07-04T10:28:41Z",
+    "finished_at": "2026-07-04T10:30:00Z"
+  },
+  "resource": {
+    "kind": "album",
+    "id": "1463409338",
+    "name": "Album Name",
+    "state": "complete",
+    "tracks_done": 12,
+    "tracks_wanted": 12
   },
   "items": [
     {
@@ -77,41 +132,45 @@ exec hook's stdin — looks like:
       "album": "Album Name",
       "status": "completed",
       "codec": "alac",
-      "output_path": "/data/downloads/albums/Album Name/01. Song 1.m4a"
+      "output_path": "/app/data/downloads/library/Artist Name/Album Name/01. Song 1.m4a"
     }
   ]
 }
 ```
 
-Hook execution surfaces as `hook_started`, `hook_succeeded` and `hook_failed` events, and
-a submission can restrict which entries may run through `overrides.hooks` — see
-[api.md](api.md#job-overrides).
+Hook execution surfaces as `hook_started`, `hook_succeeded` and `hook_failed` events.
+Every enabled entry whose `events` and `job_types` match runs for every job; a submission
+cannot choose among them. On shutdown, hooks get a short drain: retries stop at once,
+and an attempt still running when the drain ends is cancelled and recorded as
+`hook_failed`.
 
 ## Library sync
 
-The watcher polls your signed-in Apple Music library and submits the **album** behind any
+The watcher polls the Apple Music library of each account whose `library_sync` switch is on
+(`PATCH /api/v1/accounts/{id}`; a new account starts off) and submits the **album** behind any
 newly added song as an ordinary download job. Favourite one track on your phone, and the
 album lands on your NAS without a manual submission.
 
 ```yaml
 library_sync:
-  enabled: false          # the only feature that creates jobs on its own
+  enabled: false          # master switch; the only feature that creates jobs on its own
   interval_minutes: 15    # 1..1440
 ```
 
-Both keys are runtime-mutable through `PUT /api/v1/config` or a manual file edit — the
-polling loop re-reads them at the start of every pass, so turning it off really stops the
-polling rather than just discarding results, and shortening the interval takes effect
-immediately instead of after the current wait.
+Both keys are runtime-mutable through `PUT /api/v1/config`, or a manual file edit applied
+with `POST /api/v1/config/reload` — the polling loop reads them at the start of every
+pass, so turning it off really stops the polling rather than just discarding results, and
+shortening the interval takes effect immediately instead of after the current wait.
 
-It depends on `catalog.media_user_token`: a personal library is readable only with a
-subscription token, and a developer token alone will not do. With that field empty the
+It depends on the account's media-user-token, which the backend reads from the wrapper
+([configuration.md](configuration.md#the-media-user-token)). A personal library is readable
+only with a subscription token, and the web-player token alone will not do. Without one the
 watcher idles and warns once instead of erroring every pass.
 
-Submissions go through `jobs.Manager.SubmitBatch`, not through the backend's own HTTP API,
-so they are identical to jobs you submit by hand — same deduplication, same validation,
-same hooks. Catalog reads use the backend's **internal** developer token, not the one
-`/api/v1/developer-token` signs for browser clients.
+New albums are added through `jobs.Manager.AddAlbums` as album records, not through the
+backend's own HTTP API, so their runs are ordinary runs — same picker, same hooks. An album
+you removed from amdl is not added back. Each account keeps its own anchor, and an album
+it adds is pinned to that account's storefront. Catalog reads use the scraped web-player token, like every other catalog read.
 
 ### Why the watermark is a position, not a timestamp
 
@@ -132,7 +191,7 @@ Enabling it for the first time only drops the anchor and submits **nothing** —
 already in the library at that moment counts as existing. Backfilling an entire library was
 never the point.
 
-Two details worth stating outright:
+Three details worth stating outright:
 
 - Each pass deliberately reads a little past the anchor so an ordinary addition resolves in
   a single request. Those extra entries are by definition *older* than every anchored one;
@@ -142,6 +201,12 @@ Two details worth stating outright:
 - If that oldest anchored song has disappeared from the library, there is no comparable
   boundary left. The watcher re-anchors and submits nothing, rather than queueing every
   album it just scanned.
+- When a new album's library-to-catalog lookup fails, the anchor stays where it was so the
+  next pass tries that album again; the albums that did resolve are added again too,
+  which their records absorb: an active run stays, and a complete record queues nothing. A
+  lookup that fails with a client error (a 4xx other than 408 and 429) three passes in a
+  row is skipped with a warning, so one album Apple refuses cannot hold the anchor back
+  forever. An album with no catalog counterpart (404) is skipped at once.
 
 ### Cost
 

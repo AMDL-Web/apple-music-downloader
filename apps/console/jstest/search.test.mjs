@@ -1,0 +1,402 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { scanLinks } from '../static/js/lib/links.js';
+import {
+  searchTerm,
+  appendPage,
+  createSearcher,
+  createArtistPages,
+  qualityHints,
+  hitView,
+  shownHits,
+  allHits,
+  hasMore,
+  groupFoot,
+  searchGroup,
+  SEARCH_GROUPS,
+  nextStop,
+  searchCountLine,
+  SEARCH_FIRST,
+  SEARCH_MORE,
+  SEARCH_MAX_TERM,
+  SEARCH_CACHE_MAX,
+  ARTIST_PAGE,
+  hitPreview,
+  hitKey,
+} from '../static/js/lib/search.js';
+
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const settle = async () => {
+  for (let i = 0; i < 4; i++) await tick();
+};
+
+/** A fake network function whose answers the test releases one by one. */
+function fakeNet() {
+  const calls = [];
+  const fn = (...args) =>
+    new Promise((resolve, reject) => {
+      const signal = args[args.length - 1];
+      const call = { args, signal, resolve, reject };
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' })));
+      calls.push(call);
+    });
+  return { calls, fn };
+}
+
+const song = (id, extra = {}) => ({ id, type: 'song', name: `Song ${id}`, url: `https://music.apple.com/cn/song/s/${id}`, ...extra });
+const album = (id, extra = {}) => ({ id, type: 'album', name: `Album ${id}`, url: `https://music.apple.com/cn/album/a/${id}`, ...extra });
+const answer = (term, songs = [song('1')], next = {}) => ({
+  term,
+  storefront: 'cn',
+  songs: { items: songs, ...(next.songs ? { next_offset: next.songs } : {}) },
+  albums: { items: [album('10')] },
+  artists: { items: [] },
+});
+
+test('the box searches only when it holds no link', () => {
+  const term = (text) => searchTerm(text, scanLinks(text, 'cn'));
+  assert.deepEqual(term('  Taylor   Swift \n'), { term: 'Taylor Swift', tooLong: false });
+  assert.deepEqual(term('星街すいせい'), { term: '星街すいせい', tooLong: false });
+  assert.deepEqual(term('   '), { term: '', tooLong: false });
+  assert.deepEqual(term('see https://music.apple.com/us/album/igor/1463409338'), { term: '', tooLong: false });
+  assert.deepEqual(term('https://example.com/x'), { term: '', tooLong: false }, 'any link previews instead');
+  assert.deepEqual(term('a'.repeat(SEARCH_MAX_TERM)), { term: 'a'.repeat(SEARCH_MAX_TERM), tooLong: false });
+  assert.deepEqual(term('a'.repeat(SEARCH_MAX_TERM + 1)), { term: '', tooLong: true });
+  // Characters, not UTF-16 units: 200 emoji are still a term.
+  assert.equal(term('🎵'.repeat(SEARCH_MAX_TERM)).term.length, SEARCH_MAX_TERM * 2);
+});
+
+test('a page appends each hit once and carries the next offset', () => {
+  const g = appendPage({ items: [song('1'), song('2')], next_offset: 2 }, { items: [song('2'), song('3')], next_offset: 27 });
+  assert.deepEqual(g.items.map((h) => h.id), ['1', '2', '3']);
+  assert.equal(g.next_offset, 27);
+  assert.deepEqual(appendPage(g, { items: [song('4')] }).next_offset, undefined, 'the last page has none');
+  assert.deepEqual(appendPage(null, null), { items: [] });
+});
+
+test('a search asks for the first page and keeps the answer', async () => {
+  const net = fakeNet();
+  let changes = 0;
+  const s = createSearcher({ search: net.fn, onChange: () => changes++ });
+  s.run('Yorushika');
+  assert.equal(s.state().status, 'loading');
+  assert.equal(s.state().stale, false, 'nothing shown yet');
+  await tick();
+  assert.deepEqual(net.calls[0].args[0], { term: 'Yorushika', limit: SEARCH_FIRST });
+  net.calls[0].resolve(answer('Yorushika'));
+  await settle();
+  assert.equal(s.state().status, 'ready');
+  assert.deepEqual(shownHits(s.state().data).map(hitKey), ['album:10', 'song:1'], 'albums come first, as the page shows them');
+  assert.ok(changes >= 2);
+});
+
+test('a new term keeps the last answer on screen until its own lands, and aborts the old search', async () => {
+  const net = fakeNet();
+  const s = createSearcher({ search: net.fn });
+  s.run('Yo');
+  await tick();
+  net.calls[0].resolve(answer('Yo'));
+  await settle();
+  s.run('Yor');
+  await tick();
+  s.run('Yoru');
+  await tick();
+  assert.equal(s.state().stale, true);
+  assert.equal(s.state().data.term, 'Yo', 'the old answer holds the height');
+  assert.equal(net.calls[1].signal.aborted, true, 'the search typed past is aborted');
+  net.calls[2].resolve(answer('Yoru', [song('2')]));
+  await settle();
+  assert.equal(s.state().term, 'Yoru');
+  assert.equal(s.state().stale, false);
+  assert.deepEqual(s.state().data.songs.items.map((h) => h.id), ['2']);
+});
+
+test('a late answer for an old term never replaces the current one', async () => {
+  const net = fakeNet();
+  // A server that answers although the request was aborted.
+  const search = (q, signal) => net.fn(q, { addEventListener() {}, aborted: false, real: signal });
+  const s = createSearcher({ search });
+  s.run('a');
+  await tick();
+  s.run('b');
+  await tick();
+  net.calls[1].resolve(answer('b', [song('b')]));
+  await settle();
+  net.calls[0].resolve(answer('a', [song('a')]));
+  await settle();
+  assert.equal(s.state().term, 'b');
+  assert.deepEqual(s.state().data.songs.items.map((h) => h.id), ['b']);
+});
+
+test('answers are cached per term and come back at once', async () => {
+  const net = fakeNet();
+  const cache = new Map();
+  const s = createSearcher({ search: net.fn, cache });
+  s.run('x');
+  await tick();
+  net.calls[0].resolve(answer('x'));
+  await settle();
+  s.run('y');
+  await tick();
+  s.run('x');
+  assert.equal(s.state().status, 'ready', 'no wait for a term already answered');
+  assert.equal(net.calls.length, 2);
+  assert.equal(net.calls[1].signal.aborted, true);
+  for (let i = 0; i < SEARCH_CACHE_MAX + 5; i++) cache.set(`t${i}`, {});
+  s.run('z');
+  await tick();
+  net.calls[2].resolve(answer('z'));
+  await settle();
+  assert.ok(cache.size <= SEARCH_CACHE_MAX);
+});
+
+test('an error is shown, not cached, and Retry searches again', async () => {
+  const net = fakeNet();
+  const cache = new Map();
+  const s = createSearcher({ search: net.fn, cache });
+  s.run('x');
+  await tick();
+  net.calls[0].reject(Object.assign(new Error('read Apple Music catalog: 502'), { status: 502 }));
+  await settle();
+  assert.equal(s.state().status, 'error');
+  assert.equal(cache.size, 0);
+  s.retry();
+  await tick();
+  assert.equal(net.calls.length, 2);
+  net.calls[1].resolve(answer('x'));
+  await settle();
+  assert.equal(s.state().status, 'ready');
+});
+
+test('clearing the term clears the results', async () => {
+  const net = fakeNet();
+  const s = createSearcher({ search: net.fn });
+  s.run('x');
+  s.run('');
+  assert.equal(s.state().status, 'idle');
+  assert.equal(s.state().data, null);
+  await tick();
+  assert.equal(net.calls.length, 0, 'a search cleared before it started never reaches the network');
+});
+
+test('more reads the next page of one group and appends it', async () => {
+  const net = fakeNet();
+  const s = createSearcher({ search: net.fn });
+  s.run('x');
+  await tick();
+  net.calls[0].resolve(answer('x', [song('1'), song('2')], { songs: 2 }));
+  await settle();
+  s.more('albums');
+  assert.equal(net.calls.length, 1, 'a group without a next page reads nothing');
+  s.more('songs');
+  s.more('songs');
+  await tick();
+  assert.equal(net.calls.length, 2, 'one page at a time');
+  assert.deepEqual(net.calls[1].args[0], { term: 'x', types: 'songs', offset: 2, limit: SEARCH_MORE });
+  assert.equal(s.state().more.songs, 'loading');
+  net.calls[1].resolve({ term: 'x', songs: { items: [song('3')] } });
+  await settle();
+  assert.deepEqual(s.state().data.songs.items.map((h) => h.id), ['1', '2', '3']);
+  assert.equal(s.state().data.songs.next_offset, undefined);
+  assert.equal(s.state().more.songs, undefined);
+  assert.deepEqual(s.state().data.albums.items.map((h) => h.id), ['10'], 'other groups are untouched');
+});
+
+test('pages of a playlist group append each playlist once, past a page that repeats one', async () => {
+  const net = fakeNet();
+  const s = createSearcher({ search: net.fn });
+  const pl = (n) => ({ id: `pl.${n}`, type: 'playlist', name: `Playlist ${n}`, url: `https://music.apple.com/cn/playlist/p/pl.${n}` });
+  s.run('x');
+  await tick();
+  net.calls[0].resolve({ ...answer('x'), playlists: { items: [pl(1), pl(2)], next_offset: 2 } });
+  await settle();
+  s.more('playlists');
+  await tick();
+  assert.deepEqual(net.calls[1].args[0], { term: 'x', types: 'playlists', offset: 2, limit: SEARCH_MORE });
+  net.calls[1].resolve({ term: 'x', playlists: { items: [pl(2), pl(3)], next_offset: 27 } });
+  await settle();
+  assert.deepEqual(s.state().data.playlists.items.map((h) => h.id), ['pl.1', 'pl.2', 'pl.3']);
+  assert.equal(s.state().data.playlists.next_offset, 27);
+  s.more('playlists');
+  await tick();
+  assert.equal(net.calls[2].args[0].offset, 27, 'the next page starts where the last one said');
+});
+
+test('a failed page leaves the hits and says so', async () => {
+  const net = fakeNet();
+  const s = createSearcher({ search: net.fn });
+  s.run('x');
+  await tick();
+  net.calls[0].resolve(answer('x', [song('1')], { songs: 1 }));
+  await settle();
+  s.more('songs');
+  await tick();
+  net.calls[1].reject(new Error('timeout'));
+  await settle();
+  assert.equal(s.state().more.songs, 'error');
+  assert.equal(s.state().data.songs.items.length, 1);
+});
+
+test('an artist opens with its first page, pages on, and is cached', async () => {
+  const net = fakeNet();
+  const a = createArtistPages({ load: net.fn });
+  a.open('159260351');
+  assert.equal(a.state().status, 'loading');
+  await tick();
+  assert.deepEqual(net.calls[0].args.slice(0, 2), ['159260351', { limit: ARTIST_PAGE }]);
+  net.calls[0].resolve({ storefront: 'cn', artist: { id: '159260351', type: 'artist', name: 'Taylor Swift' }, albums: { items: [album('1')], next_offset: 25 } });
+  await settle();
+  assert.equal(a.state().status, 'ready');
+  assert.equal(a.state().artist.name, 'Taylor Swift');
+  a.more();
+  await tick();
+  assert.deepEqual(net.calls[1].args.slice(0, 2), ['159260351', { offset: 25, limit: ARTIST_PAGE }]);
+  net.calls[1].resolve({ artist: { id: '159260351' }, albums: { items: [album('2')] } });
+  await settle();
+  assert.deepEqual(a.state().albums.items.map((h) => h.id), ['1', '2']);
+  a.open('');
+  assert.equal(a.state().status, 'idle');
+  a.open('159260351');
+  assert.equal(a.state().status, 'ready', 'cached');
+  assert.equal(a.state().albums.items.length, 2);
+  assert.equal(net.calls.length, 2);
+});
+
+test('an artist that fails to load can be retried', async () => {
+  const net = fakeNet();
+  const a = createArtistPages({ load: net.fn });
+  a.open('1');
+  await tick();
+  net.calls[0].reject(new Error('Apple Music has no artist 1 in storefront cn (404)'));
+  await settle();
+  assert.equal(a.state().status, 'error');
+  a.retry();
+  await tick();
+  assert.equal(net.calls.length, 2);
+});
+
+test('quality hints name the best lossless format, then Atmos', () => {
+  assert.deepEqual(qualityHints(['atmos', 'hi-res-lossless', 'lossless', 'lossy-stereo', 'spatial']), ['Hi-Res Lossless', 'Dolby Atmos']);
+  assert.deepEqual(qualityHints(['lossless', 'lossy-stereo']), ['Lossless']);
+  assert.deepEqual(qualityHints(['lossy-stereo']), []);
+  assert.deepEqual(qualityHints(undefined), []);
+});
+
+test('a hit row shows what its type has', () => {
+  assert.deepEqual(hitView(song('1', { artist_name: 'Yorushika', album_name: '夏草が邪魔をする', duration_ms: 242913, content_rating: 'explicit', audio_traits: ['lossless'] })), {
+    title: 'Song 1',
+    facts: [
+      { key: 'artist', text: 'Yorushika', auto: true },
+      { key: 'album', text: '夏草が邪魔をする', auto: true },
+      { key: 'length', text: '4:03', auto: false },
+    ],
+    explicit: true,
+    quality: ['Lossless'],
+  });
+  assert.deepEqual(hitView(album('2', { artist_name: 'Taylor Swift', release_date: '2022-10-21', track_count: 20 })).facts.map((f) => f.text), ['Taylor Swift', '2022', '20 tracks']);
+  assert.deepEqual(hitView(album('3', { track_count: 1 })).facts.map((f) => f.text), ['1 track']);
+  // A single's album is named after the song: the meta line leaves it out.
+  assert.deepEqual(hitView({ id: '5', type: 'song', name: 'Show', artist_name: 'Ado', album_name: 'Show' }).facts.map((f) => f.key), ['artist']);
+  assert.deepEqual(hitView({ id: '4', type: 'artist', name: 'Micah', genre: '动画', audio_traits: ['lossless'] }), {
+    title: 'Micah',
+    facts: [{ key: 'genre', text: '动画', auto: true }],
+    explicit: false,
+    quality: [],
+  });
+  assert.deepEqual(hitView({ id: '5', type: 'artist', name: 'X' }).facts, [{ key: 'genre', text: 'Artist', auto: false }]);
+  // A playlist: its curator, no track count (the catalog states none), its qualities.
+  assert.deepEqual(hitView({ id: 'pl.1', type: 'playlist', name: 'Today’s Hits', artist_name: 'Apple Music', audio_traits: ['atmos', 'lossless'] }), {
+    title: 'Today’s Hits',
+    facts: [{ key: 'curator', text: 'Apple Music', auto: true }],
+    explicit: false,
+    quality: ['Lossless', 'Dolby Atmos'],
+  });
+  assert.equal(hitView(null), null);
+});
+
+test('a submitted hit seeds its result row like a link preview', () => {
+  assert.deepEqual(hitPreview(album('9', { artist_name: 'Yorushika', artwork_url: 'a/{w}x{h}bb.jpg', track_count: 7, resource: { kind: 'album', id: '9' } })), {
+    title: 'Album 9',
+    type: 'album',
+    artist_name: 'Yorushika',
+    artwork_url: 'a/{w}x{h}bb.jpg',
+  });
+  assert.equal(hitPreview({ id: '1', type: 'artist', name: 'Yorushika' }).artist_name, 'Yorushika');
+});
+
+test('the groups come in the order they are shown, and only they can be shown alone', () => {
+  assert.deepEqual(SEARCH_GROUPS.map((g) => g.id), ['albums', 'songs', 'playlists', 'artists']);
+  for (const id of ['albums', 'songs', 'playlists', 'artists']) assert.equal(searchGroup(id), id);
+  for (const bad of ['', 'stations', 'Albums', undefined, null, 'toString']) assert.equal(searchGroup(bad), '');
+});
+
+test('every group shows its first hits; a group alone shows every page read', () => {
+  const many = (n, make) => Array.from({ length: n }, (_, i) => make(String(i)));
+  const pl = (id) => ({ id: `pl.${id}`, type: 'playlist' });
+  const data = {
+    songs: { items: many(3, song) },
+    albums: { items: many(SEARCH_FIRST + 25, album), next_offset: 56 },
+    playlists: { items: many(2, pl) },
+    artists: { items: [] },
+  };
+  const ids = (hits) => hits.map((h) => `${h.type}:${h.id}`);
+  assert.deepEqual(ids(shownHits(data)), [...many(SEARCH_FIRST, (i) => `album:${i}`), 'song:0', 'song:1', 'song:2', 'playlist:pl.0', 'playlist:pl.1']);
+  assert.equal(shownHits(data, 'albums').length, SEARCH_FIRST + 25);
+  assert.deepEqual(shownHits(data, 'artists'), []);
+  assert.equal(allHits(data).length, 3 + SEARCH_FIRST + 25 + 2);
+  assert.deepEqual(shownHits(null), []);
+  // Show more: hits past the first ones, read or still to read.
+  assert.equal(hasMore(data.albums), true);
+  assert.equal(hasMore({ items: many(SEARCH_FIRST, song), next_offset: 6 }), true);
+  assert.equal(hasMore({ items: many(SEARCH_FIRST + 1, song) }), true, 'every page read, more than the first shown');
+  assert.equal(hasMore({ items: many(SEARCH_FIRST, song) }), false);
+  assert.equal(hasMore(undefined), false);
+});
+
+test('the foot under a group alone waits, loads, fails or ends', () => {
+  assert.equal(groupFoot({ items: [], next_offset: 6 }, undefined), 'wait');
+  assert.equal(groupFoot({ items: [], next_offset: 6 }, 'loading'), 'loading');
+  assert.equal(groupFoot({ items: [], next_offset: 6 }, 'error'), 'error');
+  assert.equal(groupFoot({ items: [] }, undefined), '');
+  assert.equal(groupFoot(undefined, undefined), '');
+});
+
+test('the count line says what was found, or that nothing was', () => {
+  assert.equal(searchCountLine({ term: 'x', status: 'loading' }), 'Searching…');
+  const ready = (data) => ({ term: 'Yorushika', status: 'ready', data });
+  assert.equal(searchCountLine(ready(answer('Yorushika', [song('1'), song('2')]))), '1 album and 2 songs for “Yorushika”');
+  assert.equal(
+    searchCountLine(ready({ songs: { items: [song('1')] }, albums: { items: [album('1'), album('2')] }, artists: { items: [{ id: 'a', type: 'artist' }] } })),
+    '2 albums, 1 song and 1 artist for “Yorushika”',
+  );
+  assert.equal(searchCountLine(ready({ songs: { items: [] }, albums: { items: [] }, artists: { items: [] } })), 'Nothing found for “Yorushika”');
+  assert.equal(searchCountLine({ term: '', status: 'idle' }), '');
+  assert.equal(searchCountLine(null, { status: 'ready', artist: { name: 'Yorushika' }, albums: { items: [album('1'), album('2')], next_offset: 25 } }), 'Yorushika: 2 albums so far');
+  assert.equal(searchCountLine(null, { status: 'loading' }), 'Loading albums…');
+  // Every group counts what it shows; a group alone counts its pages.
+  const albums = Array.from({ length: 31 }, (_, i) => album(String(i)));
+  const read = ready({ songs: { items: [] }, albums: { items: albums, next_offset: 31 }, playlists: { items: [{ id: 'pl.1', type: 'playlist' }] }, artists: { items: [] } });
+  assert.equal(searchCountLine(read), `${SEARCH_FIRST} albums and 1 playlist for “Yorushika”`);
+  assert.equal(searchCountLine(read, null, 'albums'), '31 albums so far for “Yorushika”');
+  assert.equal(searchCountLine(read, null, 'playlists'), '1 playlist for “Yorushika”');
+  assert.equal(searchCountLine(read, null, 'songs'), 'No songs for “Yorushika”');
+  assert.equal(searchCountLine({ term: 'x', status: 'loading' }, null, 'albums'), 'Searching…');
+});
+
+test('the arrow keys move among the hits by where they are drawn', () => {
+  const box = (left, top, group, w = 100, h = 100) => ({ left, top, right: left + w, bottom: top + h, group });
+  // Albums: one row of three tiles; Songs: two rows of two, wider; Artists: one tile.
+  const stops = [box(0, 0, 'a'), box(120, 0, 'a'), box(240, 0, 'a'), box(0, 200, 's', 160, 40), box(180, 200, 's', 160, 40), box(0, 250, 's', 160, 40), box(180, 250, 's', 160, 40), box(0, 400, 'r')];
+  assert.equal(nextStop(stops, 0, 'ArrowRight'), 1);
+  assert.equal(nextStop(stops, 2, 'ArrowRight'), 2, 'the last of a group stays');
+  assert.equal(nextStop(stops, 3, 'ArrowLeft'), 3, 'the first of a group stays');
+  assert.equal(nextStop(stops, 2, 'ArrowDown'), 4, 'down to the nearest across in the next row');
+  assert.equal(nextStop(stops, 4, 'ArrowDown'), 6);
+  assert.equal(nextStop(stops, 6, 'ArrowDown'), 7, 'across sections');
+  assert.equal(nextStop(stops, 7, 'ArrowDown'), 7, 'nothing below: stay');
+  assert.equal(nextStop(stops, 5, 'ArrowUp'), 3);
+  assert.equal(nextStop(stops, 1, 'ArrowUp'), -1, 'nothing above: back to the box');
+  assert.equal(nextStop(stops, 4, 'Home'), 0);
+  assert.equal(nextStop(stops, 4, 'End'), 7);
+  assert.equal(nextStop(stops, 1, 'Enter'), 1);
+});

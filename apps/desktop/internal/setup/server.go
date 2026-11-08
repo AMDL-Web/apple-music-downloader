@@ -1,0 +1,187 @@
+package setup
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"amdl/apps/desktop/internal/region"
+	"amdl/internal/client"
+	"amdl/internal/format"
+)
+
+// Line is one finding of a test: its state and what it found.
+type Line struct {
+	State State
+	Text  string
+}
+
+// Server is what a test found about a remote amdl, each part Unchecked when
+// an earlier one failed. State is Ready when the server answered as an amdl,
+// else Failed. Anything not Ready there is fixed on that server.
+type Server struct {
+	Address string
+	State   State
+	// Reach is the server's answer and version; Account the Apple ID its
+	// wrapper has signed in; FFmpeg its ffmpeg; Folder its downloads folder.
+	Reach, Account, FFmpeg, Folder Line
+	Taken                          time.Duration
+}
+
+// serverTimeout bounds a whole test of a server.
+const serverTimeout = 15 * time.Second
+
+// lowSpace is the free space below which a downloads folder is reported as
+// nearly full: about one lossless album in high resolution.
+const lowSpace = 2 << 30
+
+// TestServer tests the amdl at address off the UI thread. Server keeps the
+// last finished test until the answer replaces it, so a screen that shows it
+// does not drop its rows for a test that answers within a frame.
+func (s *Setup) TestServer(address string) {
+	s.testGen++
+	gen := s.testGen
+	s.Testing = address
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout)
+		defer cancel()
+		got := s.deps.Diagnose(ctx, address)
+		s.post(func() {
+			if s.testGen == gen {
+				s.Server, s.Testing = got, ""
+			}
+		})
+	}()
+}
+
+// ForgetServer drops the last test and any test still running, whose answer
+// then lands nowhere.
+func (s *Setup) ForgetServer() {
+	s.testGen++
+	s.Server, s.Testing = Server{}, ""
+}
+
+// Diagnose tests the amdl at address for a client of version mine.
+func Diagnose(ctx context.Context, address, mine string) Server {
+	c, err := client.New(address)
+	if err != nil {
+		return Server{Address: address, State: Failed, Reach: Line{Failed, err.Error()}}
+	}
+	return DiagnoseClient(ctx, c, address, mine)
+}
+
+// DiagnoseClient is Diagnose through c, a client of the amdl at address.
+func DiagnoseClient(ctx context.Context, c *client.Client, address, mine string) Server {
+	sv := Server{Address: address, State: Failed}
+	start := time.Now()
+	if _, err := c.Health(ctx); err != nil {
+		sv.Reach = Line{Failed, "No answer · " + short(err)}
+		return sv
+	}
+	sys, err := c.System(ctx)
+	sv.Taken = time.Since(start)
+	if err != nil {
+		sv.Reach = Line{Failed, "Not an amdl server · " + short(err)}
+		return sv
+	}
+	sv.State = Ready
+	sv.Reach = Line{Ready, fmt.Sprintf("amdl %s · %d ms", sys.Version, sv.Taken.Milliseconds())}
+	if !Compatible(sys.Version, mine) {
+		sv.Reach = Line{Failed, fmt.Sprintf("amdl %s · this app needs amdl %d", sys.Version, major(mine))}
+	}
+	sv.FFmpeg = Line{Failed, "Missing"}
+	for _, t := range sys.Tools {
+		if t.Name == "ffmpeg" && t.Available {
+			sv.FFmpeg = Line{Ready, t.Path}
+		}
+	}
+	sv.Folder = folderLine(sys.Storage)
+	ws, err := c.WrapperStatus(ctx)
+	switch {
+	case err != nil:
+		sv.Account = Line{Failed, "No wrapper · " + short(err)}
+	case !ws.Ready:
+		sv.Account = Line{Working, "Wrapper starting"}
+	case !ws.LoggedIn:
+		sv.Account = Line{Missing, "Not signed in"}
+	default:
+		// A backend older than the accounts list says the regions.
+		list, _ := c.ListAccounts(ctx)
+		sv.Account = Line{Ready, AccountText(list.Accounts, ws.Regions)}
+	}
+	return sv
+}
+
+// AccountText names the accounts by Apple ID and region, else the regions
+// the wrapper serves, or says one is signed in when it names neither.
+func AccountText(accounts []client.Account, regions []string) string {
+	parts := []string{}
+	for _, a := range accounts {
+		if l := region.Label(a.Name, a.Region, ""); l != "" {
+			parts = append(parts, l)
+		}
+	}
+	if len(parts) == 0 {
+		for _, r := range regions {
+			parts = append(parts, region.Name(r))
+		}
+	}
+	if len(parts) == 0 {
+		return "Signed in"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func folderLine(storage []client.Storage) Line {
+	for _, st := range storage {
+		if st.Name != "downloads_dir" {
+			continue
+		}
+		return FolderLine(st)
+	}
+	return Line{Unchecked, ""}
+}
+
+// FolderLine reports a downloads folder: its path and free space, nearly
+// full below lowSpace.
+func FolderLine(st client.Storage) Line {
+	switch {
+	case st.Error != "":
+		return Line{Failed, st.Path + " · " + st.Error}
+	case st.TotalBytes > 0 && st.FreeBytes < lowSpace:
+		return Line{Missing, st.Path + " · " + format.Bytes(st.FreeBytes) + " free"}
+	case st.TotalBytes > 0:
+		return Line{Ready, st.Path + " · " + format.Bytes(st.FreeBytes) + " free"}
+	}
+	return Line{Ready, st.Path}
+}
+
+// Compatible reports whether a client of version mine can use a server of
+// version theirs: the same major version, or either one a development build.
+func Compatible(theirs, mine string) bool {
+	a, b := major(theirs), major(mine)
+	return a <= 0 || b <= 0 || a == b
+}
+
+// major is a release's major version, 0 for a development build.
+func major(v string) int {
+	v = strings.TrimPrefix(v, "v")
+	n, err := strconv.Atoi(strings.SplitN(v, ".", 2)[0])
+	if err != nil || strings.Contains(v, "-dev") {
+		return 0
+	}
+	return n
+}
+
+func short(err error) string {
+	s := err.Error()
+	if i := strings.LastIndex(s, ": "); i >= 0 && len(s) > 60 {
+		s = s[i+2:]
+	}
+	if len(s) > 60 {
+		s = s[:57] + "…"
+	}
+	return s
+}

@@ -1,0 +1,621 @@
+/* ---- Cards and layout ---------------------------------------------- */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+/* Overview: one 12-column grid of named sections (data-section on each card),
+   so a skin can reorder (order) and resize (grid-column) them. */
+.page-overview {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--page-gap) var(--grid-gap);
+}
+
+.page-overview > [data-section] {
+  grid-column: span 12;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  min-width: 0;
+  padding: var(--card-pad);
+  border: var(--card-border);
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  min-width: 0;
+}
+
+/* Flush cards hold edge-to-edge lists; their head keeps the card padding. */
+.card-flush {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.card-flush > .card-body {
+  gap: 0;
+}
+
+.card-flush > .card-head {
+  padding: var(--card-pad);
+  border-bottom: var(--card-divider);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+  min-height: var(--control-h-sm);
+}
+
+.card-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-card-title);
+  line-height: var(--lh-card-title);
+  font-weight: var(--w-title);
+  letter-spacing: var(--tracking-title);
+}
+
+.card-note {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-weight: var(--w-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.kv-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+  gap: var(--s-3);
+  align-items: baseline;
+}
+
+.kv dt {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.kv dd {
+  min-width: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.table th,
+.table td {
+  height: 40px;
+  padding: 0 var(--s-3) 0 0;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  font-weight: var(--w-regular);
+}
+
+.table thead th {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--w-medium);
+}
+
+.table .num {
+  text-align: right;
+}
+
+/* ---- Job list ------------------------------------------------------ */
+
+.job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.job-list > li + li {
+  border-top: var(--row-divider);
+}
+
+.job-row {
+  display: grid;
+  /* The progress column is as wide as --job-prog; a row without progress
+     (data-progress="off": finished jobs) sets it to 0 and gives the room to
+     the title. */
+  grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 168px) 148px 80px var(--job-trail, 16px);
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 56px;
+  padding: var(--s-2) var(--card-pad-x);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.job-row[data-progress="off"] {
+  --job-prog: 0px;
+}
+
+/* In the Queue, a job with no progress bar states its status next to the
+   time, not at the far end of an empty column. */
+.page-queue .job-row[data-progress="off"] .job-status {
+  justify-self: end;
+}
+
+.job-row:hover {
+  background: var(--bg-hover);
+}
+
+.job-row:focus-visible {
+  outline-offset: -2px;
+}
+
+.job-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Skin opt-in: type, genre, year and start time of the job. */
+.job-facts {
+  display: none;
+  gap: var(--s-1_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.job-fact + .job-fact::before {
+  content: "·";
+  margin-inline-end: var(--s-1_5);
+}
+
+.job-title {
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Not named by Apple yet: the link stands in, muted, never a guessed title. */
+.job-title.is-unresolved {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: var(--w-regular);
+}
+
+/* A failed job's reason: its first line on a line of its own, at most two
+   lines, the full text in the title. */
+.job-error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-width: 0;
+  margin-top: var(--s-0_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.job-sub {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-updated {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+}
+
+.job-updated {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.job-status {
+  min-width: 0;
+}
+
+/* The status cell holds one badge: centered on the line, not on its own
+   baseline, which an icon (Queued) and a pulse (Running) put at different
+   heights, so the badge would jump as the job starts. */
+.job-status > :is(.badge, .status-text) {
+  vertical-align: middle;
+}
+
+.job-chevron {
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.job-list-compact .job-row {
+  grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 160px) 148px;
+}
+
+.job-list-compact .job-updated,
+.job-list-compact .job-chevron {
+  display: none;
+}
+
+/* ---- Queue selection (views/queue-select.js) ----------------------- */
+
+/* Retry all (Failed tab) and the Select toggle, after the filters. */
+.queue-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.queue-select[aria-pressed="true"] {
+  background: var(--bg-selected);
+}
+
+/* The bar over the list: select all, count, actions or a run's progress.
+   It sticks under the top bar while the list scrolls. */
+.bulk-bar {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-height: 48px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  box-shadow: var(--card-shadow);
+}
+
+.bulk-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  cursor: pointer;
+}
+
+.bulk-check,
+.job-check-input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.bulk-count {
+  font-weight: var(--w-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.bulk-hint {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.bulk-progress {
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.bulk-progress-text {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bulk-meter {
+  position: relative;
+  flex: 1;
+  height: var(--bar-h);
+  border-radius: var(--r-bar);
+  corner-shape: round;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.bulk-meter-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--info);
+  transform-origin: left center;
+  transform: scaleX(var(--f));
+  transition: transform var(--dur-base) linear;
+}
+
+/* Selection mode: a checkbox column before each row; a plain click on the
+   row selects it, so text selection is off. */
+.job-list.is-selecting {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.job-list.is-selecting > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.job-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-h);
+  padding-inline-start: var(--card-pad-x);
+  cursor: pointer;
+}
+
+.job-list.is-selecting > li > .job-row {
+  padding-inline-start: var(--s-2);
+}
+
+.job-item[data-selected] {
+  background: var(--bg-selected);
+}
+
+@media (max-width: 639px) {
+  .queue-tools {
+    flex: none;
+  }
+
+  /* A title wraps to a second line instead of cutting at the status. */
+  .job-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* Five tabs with their counts need about 320 px, so they fit a 375 px
+     phone: each is at least as wide as its label and takes its share of the
+     spare room. A narrower screen scrolls the row sideways, an edge fading
+     (css/queue.css). */
+  .page-queue .seg-btn {
+    flex: 1 0 auto;
+    justify-content: center;
+    padding-inline: var(--s-2);
+  }
+
+  .job-check {
+    min-width: var(--touch);
+  }
+
+  .bulk-all {
+    width: var(--touch);
+    height: var(--touch);
+  }
+
+  .bulk-bar {
+    padding: var(--s-2);
+  }
+}
+
+/* Skin opt-in: the latest failures (24 h) under the live list, each with
+   Retry. Shown, a row is icon, title and detail, then the button. */
+.attention {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--row-divider);
+}
+
+.attention-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title action"
+    "detail action";
+  align-items: center;
+  column-gap: var(--s-3);
+  padding: var(--s-3) var(--card-pad-x);
+}
+
+.attention-row + .attention-row {
+  border-top: var(--row-divider);
+}
+
+.attention-title,
+.attention-detail {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.attention-title {
+  grid-area: title;
+}
+
+.attention-detail {
+  grid-area: detail;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.attention-row > .btn {
+  grid-area: action;
+}
+
+.attention-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  color: var(--danger-text);
+  font-weight: var(--w-medium);
+}
+
+.attention-link {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+
+.attention-link:hover {
+  text-decoration: underline;
+}
+
+.attention-input,
+.attention-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attention-input {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* Beside a title the link is the extra: it gives way first, so a phone shows
+   the title and not "Beet…" next to most of a URL. */
+.attention-title > .attention-input:not(.attention-link) {
+  flex-shrink: 100;
+}
+
+/* ---- Artwork ------------------------------------------------------- */
+
+.art {
+  position: relative;
+  display: block;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--r-art);
+  box-shadow: var(--shadow-art);
+  background: var(--art-bg, var(--bg-hover));
+}
+
+/* A motion cover (ui/motion.js) over the still: invisible until its first
+   frame plays, so a slow or failed video never blanks the cover. */
+.motion {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--r-art);
+  background: var(--art-bg, var(--bg-hover));
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.motion.is-ready {
+  opacity: 1;
+}
+
+.art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.art-40 {
+  width: 40px;
+  height: 40px;
+}
+
+.art-64 {
+  width: 64px;
+  height: 64px;
+}
+
+.art-square {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.art-glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
+/* A widget whose endpoint this backend lacks (components.js Unavailable). */
+.quiet-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}

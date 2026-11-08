@@ -1,0 +1,321 @@
+index idx_albums_pick on albums(paused, priority) unique=0 origin=c
+index idx_albums_state on albums(state, added_at) unique=0 origin=c
+index idx_apple_library_items_catalog on apple_library_items(account_id, kind, catalog_id) unique=0 origin=c WHERE catalog_id <> ''
+index idx_apple_library_items_order on apple_library_items(account_id, kind, add_order) unique=0 origin=c
+index idx_files_due on files(audio_state, next_attempt_at) unique=0 origin=c
+index idx_files_path on files(path) unique=1 origin=c WHERE path <> ''
+index idx_pending_adds_catalog on pending_adds(kind, catalog_id) unique=1 origin=c
+index idx_playlist_tracks_song on playlist_tracks(song_id) unique=0 origin=c
+index idx_playlists_pick on playlists(paused, priority) unique=0 origin=c
+index idx_playlists_state on playlists(state, added_at) unique=0 origin=c
+index idx_run_events_job_id_id on run_events(job_id, id) unique=0 origin=c
+index idx_run_events_type_created on run_events(type, created_at) unique=0 origin=c
+index idx_run_items_job_id on run_items(job_id, idx) unique=0 origin=c
+index idx_runs_active_key on runs(canonical_key) unique=1 origin=c WHERE status IN ('queued','running') AND canonical_key <> ''
+index idx_runs_active_resource on runs(resource_kind, resource_id) unique=1 origin=c WHERE status IN ('queued','running') AND resource_id IS NOT NULL
+index idx_runs_queued_order on runs(priority, queue_order) unique=0 origin=c WHERE status = 'queued'
+index idx_runs_resource on runs(resource_kind, resource_id, created_at) unique=0 origin=c WHERE resource_id IS NOT NULL
+index idx_tracks_song on tracks(song_id) unique=0 origin=c
+table accounts
+  column id TEXT notnull=0 default=NULL pk=1
+  column name TEXT notnull=1 default='' pk=0
+  column region TEXT notnull=1 default='' pk=0
+  column position INTEGER notnull=1 default=0 pk=0
+  column library_sync INTEGER notnull=1 default=0 pk=0
+  column apple_library INTEGER notnull=1 default=0 pk=0
+  column state TEXT notnull=1 default='active' pk=0
+  column added_at TEXT notnull=1 default=NULL pk=0
+  column seen_at TEXT notnull=0 default=NULL pk=0
+  constraint pk(id)
+table albums
+  column id TEXT notnull=0 default=NULL pk=1
+  column name TEXT notnull=1 default='' pk=0
+  column artist_name TEXT notnull=1 default='' pk=0
+  column artist_id TEXT notnull=1 default='' pk=0
+  column artist_url TEXT notnull=1 default='' pk=0
+  column release_date TEXT notnull=1 default='' pk=0
+  column genre TEXT notnull=1 default='' pk=0
+  column upc TEXT notnull=1 default='' pk=0
+  column content_rating TEXT notnull=1 default='' pk=0
+  column artwork TEXT notnull=1 default='' pk=0
+  column resolved_at TEXT notnull=0 default=NULL pk=0
+  column release_track_count INTEGER notnull=1 default=0 pk=0
+  column withheld_count INTEGER notnull=1 default=0 pk=0
+  column storefront_read TEXT notnull=1 default='' pk=0
+  column catalog_state TEXT notnull=1 default='ok' pk=0
+  column wanted_all INTEGER notnull=1 default=0 pk=0
+  column paused INTEGER notnull=1 default=0 pk=0
+  column priority INTEGER notnull=1 default=1 pk=0
+  column overrides TEXT notnull=1 default='' pk=0
+  column cover_state TEXT notnull=1 default='pending' pk=0
+  column artist_cover_state TEXT notnull=1 default='pending' pk=0
+  column tracks_wanted INTEGER notnull=1 default=0 pk=0
+  column tracks_done INTEGER notnull=1 default=0 pk=0
+  column tracks_failed INTEGER notnull=1 default=0 pk=0
+  column tracks_given_up INTEGER notnull=1 default=0 pk=0
+  column tracks_missing INTEGER notnull=1 default=0 pk=0
+  column state TEXT notnull=1 default='none' pk=0
+  column added_at TEXT notnull=1 default=NULL pk=0
+  column refreshed_at TEXT notnull=0 default=NULL pk=0
+  column completed_at TEXT notnull=0 default=NULL pk=0
+  column updated_at TEXT notnull=1 default=NULL pk=0
+  column pinned_storefront TEXT notnull=1 default='' pk=0
+  constraint pk(id)
+table apple_library_items
+  column account_id TEXT notnull=1 default='' pk=1
+  column kind TEXT notnull=1 default=NULL pk=2
+  column item_id TEXT notnull=1 default=NULL pk=3
+  column catalog_id TEXT notnull=1 default='' pk=0
+  column url TEXT notnull=1 default='' pk=0
+  column name TEXT notnull=1 default='' pk=0
+  column artist_name TEXT notnull=1 default='' pk=0
+  column album_name TEXT notnull=1 default='' pk=0
+  column artwork_url TEXT notnull=1 default='' pk=0
+  column description TEXT notnull=1 default='' pk=0
+  column genre TEXT notnull=1 default='' pk=0
+  column release_date TEXT notnull=1 default='' pk=0
+  column track_count INTEGER notnull=1 default=0 pk=0
+  column duration_ms INTEGER notnull=1 default=0 pk=0
+  column track_number INTEGER notnull=1 default=0 pk=0
+  column disc_number INTEGER notnull=1 default=0 pk=0
+  column date_added TEXT notnull=1 default='' pk=0
+  column last_modified TEXT notnull=1 default='' pk=0
+  column version_hash TEXT notnull=1 default='' pk=0
+  column playlist_kind TEXT notnull=1 default='' pk=0
+  column add_order INTEGER notnull=1 default=0 pk=0
+  column fingerprint TEXT notnull=1 default='' pk=0
+  column seen_run TEXT notnull=1 default='' pk=0
+  column tracks_version TEXT notnull=1 default='' pk=0
+  column tracks_read_at TEXT notnull=1 default='' pk=0
+  column updated_at TEXT notnull=1 default=NULL pk=0
+  constraint pk(account_id, kind, item_id)
+table apple_library_meta
+  column account_id TEXT notnull=1 default='' pk=1
+  column key TEXT notnull=1 default=NULL pk=2
+  column value TEXT notnull=1 default=NULL pk=0
+  constraint pk(account_id, key)
+table apple_library_playlist_tracks
+  column account_id TEXT notnull=1 default='' pk=1
+  column playlist_id TEXT notnull=1 default=NULL pk=2
+  column position INTEGER notnull=1 default=NULL pk=3
+  column song_id TEXT notnull=1 default='' pk=0
+  column catalog_id TEXT notnull=1 default='' pk=0
+  column url TEXT notnull=1 default='' pk=0
+  column name TEXT notnull=1 default='' pk=0
+  column artist_name TEXT notnull=1 default='' pk=0
+  column album_name TEXT notnull=1 default='' pk=0
+  column duration_ms INTEGER notnull=1 default=0 pk=0
+  column artwork_url TEXT notnull=1 default='' pk=0
+  constraint pk(account_id, playlist_id, position)
+table check_runs autoincrement
+  column id INTEGER notnull=0 default=NULL pk=1
+  column trigger TEXT notnull=1 default=NULL pk=0
+  column scope TEXT notnull=1 default='' pk=0
+  column started_at TEXT notnull=1 default=NULL pk=0
+  column finished_at TEXT notnull=0 default=NULL pk=0
+  column checked INTEGER notnull=1 default=0 pk=0
+  column missing INTEGER notnull=1 default=0 pk=0
+  column aborted_reason TEXT notnull=1 default='' pk=0
+table deleted_resources
+  column resource_kind TEXT notnull=1 default=NULL pk=1
+  column resource_id TEXT notnull=1 default=NULL pk=2
+  column name TEXT notnull=1 default='' pk=0
+  column deleted_at TEXT notnull=1 default=NULL pk=0
+  constraint pk(resource_kind, resource_id)
+table files
+  column owner_kind TEXT notnull=1 default=NULL pk=1
+  column owner_id TEXT notnull=1 default=NULL pk=2
+  column song_id TEXT notnull=1 default=NULL pk=3
+  column slot TEXT notnull=1 default=NULL pk=4
+  column audio_state TEXT notnull=1 default='pending' pk=0
+  column lyrics_state TEXT notnull=1 default='' pk=0
+  column quality_priority TEXT notnull=0 default=NULL pk=0
+  column codec TEXT notnull=1 default='' pk=0
+  column quality_label TEXT notnull=1 default='' pk=0
+  column bit_depth INTEGER notnull=1 default=0 pk=0
+  column sample_rate INTEGER notnull=1 default=0 pk=0
+  column bitrate INTEGER notnull=1 default=0 pk=0
+  column file_size INTEGER notnull=1 default=0 pk=0
+  column path TEXT notnull=1 default='' pk=0
+  column failures INTEGER notnull=1 default=0 pk=0
+  column next_attempt_at TEXT notnull=0 default=NULL pk=0
+  column last_error TEXT notnull=1 default='' pk=0
+  column last_run_id TEXT notnull=1 default='' pk=0
+  column completed_at TEXT notnull=0 default=NULL pk=0
+  column checked_at TEXT notnull=0 default=NULL pk=0
+  column updated_at TEXT notnull=1 default=NULL pk=0
+  constraint pk(owner_kind, owner_id, song_id, slot)
+table library_sync_anchor
+  column account_id TEXT notnull=1 default='' pk=1
+  column position INTEGER notnull=1 default=NULL pk=2
+  column song_id TEXT notnull=1 default=NULL pk=0
+  column song_name TEXT notnull=1 default='' pk=0
+  column album_name TEXT notnull=1 default='' pk=0
+  constraint pk(account_id, position)
+table pending_adds autoincrement
+  column id INTEGER notnull=0 default=NULL pk=1
+  column kind TEXT notnull=1 default=NULL pk=0
+  column catalog_id TEXT notnull=1 default=NULL pk=0
+  column album_hint TEXT notnull=1 default='' pk=0
+  column source TEXT notnull=1 default=NULL pk=0
+  column priority INTEGER notnull=1 default=1 pk=0
+  column paused INTEGER notnull=1 default=0 pk=0
+  column include TEXT notnull=1 default='' pk=0
+  column overrides TEXT notnull=1 default='' pk=0
+  column added_at TEXT notnull=1 default=NULL pk=0
+  column attempts INTEGER notnull=1 default=0 pk=0
+  column last_error TEXT notnull=1 default='' pk=0
+  column state TEXT notnull=1 default='pending' pk=0
+  column storefront TEXT notnull=1 default='' pk=0
+table playlist_tracks
+  column playlist_id TEXT notnull=1 default=NULL pk=1
+  column song_id TEXT notnull=1 default=NULL pk=2
+  column position INTEGER notnull=1 default=0 pk=0
+  column name TEXT notnull=1 default='' pk=0
+  column artist_name TEXT notnull=1 default='' pk=0
+  column album_name TEXT notnull=1 default='' pk=0
+  column duration_ms INTEGER notnull=1 default=0 pk=0
+  column has_lyrics INTEGER notnull=1 default=0 pk=0
+  column availability TEXT notnull=1 default='available' pk=0
+  column removed_at TEXT notnull=0 default=NULL pk=0
+  constraint pk(playlist_id, song_id)
+table playlists
+  column id TEXT notnull=0 default=NULL pk=1
+  column name TEXT notnull=1 default='' pk=0
+  column curator_name TEXT notnull=1 default='' pk=0
+  column artwork TEXT notnull=1 default='' pk=0
+  column resolved_at TEXT notnull=0 default=NULL pk=0
+  column storefront_read TEXT notnull=1 default='' pk=0
+  column catalog_state TEXT notnull=1 default='ok' pk=0
+  column last_modified TEXT notnull=1 default='' pk=0
+  column paused INTEGER notnull=1 default=0 pk=0
+  column priority INTEGER notnull=1 default=1 pk=0
+  column overrides TEXT notnull=1 default='' pk=0
+  column cover_state TEXT notnull=1 default='pending' pk=0
+  column tracks_wanted INTEGER notnull=1 default=0 pk=0
+  column tracks_done INTEGER notnull=1 default=0 pk=0
+  column tracks_failed INTEGER notnull=1 default=0 pk=0
+  column tracks_given_up INTEGER notnull=1 default=0 pk=0
+  column tracks_missing INTEGER notnull=1 default=0 pk=0
+  column state TEXT notnull=1 default='none' pk=0
+  column added_at TEXT notnull=1 default=NULL pk=0
+  column refreshed_at TEXT notnull=0 default=NULL pk=0
+  column completed_at TEXT notnull=0 default=NULL pk=0
+  column updated_at TEXT notnull=1 default=NULL pk=0
+  column pinned_storefront TEXT notnull=1 default='' pk=0
+  constraint pk(id)
+table resource_sources
+  column resource_kind TEXT notnull=1 default=NULL pk=1
+  column resource_id TEXT notnull=1 default=NULL pk=2
+  column source TEXT notnull=1 default=NULL pk=3
+  column added_at TEXT notnull=1 default=NULL pk=0
+  constraint pk(resource_kind, resource_id, source)
+table run_events autoincrement
+  column id INTEGER notnull=0 default=NULL pk=1
+  column job_id TEXT notnull=1 default=NULL pk=0
+  column item_id TEXT notnull=1 default='' pk=0
+  column type TEXT notnull=1 default=NULL pk=0
+  column phase TEXT notnull=1 default='' pk=0
+  column message TEXT notnull=1 default='' pk=0
+  column payload TEXT notnull=1 default='' pk=0
+  column created_at TEXT notnull=1 default=NULL pk=0
+table run_items
+  column id TEXT notnull=0 default=NULL pk=1
+  column job_id TEXT notnull=1 default=NULL pk=0
+  column adam_id TEXT notnull=1 default=NULL pk=0
+  column kind TEXT notnull=1 default=NULL pk=0
+  column idx INTEGER notnull=1 default=NULL pk=0
+  column title TEXT notnull=1 default='' pk=0
+  column artist TEXT notnull=1 default='' pk=0
+  column album TEXT notnull=1 default='' pk=0
+  column duration_ms INTEGER notnull=1 default=0 pk=0
+  column artwork_url TEXT notnull=1 default='' pk=0
+  column has_lyrics INTEGER notnull=1 default=0 pk=0
+  column lyrics_status TEXT notnull=1 default='' pk=0
+  column status TEXT notnull=1 default=NULL pk=0
+  column download_progress REAL notnull=1 default=0 pk=0
+  column decrypt_progress REAL notnull=1 default=0 pk=0
+  column download_bytes INTEGER notnull=1 default=0 pk=0
+  column progress_resolved INTEGER notnull=1 default=0 pk=0
+  column progress_remuxed INTEGER notnull=1 default=0 pk=0
+  column progress_verified INTEGER notnull=1 default=0 pk=0
+  column progress_tagged INTEGER notnull=1 default=0 pk=0
+  column progress_saved INTEGER notnull=1 default=0 pk=0
+  column codec TEXT notnull=1 default='' pk=0
+  column bit_depth INTEGER notnull=1 default=0 pk=0
+  column sample_rate INTEGER notnull=1 default=0 pk=0
+  column bitrate INTEGER notnull=1 default=0 pk=0
+  column file_size INTEGER notnull=1 default=0 pk=0
+  column retry_kind TEXT notnull=1 default='' pk=0
+  column attempt INTEGER notnull=1 default=0 pk=0
+  column max_attempts INTEGER notnull=1 default=0 pk=0
+  column status_message TEXT notnull=1 default='' pk=0
+  column output_path TEXT notnull=1 default='' pk=0
+  column error TEXT notnull=1 default='' pk=0
+  column slot TEXT notnull=1 default='main' pk=0
+  column owner_kind TEXT notnull=1 default='' pk=0
+  column owner_id TEXT notnull=1 default='' pk=0
+  column created_at TEXT notnull=1 default=NULL pk=0
+  column updated_at TEXT notnull=1 default=NULL pk=0
+  constraint pk(id)
+  foreign key job_id -> runs(id) on update NO ACTION on delete NO ACTION
+table runs
+  column id TEXT notnull=0 default=NULL pk=1
+  column input TEXT notnull=1 default=NULL pk=0
+  column type TEXT notnull=1 default=NULL pk=0
+  column storefront TEXT notnull=0 default=NULL pk=0
+  column title TEXT notnull=1 default='' pk=0
+  column artwork_url TEXT notnull=1 default='' pk=0
+  column artist_name TEXT notnull=1 default='' pk=0
+  column artist_url TEXT notnull=1 default='' pk=0
+  column curator_name TEXT notnull=1 default='' pk=0
+  column release_date TEXT notnull=1 default='' pk=0
+  column genre TEXT notnull=1 default='' pk=0
+  column artwork_bg_color TEXT notnull=1 default='' pk=0
+  column artwork_text_color1 TEXT notnull=1 default='' pk=0
+  column artwork_text_color2 TEXT notnull=1 default='' pk=0
+  column artwork_text_color3 TEXT notnull=1 default='' pk=0
+  column artwork_text_color4 TEXT notnull=1 default='' pk=0
+  column motion_artwork_url TEXT notnull=1 default='' pk=0
+  column motion_artwork_tall_url TEXT notnull=1 default='' pk=0
+  column motion_artwork_bg_color TEXT notnull=1 default='' pk=0
+  column motion_artwork_text_color1 TEXT notnull=1 default='' pk=0
+  column motion_artwork_text_color2 TEXT notnull=1 default='' pk=0
+  column motion_artwork_text_color3 TEXT notnull=1 default='' pk=0
+  column motion_artwork_text_color4 TEXT notnull=1 default='' pk=0
+  column motion_artwork_tall_bg_color TEXT notnull=1 default='' pk=0
+  column motion_artwork_tall_text_color1 TEXT notnull=1 default='' pk=0
+  column motion_artwork_tall_text_color2 TEXT notnull=1 default='' pk=0
+  column motion_artwork_tall_text_color3 TEXT notnull=1 default='' pk=0
+  column motion_artwork_tall_text_color4 TEXT notnull=1 default='' pk=0
+  column canonical_key TEXT notnull=1 default='' pk=0
+  column overrides TEXT notnull=1 default='' pk=0
+  column status TEXT notnull=1 default=NULL pk=0
+  column total_items INTEGER notnull=1 default=0 pk=0
+  column error TEXT notnull=1 default='' pk=0
+  column started_at TEXT notnull=0 default=NULL pk=0
+  column finished_at TEXT notnull=0 default=NULL pk=0
+  column queue_order INTEGER notnull=1 default=0 pk=0
+  column resource_kind TEXT notnull=0 default=NULL pk=0
+  column resource_id TEXT notnull=0 default=NULL pk=0
+  column trigger TEXT notnull=1 default='manual' pk=0
+  column priority INTEGER notnull=1 default=1 pk=0
+  column plan TEXT notnull=1 default='' pk=0
+  column created_at TEXT notnull=1 default=NULL pk=0
+  column updated_at TEXT notnull=1 default=NULL pk=0
+  constraint pk(id)
+table tracks
+  column album_id TEXT notnull=1 default=NULL pk=1
+  column song_id TEXT notnull=1 default=NULL pk=2
+  column disc_number INTEGER notnull=1 default=0 pk=0
+  column track_number INTEGER notnull=1 default=0 pk=0
+  column song_number INTEGER notnull=1 default=0 pk=0
+  column name TEXT notnull=1 default='' pk=0
+  column artist_name TEXT notnull=1 default='' pk=0
+  column duration_ms INTEGER notnull=1 default=0 pk=0
+  column has_lyrics INTEGER notnull=1 default=0 pk=0
+  column isrc TEXT notnull=1 default='' pk=0
+  column wanted INTEGER notnull=1 default=0 pk=0
+  column availability TEXT notnull=1 default='available' pk=0
+  column list_position INTEGER notnull=1 default=0 pk=0
+  constraint pk(album_id, song_id)

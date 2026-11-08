@@ -1,0 +1,512 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+
+	"amdl/internal/domain"
+)
+
+func TestCreateDownloadSplitsBatchAndDedupes(t *testing.T) {
+	server := newServer(t, Deps{})
+	body := `{"urls":["song|us|1, song|us|2","song|us|1"]}`
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", body)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var resp domain.BatchSubmitResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Accepted != 2 || resp.Rejected != 1 || len(resp.Results) != 3 {
+		t.Fatalf("resp = %+v, want 2 accepted / 1 rejected across 3 results", resp)
+	}
+	if resp.Results[2].Status != domain.SubmitDuplicateInRequest || resp.Results[2].Error == nil || resp.Results[2].Error.Code != "duplicate_in_request" {
+		t.Fatalf("third result = %+v, want duplicate_in_request with its error object", resp.Results[2])
+	}
+	if resp.Results[0].Error != nil {
+		t.Fatalf("accepted result carries an error: %+v", resp.Results[0])
+	}
+}
+
+func TestGetDownloadDerivesProgressFromItems(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", Status: domain.JobRunning, TotalItems: 4}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	statuses := []domain.ItemStatus{domain.ItemCompleted, domain.ItemSkipped, domain.ItemFailed, domain.ItemDownloading}
+	for i, st := range statuses {
+		item := domain.JobItem{ID: "item" + strconv.Itoa(i), JobID: job.ID, Index: i, Status: st}
+		if err := server.store.CreateItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var resp struct {
+		Job map[string]any `json:"job"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	assertJobCounters(t, resp.Job)
+}
+
+// assertJobCounters checks the wire counters of a running job with one
+// completed, one skipped, one failed and one downloading item.
+func assertJobCounters(t *testing.T, job map[string]any) {
+	t.Helper()
+	for key, want := range map[string]float64{
+		"total_items": 4, "completed_items": 1, "skipped_items": 1, "failed_items": 1, "cancelled_items": 0,
+	} {
+		if got, ok := job[key].(float64); !ok || got != want {
+			t.Errorf("%s = %#v, want %v", key, job[key], want)
+		}
+	}
+	if _, ok := job["done_items"]; ok {
+		t.Errorf("job still carries done_items: %v", job)
+	}
+}
+
+// TestGetDownloadReportsHookStates verifies the snapshot endpoint carries the
+// same hook information the SSE stream pushes as hook_* events — the two
+// are access modes of one state, so a client that never subscribes must still
+// see hook outcomes.
+func TestGetDownloadReportsHookStates(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range []domain.Event{
+		{JobID: job.ID, Type: "hook_started", Phase: "emby-refresh"},
+		{JobID: job.ID, Type: "hook_succeeded", Phase: "emby-refresh"},
+		{JobID: job.ID, Type: "hook_started", Phase: "notify"},
+		{JobID: job.ID, Type: "hook_failed", Phase: "notify", Message: "connect: refused"},
+	} {
+		if _, err := server.store.AddEvent(ctx, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var resp struct {
+		Hooks []domain.HookState `json:"hooks"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.HookState{
+		{Name: "emby-refresh", Status: "succeeded"},
+		{Name: "notify", Status: "failed", Error: "connect: refused"},
+	}
+	if len(resp.Hooks) != len(want) {
+		t.Fatalf("hooks = %+v, want %+v", resp.Hooks, want)
+	}
+	for i := range want {
+		if resp.Hooks[i] != want[i] {
+			t.Fatalf("hooks[%d] = %+v, want %+v", i, resp.Hooks[i], want[i])
+		}
+	}
+
+	// A job with no hook events must report an empty array, not null.
+	plain := domain.Job{ID: "job2", Input: "song|us|2", Type: "song", Status: domain.JobRunning}
+	if err := server.store.CreateJob(ctx, plain); err != nil {
+		t.Fatal(err)
+	}
+	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+plain.ID, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"hooks":[]`) {
+		t.Fatalf("body = %s, want a \"hooks\":[] field", recorder.Body.String())
+	}
+}
+
+func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	job := domain.Job{ID: "job1", Input: "song|us|1", Type: "song", Status: domain.JobRunning, TotalItems: 4}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	statuses := []domain.ItemStatus{domain.ItemCompleted, domain.ItemSkipped, domain.ItemFailed, domain.ItemDownloading}
+	for i, st := range statuses {
+		item := domain.JobItem{ID: "item" + strconv.Itoa(i), JobID: job.ID, Index: i, Status: st}
+		if err := server.store.CreateItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads", "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var resp struct {
+		Downloads    []map[string]any       `json:"downloads"`
+		StatusCounts domain.JobStatusCounts `json:"status_counts"`
+		EventCursor  *int64                 `json:"event_cursor"`
+		Total        int                    `json:"total"`
+		Limit        int                    `json:"limit"`
+		Offset       int                    `json:"offset"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Downloads) != 1 {
+		t.Fatalf("len(downloads) = %d, want 1", len(resp.Downloads))
+	}
+	if resp.Total != 1 || resp.Limit != 50 || resp.Offset != 0 {
+		t.Fatalf("pagination meta total=%d limit=%d offset=%d, want 1/50/0", resp.Total, resp.Limit, resp.Offset)
+	}
+	if resp.StatusCounts != (domain.JobStatusCounts{Running: 1, Total: 1}) {
+		t.Fatalf("status_counts = %+v, want running=1 total=1 with other statuses zero", resp.StatusCounts)
+	}
+	if resp.EventCursor == nil || *resp.EventCursor != 0 {
+		t.Fatalf("event_cursor = %v, want 0 (no events yet)", resp.EventCursor)
+	}
+	assertJobCounters(t, resp.Downloads[0])
+}
+
+// A job's display metadata (artist, curator, release, genre, the artwork URL
+// template and palette) and its items' artwork and lyrics flag reach both the
+// download detail and the list. The golden files pin every field name and
+// value; the schema check in requestJSON pins the shape.
+func TestDownloadResponsesCarryDisplayMetadata(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	job := domain.Job{
+		ID: "job1", Input: "album|us|1", Type: "album", Title: "Album", Storefront: "us",
+		ArtistName: "Album Artist", ArtistURL: "https://music.apple.com/us/artist/album-artist/1",
+		CuratorName: "Curator", ReleaseDate: "2024-06-01", Genre: "Pop",
+		ArtworkURL:     "https://is1-ssl.mzstatic.com/image/thumb/Music/album/{w}x{h}bb.jpg",
+		ArtworkBgColor: "1a1a1a", ArtworkTextColor1: "ffffff", ArtworkTextColor2: "eeeeee",
+		ArtworkTextColor3: "cccccc", ArtworkTextColor4: "aaaaaa",
+		Status: domain.JobRunning, TotalItems: 1,
+	}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	item := domain.JobItem{ID: "item1", JobID: job.ID, Index: 1, Title: "Track", HasLyrics: true, Status: domain.ItemQueued,
+		ArtworkURL: "https://is1-ssl.mzstatic.com/image/thumb/Music/track/{w}x{h}bb.jpg"}
+	if err := server.store.CreateItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, path := range map[string]string{
+		"download_detail": "/api/v1/downloads/" + job.ID,
+		"download_list":   "/api/v1/downloads",
+	} {
+		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("GET %s: status = %d, body = %s", path, recorder.Code, recorder.Body.String())
+		}
+		assertGolden(t, name, recorder.Body.Bytes())
+	}
+}
+
+func TestDeleteDownload(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	terminal := domain.Job{ID: "job_done", Input: "song|us|1", Type: "song", CanonicalKey: "song:1", Status: domain.JobCompleted}
+	running := domain.Job{ID: "job_run", Input: "song|us|2", Type: "song", CanonicalKey: "song:2", Status: domain.JobRunning}
+	for _, job := range []domain.Job{terminal, running} {
+		if err := server.store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := server.store.CreateItem(ctx, domain.JobItem{ID: "item1", JobID: terminal.ID, Status: domain.ItemCompleted}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.store.AddEvent(ctx, domain.Event{JobID: terminal.ID, Type: "job_finished"}); err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := requestJSON(t, server.Routes(), http.MethodDelete, "/api/v1/downloads/"+terminal.ID, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("delete terminal: status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if _, err := server.store.GetJob(ctx, terminal.ID); err == nil {
+		t.Fatal("job row still exists after delete")
+	}
+	items, err := server.store.ListItems(ctx, terminal.ID)
+	if err != nil || len(items) != 0 {
+		t.Fatalf("items after delete = %v (err %v), want none", items, err)
+	}
+	events, err := server.store.ListEventsAfterLimit(ctx, terminal.ID, 0, 0)
+	if err != nil || len(events) != 1 || events[0].Type != domain.EventJobDeleted {
+		t.Fatalf("events after delete = %v (err %v), want one delete tombstone", events, err)
+	}
+
+	recorder = requestJSON(t, server.Routes(), http.MethodDelete, "/api/v1/downloads/"+running.ID, "")
+	assertErrorCode(t, recorder, http.StatusConflict, "job_active")
+
+	recorder = requestJSON(t, server.Routes(), http.MethodDelete, "/api/v1/downloads/missing", "")
+	assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
+}
+
+func TestCreateDownloadRejectsEmptyURLs(t *testing.T) {
+	server := newServer(t, Deps{})
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":[" , ,"]}`)
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
+}
+
+func TestCreateDownloadRejectsTooManyURLs(t *testing.T) {
+	server := newServer(t, Deps{})
+	urls := make([]string, maxBatchSubmitURLs+1)
+	for i := range urls {
+		urls[i] = "song|us|" + strings.Repeat("1", 1) + string(rune('a'+i%26))
+	}
+	body, err := json.Marshal(domain.DownloadRequest{URLs: urls})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", string(body))
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
+}
+
+// When no URL is accepted the batch body moves into error.details, so a
+// client that only understands the envelope still sees each URL's verdict.
+func TestCreateDownloadAllRejectedIsNoURLsAccepted(t *testing.T) {
+	server := newServer(t, Deps{})
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":["bad-url"]}`)
+	details := assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "no_urls_accepted")
+	var batch domain.BatchSubmitResponse
+	if err := json.Unmarshal(details, &batch); err != nil {
+		t.Fatalf("details %s is not the batch body: %v", details, err)
+	}
+	if batch.Accepted != 0 || batch.Rejected != 1 || len(batch.Results) != 1 {
+		t.Fatalf("batch = %+v, want 0 accepted / 1 rejected", batch)
+	}
+	got := batch.Results[0]
+	if got.URL != "bad-url" || got.Status != domain.SubmitInvalid || got.Error == nil || got.Error.Code != "invalid_url" {
+		t.Fatalf("result = %+v, want invalid with invalid_url", got)
+	}
+}
+
+// A store failure is retryable, so it must not look like a verdict on the
+// input: 500 store_error, with the per-URL results still in details.
+func TestCreateDownloadStoreFailureIsStoreError(t *testing.T) {
+	server := newServer(t, Deps{})
+	if err := server.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":["song|us|1","bad-url"]}`)
+	details := assertErrorCode(t, recorder, http.StatusInternalServerError, "store_error")
+	var batch domain.BatchSubmitResponse
+	if err := json.Unmarshal(details, &batch); err != nil {
+		t.Fatalf("details %s is not the batch body: %v", details, err)
+	}
+	if len(batch.Results) != 2 || batch.Results[0].Status != domain.SubmitServerError || batch.Results[0].Error.Code != "store_error" ||
+		batch.Results[1].Status != domain.SubmitInvalid {
+		t.Fatalf("results = %+v, want store failure then invalid", batch.Results)
+	}
+}
+
+// A transient store error on a job lookup is a 500, never a 404: a 404 tells
+// a client to drop a job that may still exist.
+func TestJobLookupStoreFailureIsNotNotFound(t *testing.T) {
+	server := newServer(t, Deps{})
+	if err := server.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/v1/downloads/job1", "/api/v1/downloads/job1/events"} {
+		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
+		assertErrorCode(t, recorder, http.StatusInternalServerError, "store_error")
+	}
+}
+
+// The pipeline fills output_path before a file exists, so only items whose file
+// is on disk (completed, skipped_existing) report it, as an absolute path.
+func TestGetDownloadReportsOutputPathOfFinishedItemsOnly(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	job := domain.Job{ID: "job1", Input: "album|us|1", Type: "album", Status: domain.JobCompleted, TotalItems: 4}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	abs := filepath.Join(t.TempDir(), "A", "Album", "01. One.m4a")
+	rel := filepath.Join("data", "downloads", "A", "Album", "02. Two.m4a")
+	for _, item := range []domain.JobItem{
+		{ID: "done", JobID: job.ID, Index: 1, Status: domain.ItemCompleted, OutputPath: abs},
+		{ID: "skipped", JobID: job.ID, Index: 2, Status: domain.ItemSkipped, OutputPath: rel},
+		{ID: "failed", JobID: job.ID, Index: 3, Status: domain.ItemFailed, OutputPath: abs + ".x"},
+		{ID: "queued", JobID: job.ID, Index: 4, Status: domain.ItemQueued},
+	} {
+		if err := server.store.CreateItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var detail struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	wantSkipped, err := filepath.Abs(rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"done": abs, "skipped": wantSkipped, "failed": nil, "queued": nil}
+	if len(detail.Items) != len(want) {
+		t.Fatalf("items = %v, want %d", detail.Items, len(want))
+	}
+	for _, item := range detail.Items {
+		id, _ := item["id"].(string)
+		if got := item["output_path"]; got != want[id] {
+			t.Errorf("item %s output_path = %v, want %v", id, got, want[id])
+		}
+	}
+}
+
+func TestCancelOnlyStopsAJobThatHasNotEnded(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	for _, tt := range []struct {
+		status domain.JobStatus
+		code   int
+	}{
+		{domain.JobCompleted, http.StatusConflict},
+		{domain.JobFailed, http.StatusConflict},
+		{domain.JobCancelled, http.StatusOK},
+	} {
+		id := "job-" + string(tt.status)
+		job := domain.Job{ID: id, Input: "song|us|" + id, Type: "song", CanonicalKey: "song:us:" + id, Status: tt.status}
+		if err := server.store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+id+"/cancel", "")
+		if tt.code == http.StatusConflict {
+			assertErrorCode(t, recorder, http.StatusConflict, CodeJobNotCancellable)
+		} else if recorder.Code != tt.code {
+			t.Fatalf("cancel %s job = %d %s, want %d", tt.status, recorder.Code, recorder.Body.String(), tt.code)
+		}
+		if got, err := server.store.GetJob(ctx, id); err != nil || got.Status != tt.status {
+			t.Fatalf("job after cancel = %v (%v), want %s kept", got.Status, err, tt.status)
+		}
+	}
+}
+
+func TestRetryDownloadRejectsCompletedAndMissingJobs(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	completed := domain.Job{ID: "job-done", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobCompleted}
+	if err := server.store.CreateJob(ctx, completed); err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+completed.ID+"/retry", "")
+	assertErrorCode(t, recorder, http.StatusConflict, "job_not_retryable")
+	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/no-such-job/retry", "")
+	assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
+}
+
+// TestCancelMissingJobIsNotFound pins job_not_found on every job route: a
+// missing job means "drop the row from the list", unlike a 500, which means
+// "back off and retry".
+func TestCancelMissingJobIsNotFound(t *testing.T) {
+	server := newServer(t, Deps{})
+
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"cancel", http.MethodPost, "/api/v1/downloads/job_missing/cancel"},
+		{"retry", http.MethodPost, "/api/v1/downloads/job_missing/retry"},
+		{"delete", http.MethodDelete, "/api/v1/downloads/job_missing"},
+		{"get", http.MethodGet, "/api/v1/downloads/job_missing"},
+		{"events", http.MethodGet, "/api/v1/downloads/job_missing/events"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := serve(t, server.Routes(), httptest.NewRequest(tc.method, tc.path, nil))
+			assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
+		})
+	}
+}
+
+func TestListAndDetailCarryTheJobsProgress(t *testing.T) {
+	server := newServer(t, Deps{})
+	ctx := context.Background()
+	job := domain.Job{ID: "job-progress", Input: "album|us|9", Type: "album", CanonicalKey: "album:us:9", Status: domain.JobRunning}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range []domain.JobItem{
+		{ID: "p1", JobID: job.ID, Index: 1, Status: domain.ItemCompleted, Progress: domain.ItemProgress{Saved: true}},
+		{ID: "p2", JobID: job.ID, Index: 2, Status: domain.ItemQueued},
+	} {
+		if err := server.store.CreateItem(ctx, it); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var list struct {
+		Downloads []domain.Job `json:"downloads"`
+	}
+	if err := json.Unmarshal(requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads", "").Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	var detail struct {
+		Job domain.Job `json:"job"`
+	}
+	if err := json.Unmarshal(requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "").Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	// One of two tracks saved, the other not started: half the job.
+	if len(list.Downloads) != 1 || list.Downloads[0].Progress == nil || *list.Downloads[0].Progress != 0.5 {
+		t.Fatalf("list progress = %+v", list.Downloads)
+	}
+	if detail.Job.Progress == nil || *detail.Job.Progress != 0.5 {
+		t.Fatalf("detail progress = %v", detail.Job.Progress)
+	}
+}
+
+// A retry is a new run (one row per run): the failed or cancelled one-off
+// run stays as it ended, its input gets a queued run, and the answer names
+// that run.
+func TestRetryDownloadQueuesANewRun(t *testing.T) {
+	for _, status := range []domain.JobStatus{domain.JobFailed, domain.JobCancelled} {
+		server := newServer(t, Deps{})
+		ctx := context.Background()
+		job := domain.Job{ID: "job-" + string(status), Input: "station|us|ra.1", Type: "station", Storefront: "us", CanonicalKey: "station:us:ra.1", Status: status, Error: "boom"}
+		if err := server.store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+job.ID+"/retry", "")
+		if recorder.Code != http.StatusAccepted || !strings.Contains(recorder.Body.String(), `"queued"`) {
+			t.Fatalf("%s: status = %d, body = %s; want 202 queued", status, recorder.Code, recorder.Body.String())
+		}
+		var body struct {
+			Job domain.Job `json:"job"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil || body.Job.ID == "" || body.Job.ID == job.ID {
+			t.Fatalf("%s: the answer names run %q (%v), want the new one", status, body.Job.ID, err)
+		}
+		if got, err := server.store.GetJob(ctx, job.ID); err != nil || got.Status != status {
+			t.Fatalf("%s: retried run = %+v (%v), want it left as it ended", status, got, err)
+		}
+		active, found, err := server.store.FindActiveJobByKey(ctx, job.CanonicalKey)
+		if err != nil || !found || active.ID != body.Job.ID || active.Status != domain.JobQueued || active.Input != job.Input {
+			t.Fatalf("%s: active run = %+v (%v, %v), want a new queued run of the same input", status, active, found, err)
+		}
+	}
+}

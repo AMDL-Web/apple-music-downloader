@@ -1,0 +1,336 @@
+package client
+
+import (
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"amdl/internal/domain"
+)
+
+// The response envelopes below mirror schemas of internal/api/openapi.yaml
+// whose Go types are unexported in internal/api. Jobs, items and events reuse
+// the domain types the backend marshals.
+
+// Health is the HealthResponse schema.
+type Health struct {
+	Status        string `json:"status"`
+	DatabaseError string `json:"database_error,omitempty"`
+}
+
+// SystemInfo is the SystemInfo schema.
+type SystemInfo struct {
+	Version              string    `json:"version"`
+	Commit               string    `json:"commit"`
+	BuildDate            string    `json:"build_date"`
+	GoVersion            string    `json:"go_version"`
+	OS                   string    `json:"os"`
+	Arch                 string    `json:"arch"`
+	StartedAt            time.Time `json:"started_at"`
+	UptimeSeconds        int64     `json:"uptime_seconds"`
+	Simulate             bool      `json:"simulate"`
+	MotionArtworkEnabled bool      `json:"motion_artwork_enabled"`
+	DefaultStorefront    string    `json:"default_storefront"`
+	Jobs                 struct {
+		Workers         int `json:"workers"`
+		Active          int `json:"active"`
+		QueueDepth      int `json:"queue_depth"`
+		QueueCapacity   int `json:"queue_capacity"`
+		RecoveryBacklog int `json:"recovery_backlog"`
+	} `json:"jobs"`
+	Pools struct {
+		Downloads       int `json:"downloads"`
+		Decrypts        int `json:"decrypts"`
+		WrapperRequests int `json:"wrapper_requests"`
+	} `json:"pools"`
+	Tools   []domain.Capability `json:"tools"`
+	Storage []Storage           `json:"storage"`
+	// PendingRestart names the config keys saved with a value the next
+	// start applies.
+	PendingRestart []string `json:"pending_restart"`
+}
+
+// Storage is one entry of SystemInfo.storage: the free space of
+// downloads_dir or temp_dir, or why it could not be read.
+type Storage struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	FreeBytes  int64  `json:"free_bytes,omitempty"`
+	TotalBytes int64  `json:"total_bytes,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// WrapperStatus is the WrapperStatus schema.
+type WrapperStatus struct {
+	Ready          bool     `json:"ready"`
+	LoggedIn       bool     `json:"logged_in"`
+	Regions        []string `json:"regions"`
+	LoginSupported bool     `json:"login_supported"`
+	// Managed is set when the backend runs the wrapper on its machine.
+	Managed *ManagedWrapper `json:"managed,omitempty"`
+	// TokenSet says wrapper.token is set: the backend sends it as a bearer
+	// key to a wrapper behind a gateway or proxy.
+	TokenSet bool `json:"token_set"`
+}
+
+// ManagedWrapper is the ManagedWrapper schema.
+type ManagedWrapper struct {
+	Mode          string `json:"mode"`
+	Accel         string `json:"accel"`
+	AccelFallback bool   `json:"accel_fallback"`
+	QEMU          string `json:"qemu"`
+	Guest         string `json:"guest"`
+	LoginResidue  bool   `json:"login_residue"`
+	LastError     string `json:"last_error,omitempty"`
+	// Download is the host's download of the wrapper-lite payload, while
+	// mode is starting.
+	Download *WrapperDownload `json:"download,omitempty"`
+}
+
+// WrapperDownload is the WrapperDownload schema: a download's progress in bytes.
+type WrapperDownload struct {
+	DoneBytes  int64 `json:"done_bytes"`
+	TotalBytes int64 `json:"total_bytes"`
+}
+
+// DownloadList is the DownloadList schema.
+type DownloadList struct {
+	Downloads    []domain.Job           `json:"downloads"`
+	StatusCounts domain.JobStatusCounts `json:"status_counts"`
+	Total        int                    `json:"total"`
+	Limit        int                    `json:"limit"`
+	Offset       int                    `json:"offset"`
+	EventCursor  int64                  `json:"event_cursor"`
+}
+
+// DownloadDetail is the DownloadDetail schema.
+type DownloadDetail struct {
+	Job         domain.Job         `json:"job"`
+	Items       []domain.JobItem   `json:"items"`
+	Hooks       []domain.HookState `json:"hooks"`
+	EventCursor int64              `json:"event_cursor"`
+}
+
+// HooksRunning reports whether a post-download hook of the job is still
+// running, which can outlast the job's terminal status.
+func (d DownloadDetail) HooksRunning() bool {
+	for _, h := range d.Hooks {
+		if h.Status == "running" {
+			return true
+		}
+	}
+	return false
+}
+
+// Lookup is the LookupResponse schema: a parsed link and its catalog
+// metadata, with the Job field names.
+type Lookup struct {
+	Input               string   `json:"input"`
+	Type                string   `json:"type"`
+	Storefront          string   `json:"storefront"`
+	ID                  string   `json:"id"`
+	TrackID             string   `json:"track_id,omitempty"`
+	Title               string   `json:"title"`
+	ArtistName          string   `json:"artist_name,omitempty"`
+	ArtistURL           string   `json:"artist_url,omitempty"`
+	CuratorName         string   `json:"curator_name,omitempty"`
+	AlbumName           string   `json:"album_name,omitempty"`
+	ArtworkURL          string   `json:"artwork_url,omitempty"`
+	ArtworkBgColor      string   `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1   string   `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2   string   `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3   string   `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4   string   `json:"artwork_text_color4,omitempty"`
+	ReleaseDate         string   `json:"release_date,omitempty"`
+	Genre               string   `json:"genre,omitempty"`
+	TrackCount          int      `json:"track_count,omitempty"`
+	DurationMS          int      `json:"duration_ms,omitempty"`
+	ContentRating       string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster  bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits         []string `json:"audio_traits,omitempty"`
+	NeedsMediaUserToken bool     `json:"needs_media_user_token,omitempty"`
+	// Resource is the record holding the link's album, playlist or song;
+	// nil when amdl has none.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
+}
+
+// ListQuery is the query of GET /api/v1/downloads; zero fields are left out.
+type ListQuery struct {
+	Limit  int
+	Offset int
+	Status []domain.JobStatus
+	Types  []string
+	// NoRecord keeps the runs of no record (resource_kind=none): stations,
+	// a library playlist without a catalog id, the 1.x history.
+	NoRecord bool
+	// Resource keeps the runs of one record, as resource_kind and
+	// resource_id.
+	Resource domain.ResourceRef
+	Search   string
+	// Sort is created_at (the backend's default), updated_at or queue_order.
+	Sort string
+	// Ascending flips the default newest-first order.
+	Ascending bool
+}
+
+func (q ListQuery) values() url.Values {
+	v := url.Values{}
+	if q.Limit > 0 {
+		v.Set("limit", strconv.Itoa(q.Limit))
+	}
+	if q.Offset > 0 {
+		v.Set("offset", strconv.Itoa(q.Offset))
+	}
+	if len(q.Status) > 0 {
+		s := make([]string, len(q.Status))
+		for i, st := range q.Status {
+			s[i] = string(st)
+		}
+		v.Set("status", strings.Join(s, ","))
+	}
+	if len(q.Types) > 0 {
+		v.Set("type", strings.Join(q.Types, ","))
+	}
+	if q.NoRecord {
+		v.Set("resource_kind", "none")
+	}
+	if q.Resource.ID != "" {
+		v.Set("resource_kind", string(q.Resource.Kind))
+		v.Set("resource_id", q.Resource.ID)
+	}
+	if q.Search != "" {
+		v.Set("q", q.Search)
+	}
+	if q.Sort != "" {
+		v.Set("sort", q.Sort)
+	}
+	if q.Ascending {
+		v.Set("order", "asc")
+	}
+	return v
+}
+
+// Terminal reports whether a job status is final: completed, failed or
+// cancelled.
+func Terminal(s domain.JobStatus) bool {
+	return s == domain.JobCompleted || s == domain.JobFailed || s == domain.JobCancelled
+}
+
+// Stats is the Stats schema of GET /api/v1/stats.
+type Stats struct {
+	GeneratedAt time.Time `json:"generated_at"`
+	Days        int       `json:"days"`
+	Totals      struct {
+		Jobs            int   `json:"jobs"`
+		TracksCompleted int   `json:"tracks_completed"`
+		TracksSkipped   int   `json:"tracks_skipped"`
+		TracksFailed    int   `json:"tracks_failed"`
+		BytesWritten    int64 `json:"bytes_written"`
+		DurationMS      int64 `json:"duration_ms"`
+	} `json:"totals"`
+	// Daily has one entry per UTC calendar day, oldest first, ending today.
+	Daily []StatsDay `json:"daily"`
+	Hooks []struct {
+		Name         string     `json:"name"`
+		Succeeded    int        `json:"succeeded"`
+		Failed       int        `json:"failed"`
+		LastFailedAt *time.Time `json:"last_failed_at,omitempty"`
+	} `json:"hooks"`
+}
+
+// StatsDay is one day of Stats.daily.
+type StatsDay struct {
+	Date            string `json:"date"`
+	TracksCompleted int    `json:"tracks_completed"`
+	BytesWritten    int64  `json:"bytes_written"`
+	JobsCompleted   int    `json:"jobs_completed"`
+	JobsFailed      int    `json:"jobs_failed"`
+}
+
+// LibrarySync is the LibrarySyncStatus schema. Enabled is the master switch
+// (library_sync.enabled); each account polls when both it and its own
+// switch are on.
+type LibrarySync struct {
+	Enabled         bool                 `json:"enabled"`
+	IntervalMinutes int                  `json:"interval_minutes"`
+	Accounts        []LibrarySyncAccount `json:"accounts"`
+}
+
+// LibrarySyncAccount is the LibrarySyncAccount schema: what the monitor
+// observed for one account. Enabled is the account's own switch.
+type LibrarySyncAccount struct {
+	AccountID      string     `json:"account_id"`
+	Name           string     `json:"name"`
+	Region         string     `json:"region"`
+	Enabled        bool       `json:"enabled"`
+	AnchorSize     int        `json:"anchor_size"`
+	LastPollAt     *time.Time `json:"last_poll_at,omitempty"`
+	LastError      string     `json:"last_error,omitempty"`
+	LastSubmitted  int        `json:"last_submitted"`
+	TotalSubmitted int        `json:"total_submitted"`
+}
+
+// Hooks is the HooksResponse schema.
+type Hooks struct {
+	Enabled bool        `json:"enabled"`
+	Entries []HookEntry `json:"entries"`
+}
+
+// HookEntry is the HookEntry schema. Method, Origin, HeaderNames and
+// MaxAttempts are a webhook's; a command hook has none.
+type HookEntry struct {
+	Name        string   `json:"name"`
+	Enabled     bool     `json:"enabled"`
+	Type        string   `json:"type"`
+	Events      []string `json:"events"`
+	JobTypes    []string `json:"job_types"`
+	Preset      string   `json:"preset,omitempty"`
+	Method      string   `json:"method,omitempty"`
+	Origin      string   `json:"origin,omitempty"`
+	HeaderNames []string `json:"header_names,omitempty"`
+	MaxAttempts int      `json:"max_attempts,omitempty"`
+}
+
+// HookWrite is the WebhookWrite schema: a field left nil, or empty where it
+// is not a pointer, keeps the entry's value. Preset and Values build the
+// request in place of Method, URL, Headers and Body.
+type HookWrite struct {
+	Preset      string             `json:"preset,omitempty"`
+	Values      map[string]string  `json:"values,omitempty"`
+	Enabled     *bool              `json:"enabled,omitempty"`
+	Events      []string           `json:"events,omitempty"`
+	JobTypes    *[]string          `json:"job_types,omitempty"`
+	MaxAttempts *int               `json:"max_attempts,omitempty"`
+	Method      string             `json:"method,omitempty"`
+	URL         string             `json:"url,omitempty"`
+	Headers     *map[string]string `json:"headers,omitempty"`
+	Body        *string            `json:"body,omitempty"`
+}
+
+// HookPreset is the HookPreset schema: a service a webhook can be built for.
+type HookPreset struct {
+	ID     string      `json:"id"`
+	Name   string      `json:"name"`
+	Kind   string      `json:"kind"`
+	Events []string    `json:"events"`
+	Fields []HookField `json:"fields"`
+}
+
+// HookField is the HookPresetField schema.
+type HookField struct {
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Placeholder string   `json:"placeholder,omitempty"`
+	Default     string   `json:"default,omitempty"`
+	Secret      bool     `json:"secret,omitempty"`
+	Optional    bool     `json:"optional,omitempty"`
+	Multiline   bool     `json:"multiline,omitempty"`
+	Choices     []string `json:"choices,omitempty"`
+}
+
+// HookTest is the HookTestResult schema.
+type HookTest struct {
+	Succeeded bool   `json:"succeeded"`
+	Error     string `json:"error,omitempty"`
+}

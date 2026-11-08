@@ -1,0 +1,441 @@
+/* ---- Overview ------------------------------------------------------ */
+
+/* Until the status line and Needs attention have answered, the sections they
+   would push down are laid out but not drawn (OverviewPage's hold). */
+.page-overview[data-held] > :not(.health-strip, .health-strips, [data-section="attention"]),
+.page-overview[data-held="strip"] > [data-section="attention"] {
+  visibility: hidden;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(144px, 1fr));
+  gap: var(--grid-gap);
+}
+
+.kpi {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--s-1);
+  min-height: 96px;
+  padding: var(--s-3);
+  border-radius: var(--r-control);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.kpi:hover {
+  background: var(--bg-hover);
+}
+
+.kpi-label {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.kpi-icon {
+  position: absolute;
+  top: var(--s-4);
+  right: var(--s-4);
+  display: flex;
+}
+
+.kpi-icon .pulse,
+.kpi-icon [data-role] {
+  margin: 0;
+}
+
+/* The loading bar stands on the number's own line, so the tile keeps its height. */
+.kpi-value > .skel {
+  height: 1lh;
+}
+
+.kpi-value {
+  align-self: center;
+  font-family: var(--font-display);
+  font-size: var(--fs-kpi);
+  line-height: var(--lh-kpi);
+  font-weight: var(--w-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-display);
+}
+
+/* Label/value facts (Facts): a wrapping row of small pairs by default. */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-5);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.fact {
+  display: flex;
+  gap: var(--s-1_5);
+  min-width: 0;
+}
+
+.fact-label {
+  color: var(--text-secondary);
+}
+
+.fact-value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fact[data-role="danger"] .fact-value {
+  color: var(--danger-text);
+}
+
+/* Recently completed (views/overview-recent.js): the latest release as a
+   banner in its album's colors, then a wall of the ones before it, two rows
+   of --cols tiles. New download's search results reuse the wall and its
+   tiles (views/download-tiles.js). Every line is one line, so a new completion changes
+   what the boxes show, not their size. */
+.recent {
+  display: grid;
+  gap: var(--s-5);
+}
+
+.latest {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-5);
+  padding: var(--s-5);
+  border-radius: var(--r-card);
+  background: var(--art-bg, var(--bg-surface));
+  color: var(--art-t1, var(--text-primary));
+  text-decoration: none;
+}
+
+.latest > .art {
+  width: 112px;
+  height: 112px;
+}
+
+.latest-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.latest-kicker,
+.latest-title,
+.latest-artist,
+.latest-facts,
+.wall-title,
+.wall-sub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.latest-kicker {
+  color: var(--art-t2, var(--text-secondary));
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-weight: var(--w-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.latest-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-24);
+  line-height: var(--lh-24);
+  font-weight: var(--w-display);
+}
+
+.latest-artist {
+  color: var(--art-t2, var(--text-secondary));
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+.latest-facts {
+  color: var(--art-t3, var(--text-secondary));
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.wall {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: var(--s-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wall > li {
+  min-width: 0;
+}
+
+.wall-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-art);
+}
+
+.wall-tile > .art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.wall-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+.wall-sub {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* Hover underlines the title of a tile that opens something (a link, or a
+   button such as an artist's); the cover's motion plays (ui/motion.js). A
+   New download album tile is neither: only its Download acts. */
+:is(a, button).wall-tile:hover .wall-title,
+.latest:hover .latest-title {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.latest.is-skel .skel-text,
+.wall-tile.is-skel .skel-text {
+  width: min(70%, 12em);
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.chart-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-readout-day {
+  color: var(--text-primary);
+  font-weight: var(--w-medium);
+}
+
+.chart-multiple {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.chart-title {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.chart-plot {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: var(--s-2);
+  height: 88px;
+}
+
+.chart-yaxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-bars {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  gap: var(--s-0_5);
+  height: 100%;
+  border-top: 1px solid var(--chart-grid);
+  border-bottom: 1px solid var(--chart-grid);
+}
+
+/* Gridline at max/2, matching the middle y-axis label; behind the bars. */
+.chart-bars.has-mid::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1px solid var(--chart-grid);
+  z-index: -1;
+}
+
+.chart-col {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+}
+
+.chart-bar {
+  width: 100%;
+  max-width: 24px;
+  height: calc(var(--v) * 100%);
+  min-height: 2px;
+  border-radius: var(--r-bar) var(--r-bar) 0 0;
+  corner-shape: round;
+  background: var(--chart-bar);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.chart-bar.is-zero {
+  min-height: 0;
+  height: 0;
+}
+
+.chart-bars:hover .chart-bar {
+  opacity: 0.45;
+}
+
+.chart-bars:hover .chart-col.is-hover .chart-bar {
+  opacity: 1;
+}
+
+.chart-xaxis {
+  display: flex;
+  justify-content: space-between;
+  padding-left: calc(56px + var(--s-2));
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+}
+
+/* One label per day; the base keeps the first, middle and latest. */
+.chart-xaxis > span:not(.is-first, .is-mid, .is-latest) {
+  display: none;
+}
+
+/* ---- Server status line ------------------------------------------- */
+
+/* One line above the sections that answers "is the server healthy?". */
+.health-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.health-strip[data-state="ok"],
+.health-strip[data-state="loading"] {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.health-strip[data-state="problem"] {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+/* A notice per severity, stacked at the banners' gap. */
+.health-strips {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+/* The problem strip stands on the page beside the cards: their radius. */
+.health-strip.notice {
+  border-radius: var(--r-card);
+}
+
+/* Each item opens its Settings section; it reads as the notice's text. */
+.health-strip-item {
+  color: inherit;
+  text-decoration: none;
+}
+
+.health-strip-item:hover {
+  text-decoration: underline;
+}
+
+.health-strip-item + .health-strip-item::before {
+  content: "·";
+  margin-inline: var(--s-1_5);
+}
+
+.health-strip-link {
+  margin-inline-start: var(--s-2);
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+
+/* ---- Needs attention and the quiet queue ----------------------------- */
+
+/* A failure's reason may take two lines; the clamp ends it, not a one-line ellipsis. */
+.attention-detail {
+  display: block;
+  overflow: visible;
+  white-space: normal;
+}
+
+.attention-error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+.attention-time {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* The empty live queue (views/overview.js LiveIdle): a job card with a
+   blank cover, as tall as one with its progress row (the skin sets the
+   padding), so a job takes its place without moving the page. */
+.live-idle-art {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border-control);
+  background: var(--bg-inset);
+  color: var(--text-disabled);
+}
+
+.live-idle-card .job-title {
+  color: var(--text-secondary);
+}
+
+.live-idle-card[data-pending] .job-main {
+  visibility: hidden;
+}

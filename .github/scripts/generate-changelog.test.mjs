@@ -1,15 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-// 回归测试仅服务于 GitHub Actions 的自动发版说明生成流程。
-
 import {
   classifyCommits,
   formatAuthors,
   generateMd,
   parseCoAuthors,
+  parseCategory,
   parseGitLog,
+  parseArgs,
+  UsageError,
 } from './generate-changelog.js';
+
+test('parseCategory keeps a breaking build commit and drops a plain one', () => {
+  assert.match(parseCategory('build!: ship one amdl binary'), /Breaking/i);
+  assert.match(parseCategory('build(docker)!: rename the image'), /Breaking/i);
+  assert.equal(parseCategory('build: bump the Go toolchain'), null);
+  assert.equal(parseCategory('style: gofmt'), null);
+});
 
 test('parseCoAuthors extracts every Co-authored-by trailer', () => {
   const trailers = `Co-authored-by: Bob Example <123+Bob@users.noreply.github.com>
@@ -65,4 +73,39 @@ test('generated changelog appends the author and all co-authors to each entry', 
   const markdown = generateMd(classified, 'v1.4.0', null);
   assert.match(markdown, /\* add release notes @Alice, @Bob, @codex/);
   assert.doesNotMatch(markdown, /### 协作者 \| Contributors/);
+});
+
+test('breaking commits get their own first section and lose the prefix', () => {
+  const classified = classifyCommits([
+    { hash: 'a'.repeat(16), author: 'Alice', email: 'Alice@users.noreply.github.com', message: 'feat(api)!: switch errors to an envelope', coAuthors: [] },
+    { hash: 'b'.repeat(16), author: 'Alice', email: 'Alice@users.noreply.github.com', message: 'fix(db): keep rows', coAuthors: [] },
+  ]);
+  const markdown = generateMd(classified, 'v2.0.0', null);
+  const breaking = markdown.indexOf('### 破坏性变更 | Breaking');
+  assert.ok(breaking >= 0 && breaking < markdown.indexOf('### 修复 | Fix'));
+  assert.match(markdown, /\* switch errors to an envelope @Alice/);
+});
+
+test('Claude co-authors are credited as @claude whatever the model name', () => {
+  assert.equal(formatAuthors([
+    { author: 'Claude Opus 5.5', email: 'noreply@anthropic.com' },
+    { author: 'Claude', email: 'noreply@anthropic.com' },
+  ]), '@claude');
+});
+
+test('parseArgs reads the flags the release workflow passes', () => {
+  assert.deepEqual(parseArgs(['--tag', 'v2.0.0', '--with-hash', '--base', 'v1.9.0', '--output-only']), {
+    tagName: 'v2.0.0',
+    latest: 'v1.9.0',
+    withHash: true,
+    withCommitizen: false,
+    outputOnly: true,
+    help: false,
+  });
+});
+
+test('parseArgs rejects an unknown flag or a flag without a value', () => {
+  for (const args of [['--taq', 'v2.0.0'], ['--tag'], ['-b'], ['--tag', '--with-hash'], ['v2.0.0']]) {
+    assert.throws(() => parseArgs(args), UsageError, args.join(' '));
+  }
 });

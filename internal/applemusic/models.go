@@ -28,9 +28,11 @@ type Song struct {
 	ISRC             string
 	ContentRating    string
 	HasLyrics        bool
-	ArtworkURL       string
-	AlbumArtworkURL  string
-	ArtistArtworkURL string
+	// AppleDigitalMaster is attributes.isAppleDigitalMaster.
+	AppleDigitalMaster bool
+	ArtworkURL         string
+	AlbumArtworkURL    string
+	ArtistArtworkURL   string
 	// ArtworkColors/AlbumArtworkColors are the palettes of the artwork behind
 	// ArtworkURL and AlbumArtworkURL respectively.
 	ArtworkColors         ArtworkColors
@@ -49,6 +51,14 @@ type Song struct {
 	// included artist resource's attributes.url. Empty when the catalog
 	// response carries no artist relationship.
 	ArtistURL string
+	// HiResLossless reports "hi-res-lossless" in attributes.audioTraits.
+	HiResLossless bool
+	// AudioTraits is attributes.audioTraits as Apple sends it, for example
+	// "lossless", "hi-res-lossless", "atmos", "spatial", "lossy-stereo".
+	AudioTraits []string
+	// URL is the song's music.apple.com page (attributes.url), an album link
+	// whose i parameter names the song.
+	URL string
 }
 
 type Collection struct {
@@ -69,7 +79,23 @@ type Collection struct {
 	// catalog does not expose them on playlists or stations.
 	ReleaseDate string
 	GenreNames  []string
-	Tracks      []Song
+	// ContentRating ("explicit", "clean" or empty) and AppleDigitalMaster
+	// (attributes.isMasteredForItunes) are album attributes; only Album fills
+	// them.
+	ContentRating      string
+	AppleDigitalMaster bool
+	// URL (attributes.url) is filled for album summaries: search hits and an
+	// artist's albums. TrackCount (attributes.trackCount: the whole release,
+	// tracks the storefront withholds from the list included) is filled for
+	// those and by Album. AudioTraits (amp-api's attributes.audioTraits) is
+	// filled for those, by Album and for playlists. Playlists have no
+	// TrackCount: the catalog states none.
+	URL         string
+	TrackCount  int
+	AudioTraits []string
+	// IsSingle (attributes.isSingle) is filled for album summaries.
+	IsSingle bool
+	Tracks   []Song
 }
 
 type Artist struct {
@@ -77,6 +103,7 @@ type Artist struct {
 	Name string
 	// URL is the artist's own music.apple.com page (attributes.url).
 	URL           string
+	GenreNames    []string
 	ArtworkURL    string
 	ArtworkColors ArtworkColors
 }
@@ -93,6 +120,14 @@ type StationInfo struct {
 	Format        string
 	IsLive        bool
 }
+
+// StationCuratorName is the display curator of a station: the catalog has no
+// curator attribute for stations, so jobs and link previews show this label.
+const StationCuratorName = "Apple Music Station"
+
+// Downloadable reports whether the station resolves to a finite track list
+// (format "tracks"); a live stream has none.
+func (s StationInfo) Downloadable() bool { return s.Format == "tracks" }
 
 type ArtistAlbums struct {
 	Artist
@@ -211,21 +246,28 @@ type catalogPlaylistData struct {
 }
 
 type songAttributes struct {
-	Name                string            `json:"name"`
-	ArtistName          string            `json:"artistName"`
-	AlbumName           string            `json:"albumName"`
-	ComposerName        string            `json:"composerName"`
-	GenreNames          []string          `json:"genreNames"`
-	ReleaseDate         string            `json:"releaseDate"`
-	TrackNumber         int               `json:"trackNumber"`
-	DiscNumber          int               `json:"discNumber"`
-	DurationInMillis    int               `json:"durationInMillis"`
-	ISRC                string            `json:"isrc"`
-	ContentRating       string            `json:"contentRating"`
-	HasTimeSyncedLyrics bool              `json:"hasTimeSyncedLyrics"`
-	HasLyrics           bool              `json:"hasLyrics"`
-	Artwork             artwork           `json:"artwork"`
-	ExtendedAssetURLs   extendedAssetURLs `json:"extendedAssetUrls"`
+	Name                 string            `json:"name"`
+	ArtistName           string            `json:"artistName"`
+	AlbumName            string            `json:"albumName"`
+	ComposerName         string            `json:"composerName"`
+	GenreNames           []string          `json:"genreNames"`
+	ReleaseDate          string            `json:"releaseDate"`
+	TrackNumber          int               `json:"trackNumber"`
+	DiscNumber           int               `json:"discNumber"`
+	DurationInMillis     int               `json:"durationInMillis"`
+	ISRC                 string            `json:"isrc"`
+	ContentRating        string            `json:"contentRating"`
+	IsAppleDigitalMaster bool              `json:"isAppleDigitalMaster"`
+	HasTimeSyncedLyrics  bool              `json:"hasTimeSyncedLyrics"`
+	HasLyrics            bool              `json:"hasLyrics"`
+	Artwork              artwork           `json:"artwork"`
+	ExtendedAssetURLs    extendedAssetURLs `json:"extendedAssetUrls"`
+	// AudioTraits is returned without extend=.
+	AudioTraits []string `json:"audioTraits"`
+	URL         string   `json:"url"`
+	// InLibrary is set only by a search that asks for extend=inLibrary with a
+	// usable media-user-token.
+	InLibrary *bool `json:"inLibrary"`
 }
 
 type albumAttributes struct {
@@ -242,6 +284,17 @@ type albumAttributes struct {
 	RecordLabel string   `json:"recordLabel"`
 	UPC         string   `json:"upc"`
 	Artwork     artwork  `json:"artwork"`
+	// ContentRating and IsMasteredForItunes are documented, non-extended
+	// attributes of the public catalog's Albums resource.
+	ContentRating       string `json:"contentRating"`
+	IsMasteredForItunes bool   `json:"isMasteredForItunes"`
+	// IsSingle is a documented attribute of the Albums resource.
+	IsSingle bool   `json:"isSingle"`
+	URL      string `json:"url"`
+	// AudioTraits is amp-api only, as on songs.
+	AudioTraits []string `json:"audioTraits"`
+	// InLibrary is as on songs.
+	InLibrary *bool `json:"inLibrary"`
 }
 
 type playlistAttributes struct {
@@ -249,6 +302,13 @@ type playlistAttributes struct {
 	CuratorName string  `json:"curatorName"`
 	ArtistName  string  `json:"artistName"`
 	Artwork     artwork `json:"artwork"`
+	// URL is the documented attributes.url of a Playlists resource.
+	URL string `json:"url"`
+	// AudioTraits is amp-api only, as on songs and albums; search hits carry
+	// it, empty so far.
+	AudioTraits []string `json:"audioTraits"`
+	// InLibrary is as on songs.
+	InLibrary *bool `json:"inLibrary"`
 }
 
 type artwork struct {
@@ -327,9 +387,10 @@ type artistData struct {
 }
 
 type artistAttributes struct {
-	Name    string  `json:"name"`
-	URL     string  `json:"url"`
-	Artwork artwork `json:"artwork"`
+	Name       string   `json:"name"`
+	URL        string   `json:"url"`
+	GenreNames []string `json:"genreNames"`
+	Artwork    artwork  `json:"artwork"`
 }
 
 type artistRelationships struct {

@@ -1,0 +1,3 @@
+node_modules/
+# Test results, the HTML report, the server binary and its coverage.
+out/

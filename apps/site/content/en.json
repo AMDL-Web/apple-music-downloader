@@ -1,0 +1,238 @@
+{
+  "meta": {
+    "title": "AMDL — Self-hosted Apple Music downloader",
+    "description": "Self-hosted Apple Music downloader saving tagged .m4a files in ALAC up to 24-bit/192 kHz, Dolby Atmos, or AAC, with web console, TUI, CLI, and MCP server.",
+    "ogAlt": "The AMDL headline beside three album covers, showing Apple Music on your own disk."
+  },
+  "ui": {
+    "skip": "Skip to content",
+    "nav": "Main navigation",
+    "sections": "Sections",
+    "anchor": "Link to this section",
+    "theme": "Color theme",
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "github": "GitHub repository",
+    "otherLang": "中文",
+    "otherLangLabel": "切换到中文",
+    "copy": "Copy code",
+    "copied": "Copied",
+    "home": "AMDL home",
+    "prev": "Previous view",
+    "next": "Next view"
+  },
+  "nav": {
+    "how": "How it works",
+    "formats": "Formats",
+    "apps": "Ways to use",
+    "install": "Install",
+    "docs": "Docs"
+  },
+  "header": {
+    "install": "Install AMDL"
+  },
+  "hero": {
+    "eyebrow": "Self-hosted · AGPL-3.0 open source",
+    "title": "Apple Music,\non your own disk",
+    "lead": "Pass a link or search. AMDL downloads, decrypts, and tags tracks into **finished .m4a files on your disk** via web console, terminal UI, CLI, or MCP.",
+    "source": "View source",
+    "runsOn": "Runs on",
+    "shelfLabel": "Made-up album covers on a shelf above a saved track file, 01. Glass Weather.m4a in ALAC 24-bit · 96 kHz."
+  },
+  "how": {
+    "title": "From a link to a finished file",
+    "lead": "AMDL resolves a link, fetches the encrypted stream, decrypts it in-process on your machine using keys from your wrapper, and pipes the audio into ffmpeg.",
+    "link": {
+      "title": "A link or a search",
+      "text": "Pass a song, album, playlist, artist, or station link, or search the catalog.",
+      "note": "Queue up to 100 links at once."
+    },
+    "amdl": {
+      "title": "Inside AMDL",
+      "steps": [
+        {
+          "name": "Download",
+          "text": "Fetches the encrypted media stream."
+        },
+        {
+          "name": "Decrypt",
+          "text": "Runs in-process inside `amdl` with your wrapper."
+        },
+        {
+          "name": "Remux",
+          "text": "`ffmpeg` writes `.m4a`; no decrypted whole track on disk."
+        },
+        {
+          "name": "Tag",
+          "text": "Embeds tags, cover, and lyrics, then checks integrity."
+        }
+      ],
+      "note": "If a codec fails, it falls back to the next."
+    },
+    "file": {
+      "title": "Files on your disk",
+      "text": "Songs, albums, and artists share one configurable `library/` folder tree.",
+      "note": "Existing files are kept, not downloaded again."
+    },
+    "label": "Folder tree under library/ where artist folder Mira Solenne contains artist.jpg and album folder Glass Weather with numbered .m4a tracks and cover.jpg.",
+    "more": "Read pipeline docs"
+  },
+  "formats": {
+    "title": "Formats and codec priority",
+    "lead": "Download ALAC up to 24-bit / 192 kHz by default, or order a priority list of ALAC, Dolby Atmos, Dolby Digital, and AAC variants.",
+    "file": {
+      "codec": "Quality",
+      "cover": "Cover art",
+      "lyrics": "Lyrics",
+      "lyricsValue": "`LRC`, timed by line or word",
+      "tags": "Tags",
+      "tagsValue": "Title, artist, album, track number"
+    },
+    "ladder": {
+      "head": "Tried in your priority order"
+    },
+    "rows": {
+      "alac": "Apple Lossless, up to 24-bit / 192 kHz.",
+      "ec3": "Dolby Atmos spatial audio, if on the album.",
+      "aac": "256 kbps stereo audio.",
+      "aaclc": "Always tried last as fallback; not listed."
+    },
+    "also": "Also available",
+    "caption": "Order codecs in `quality_priority` (`[\"alac\"]` by default). With `codec_alternative` on, a codec that runs out of attempts hands over to the next."
+  },
+  "apps": {
+    "title": "Four ways to use one backend",
+    "lead": "One binary packs the CLI, MCP server, terminal UI, and backend with its web console. Use any of them, or connect the native desktop app.",
+    "shown": "Illustrations show the real interfaces with fictional music. The apps themselves are in English.",
+    "more": "Also built in:",
+    "desktop": {
+      "tab": "Desktop app",
+      "caption": "Native app for macOS, Windows and Linux: a client of your AMDL server, or standalone with the backend inside. Its setup screen installs ffmpeg and the wrapper.",
+      "doc": "Read desktop guide",
+      "label": "Desktop app album page showing Glass Weather mid-download with five of twelve tracks saved and the target library folder path."
+    },
+    "console": {
+      "tab": "Web console",
+      "caption": "Served at `/console/` with nothing to install on the client. Open it across your network on port `18080` in Docker, or on this machine for a local install.",
+      "doc": "Read console docs",
+      "label": "Web console Overview page with one failed link under Needs attention, three albums downloading as cards tinted in their cover colors, and one queued link."
+    },
+    "terminal": {
+      "tab": "Terminal",
+      "caption": "Run `amdl` with no arguments for an interactive terminal UI that shows each track's stage. For scripts, CLI subcommands write structured JSON to stdout.",
+      "doc": "Read terminal docs",
+      "label": "Terminal UI showing the AMDL banner, Glass Weather downloading track by track, the command prompt, and catalog search results for Mira Solenne."
+    },
+    "agents": {
+      "tab": "Agents (MCP)",
+      "caption": "`amdl mcp` exposes 37 tools over stdio, from catalog search to finished download. No tool signs in, so your Apple ID password never passes through a model.",
+      "doc": "Read MCP docs",
+      "label": "Chat session where you ask for the new Nightjar Coast album in Dolby Atmos, and the agent calls search_catalog, start_download, and wait_for_job before reporting where the 11 tracks were saved.",
+      "chat": {
+        "you": "You",
+        "agent": "Agent",
+        "ask": "Download the new Nightjar Coast album in Dolby Atmos.",
+        "reply": "Downloaded Low Tide Signals (2026) — all 11 tracks in Dolby Atmos saved to `/volume1/music/library/Nightjar Coast/Low Tide Signals/`."
+      },
+      "tools": "All 37 MCP tools",
+      "groups": {
+        "catalog": "Catalog and quality",
+        "jobs": "Download jobs",
+        "library": "Download records",
+        "apple": "Apple Music library",
+        "system": "Server and accounts"
+      },
+      "config": "Client config printed by `amdl cli setup`"
+    },
+    "api": {
+      "link": "HTTP API (REST & SSE)"
+    },
+    "hooks": {
+      "link": "Webhooks and shell hooks"
+    }
+  },
+  "install": {
+    "title": "Install on your machine or in Docker",
+    "lead": "You need an Apple Music subscription and a wrapper (the service that holds your login). Install the binary or run it in Docker.",
+    "tabsLabel": "Installation method",
+    "tabs": {
+      "binary": "Binary",
+      "docker": "Docker"
+    },
+    "binary": {
+      "steps": [
+        {
+          "title": "Install the binary",
+          "text": "The script verifies the download against `SHA256SUMS` and installs `amdl` into `~/.local/bin` on macOS and Linux, or `%LOCALAPPDATA%\\Programs\\amdl` on Windows."
+        },
+        {
+          "title": "Check ffmpeg",
+          "text": "Every track requires `ffmpeg` 8 or later. Run `amdl doctor` to check your environment and print the command that installs anything missing."
+        },
+        {
+          "title": "Install a wrapper",
+          "text": "`amdl wrapper install` runs it natively on Linux x86_64 and in a QEMU guest elsewhere (not Windows on ARM). Skip this if a wrapper already runs on a NAS or server."
+        },
+        {
+          "title": "Start the backend service",
+          "text": "Starts the backend at login. `amdl service status` prints the console address; sign the wrapper in there or with `amdl wrapper login`. For a remote wrapper, pass `--wrapper <url>`."
+        }
+      ]
+    },
+    "docker": {
+      "steps": [
+        {
+          "title": "Get the Compose file",
+          "text": "In an empty directory, download the Compose file, create `data/downloads` first, and set its owner to match the container's `PUID`/`PGID` (`1000:1000` by default)."
+        },
+        {
+          "title": "Enable the wrapper service",
+          "text": "Open `docker-compose.yml` and uncomment the `wrapper-manager` service block along with the `volumes:` section at the bottom of the file."
+        },
+        {
+          "title": "Start the containers",
+          "text": "Compose builds `wrapper-manager` from AMDL-Web's wrapper fork on first start, so the host needs internet access."
+        },
+        {
+          "title": "Connect and sign in",
+          "text": "Open `http://localhost:18080/`, go to **Settings › Account**, set **Session service** to the address below, then save and restart from the notice.",
+          "after": "Sign in with your Apple ID and paste a link into **New download**. Finished files are saved to `./data/downloads`."
+        }
+      ]
+    },
+    "nas": {
+      "label": "NAS & ARM",
+      "text": "The wrapper needs Linux x86_64 with user namespaces (`unshare -Ur true` must succeed). On arm64 or a host without them like Synology DSM, use wrapper-manager v2's QEMU variant with `/dev/kvm`.",
+      "link": "Read wrapper guide"
+    },
+    "more": "See the [install guide]({blob}/docs/install.md) and [deployment guide]({blob}/docs/deployment.md) for all options. Coming from 1.x, back up your database and read the [2.0 upgrade guide]({blob}/docs/upgrading-to-2.0.md) first."
+  },
+  "cta": {
+    "title": "Set up AMDL on your own machine",
+    "button": "Read install guide"
+  },
+  "footer": {
+    "tagline": "Self-hosted AGPL-3.0 tool that saves Apple Music to your own disk as .m4a files.",
+    "notice": "Requires your own Apple Music subscription. Each install is self-hosted for one person, with no accounts or built-in auth. Catalog reads use Apple's undocumented web-player API, which can change without notice.",
+    "docs": {
+      "title": "Documentation",
+      "install": "Install guide",
+      "deployment": "Deployment guide",
+      "cli": "CLI reference",
+      "api": "HTTP API reference",
+      "automation": "Automation hooks",
+      "upgrade": "Upgrading to 2.0"
+    },
+    "project": {
+      "title": "Project",
+      "github": "GitHub",
+      "releases": "Releases",
+      "license": "AGPL-3.0 license",
+      "docs": "All docs"
+    },
+    "legal": "Released under the AGPL-3.0 license. AMDL is not affiliated with or endorsed by Apple."
+  }
+}

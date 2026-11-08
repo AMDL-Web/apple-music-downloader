@@ -1,0 +1,573 @@
+/*
+ * The New download page's form (#/new, views/download*.js): the compose
+ * field and its options, the dock and the link previews. Linked after
+ * responsive.css and before download.css, whose phone rules at its end
+ * also cover these parts. Base structure only; it reads tokens like every
+ * other base stylesheet, and the skin restyles it.
+ */
+
+/* ---- Layout -------------------------------------------------------- */
+
+/* The page runs at the content column's left edge like every page; the
+   field, its options and the cards under them stop at --compose-w, the
+   search results at --stage-max. */
+.page-new > :is(.new-top, .card, .new-dock-wrap) {
+  width: 100%;
+  max-width: var(--compose-w);
+}
+
+.page-new > .new-search-room {
+  width: 100%;
+  max-width: var(--stage-max);
+}
+
+.new-hint {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* ---- Compose ------------------------------------------------------- */
+
+.new-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* A capsule: the glyph, the text box and Clear sit in circles inset by
+   --compose-pad, so the field's radius is theirs plus the inset. When the
+   text runs to more lines it keeps that radius, and the circles stay at
+   the first line. */
+.new-compose {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  min-height: var(--compose-h);
+  padding: var(--compose-pad);
+  border-radius: var(--r-compose);
+  corner-shape: round;
+  background: var(--compose-bg);
+  box-shadow: inset 0 0 0 1px var(--compose-edge);
+  cursor: text;
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.new-compose:hover {
+  background: var(--compose-bg-hover);
+}
+
+/* Typed in: raised, its edge turns to the field ring, over a halo. */
+.new-compose:has(> .new-compose-input:focus) {
+  background: var(--compose-bg-focus);
+  box-shadow: inset 0 0 0 1px var(--focus-field), var(--compose-shadow);
+}
+
+.new-compose-glyph,
+.new-compose-trail {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--compose-in);
+  height: var(--compose-in);
+}
+
+/* Paste is a pill, wider than the circle Clear sits in. */
+.new-compose-trail {
+  width: auto;
+  min-width: var(--compose-in);
+}
+
+.new-compose-glyph {
+  color: var(--text-secondary);
+}
+
+.new-compose-icon {
+  display: flex;
+  animation: compose-glyph-in var(--dur-fast) var(--ease-out);
+}
+
+.new-compose-glyph .icon {
+  width: var(--s-6);
+  height: var(--s-6);
+}
+
+/* The glyph that takes over (search to link and back) fades in. */
+@keyframes compose-glyph-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.new-compose:has(> .new-compose-input:focus) .new-compose-glyph {
+  color: var(--text-primary);
+}
+
+/* A search on its way: the glyph breathes until the answer lands. On the
+   icon, not its wrapper, so the wrapper's fade-in is never swapped out
+   (WebKit leaves a swapped-in animation at its first frame). */
+.new-compose[data-busy] .new-compose-icon[data-glyph="search"] > .icon {
+  animation: compose-seek 1.2s var(--ease-out) infinite;
+}
+
+@keyframes compose-seek {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.new-compose-input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--compose-in);
+  max-height: calc(var(--compose-in) + 5 * var(--lh-16));
+  margin: 0;
+  padding: calc((var(--compose-in) - var(--lh-compose)) / 2) var(--s-1);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  caret-color: var(--accent-text);
+  font-family: var(--font-display);
+  font-size: var(--fs-compose);
+  line-height: var(--lh-compose);
+  font-weight: var(--w-medium);
+  letter-spacing: var(--tracking-title);
+  field-sizing: content;
+  resize: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.new-compose-input::placeholder {
+  color: var(--text-secondary);
+  font-weight: var(--w-regular);
+  opacity: 1;
+  /* One line, so the empty field is as tall as one with a term in it. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The field draws the focus ring; the box inside it does not. */
+.new-compose-input:focus,
+.new-compose-input:focus-visible {
+  outline: none;
+}
+
+/* A link or a line break: a list, set in body text, that grows. */
+.new-compose[data-dense] > .new-compose-input {
+  padding-block: calc((var(--compose-in) - var(--lh-16)) / 2);
+  line-height: var(--lh-16);
+  font-family: var(--font-sans);
+  font-size: var(--fs-16);
+  letter-spacing: normal;
+  font-weight: var(--w-regular);
+}
+
+.new-compose-clear {
+  color: var(--text-secondary);
+}
+
+/* ---- Options ------------------------------------------------------- */
+
+.new-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  min-width: 0;
+}
+
+.new-controls {
+  display: contents;
+}
+
+.new-quality {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.new-quality-select {
+  min-width: 0;
+  max-width: 320px;
+  text-overflow: ellipsis;
+}
+
+/* The glyph carries the warning; the label stays ink for its contrast. */
+.new-cfg-retry .icon {
+  color: var(--warning-text);
+}
+
+/* ---- Dock ---------------------------------------------------------- */
+
+/* Floats at the bottom of the viewport while the links run past it, so
+   Download stays in reach; the last submit's notes come under it. */
+.new-dock-wrap {
+  position: sticky;
+  bottom: var(--s-6);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.new-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.new-notes:empty,
+.new-dock-wrap:not([data-on]) > .new-dock {
+  display: none;
+}
+
+/* The same capsule rule as the field: the button is a pill inset by
+   --compose-pad, so the dock's radius is its own half height. */
+.new-dock {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  height: var(--dock-h);
+  padding: var(--compose-pad);
+  padding-left: var(--s-6);
+  border-radius: var(--r-dock);
+  corner-shape: round;
+  background: var(--dock-bg);
+  box-shadow: inset 0 0 0 1px var(--border-subtle), var(--shadow-float);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+}
+
+.new-dock-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.new-dock-count,
+.new-dock-asks {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.new-dock-count {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.new-dock-asks {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-dock-go {
+  flex: none;
+  height: calc(var(--dock-h) - 2 * var(--compose-pad));
+  min-width: 148px;
+  padding: 0 var(--s-5);
+  justify-content: center;
+}
+
+.new-dock-what::before {
+  content: " ";
+}
+
+.new-dock-key {
+  margin-left: var(--s-2);
+  font-weight: var(--w-regular);
+}
+
+/* No keyboard to press it with, no room for it, or nothing to send. */
+.new-dock-go:disabled .new-dock-key {
+  display: none;
+}
+
+@media (pointer: coarse), (max-width: 639px) {
+  .new-dock-key {
+    display: none;
+  }
+}
+
+/* The page is the search: the top bar's trigger would be a second one. */
+:root:has(.main[data-page="new"]) .search-trigger {
+  display: none;
+}
+
+/* Toasts rise above the dock (its measured height) so they never cover
+   Download. */
+:root:has(.new-dock-wrap) .toasts {
+  bottom: calc(var(--s-6) + var(--new-bar-h, var(--dock-h)) + var(--s-2));
+}
+
+/* ---- Detected links ------------------------------------------------ */
+
+.new-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.new-links > li + li {
+  border-top: var(--row-divider);
+}
+
+.new-link {
+  display: grid;
+  grid-template-columns: auto 48px minmax(0, 1fr) auto;
+  grid-template-areas: "pick art main actions";
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--card-pad-x);
+}
+
+.new-link-art {
+  grid-area: art;
+}
+
+/* The include checkbox (the Queue's selection control), centered on the
+   cover. Its label reaches out to a 44 px square around the 18 px box, so it
+   is easy to hit on a phone, without moving anything. */
+.new-link-pick {
+  grid-area: pick;
+  align-self: center;
+  display: flex;
+  padding: calc((var(--touch) - 18px) / 2);
+  margin: calc((18px - var(--touch)) / 2);
+  cursor: pointer;
+}
+
+/* A row that can't be sent has nothing to tick: its slot stays empty. */
+.new-link-pick:has(:disabled) {
+  visibility: hidden;
+}
+
+/* Unchecked rows (in the library, in the queue, or unchosen) stay listed
+   but quiet. */
+.new-link[data-excluded] .new-link-art {
+  opacity: 0.6;
+}
+
+.art-48 {
+  width: 48px;
+  height: 48px;
+}
+
+.new-link-art > .skel {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+.new-link[data-blocking] .new-link-art {
+  opacity: 0.55;
+}
+
+.new-link-main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+  min-width: 0;
+}
+
+/* The cover stays at the top when notes make the row taller. */
+.new-link-art,
+.new-link-actions {
+  align-self: start;
+}
+
+.new-link:not(:has(.new-link-note, .new-link-prior, .new-link-issue, .new-link-will)) .new-link-actions {
+  align-self: center;
+}
+
+/* Title, the Explicit mark and the quiet tags on one line; when it is
+   short of room the Apple Digital Master tag gives way first, then the
+   title. The storefront tag is two letters and keeps them. */
+.new-link-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.new-link-head > .new-link-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.new-link-head > .chip {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.new-link-head > .new-link-sf {
+  flex: none;
+}
+
+/* Tags on this page read as words in the page's 13 px, not small caps. */
+.new-link-head > .chip,
+.quality-track-head > .chip {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.new-link-explicit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-badge);
+  corner-shape: round;
+  background: var(--text-secondary);
+  color: var(--bg-canvas);
+  font-size: var(--fs-13);
+  line-height: 16px;
+  font-weight: var(--w-semibold);
+}
+
+.new-link-loading,
+.new-link-note {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-link-title {
+  min-width: 0;
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-link-title.is-url {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-regular);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* While the lookup runs the link holds one line, as the title will. */
+.new-link-title.is-url.is-pending {
+  white-space: nowrap;
+}
+
+/* One meta line; the whole of it is the tooltip. */
+.new-link-sub {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-link-sub > * + *::before {
+  content: " · ";
+}
+
+.new-link-will {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-spec {
+  white-space: nowrap;
+}
+
+.new-link-will .status-text[data-role="warning"] {
+  color: var(--warning-text);
+}
+
+.new-link-issue {
+  align-items: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.new-link-issue .icon {
+  margin-top: var(--s-0_5);
+}
+
+.new-link-issue[data-role="danger"] {
+  color: var(--danger-text);
+}
+
+.new-link-issue[data-role="warning"] {
+  color: var(--warning-text);
+}
+
+.new-link-fix {
+  white-space: nowrap;
+}
+
+.new-link-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+/* It wraps between its parts on a narrow phone, the glyph on the first line,
+   as an issue's. */
+.new-link-prior {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--s-1);
+  align-self: flex-start;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  text-decoration: none;
+}
+
+.new-link-prior .icon {
+  margin-top: var(--s-0_5);
+}
+
+.new-link-open {
+  white-space: nowrap;
+}
+
+.new-links-all {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  padding: var(--s-3) var(--card-pad-x);
+  border-top: var(--row-divider);
+}
+
+.new-links-more {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-1_5);
+  padding: var(--s-3) var(--card-pad-x);
+  border-top: var(--row-divider);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}

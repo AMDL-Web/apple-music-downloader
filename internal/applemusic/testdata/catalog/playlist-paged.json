@@ -1,0 +1,30 @@
+{
+  "data": [
+    {
+      "id": "pl.1",
+      "type": "playlists",
+      "attributes": {
+        "name": "Playlist",
+        "curatorName": "Curator",
+        "artwork": {
+          "url": "playlist-art"
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "song-1",
+              "type": "songs",
+              "attributes": {
+                "name": "One",
+                "artistName": "Artist"
+              }
+            }
+          ],
+          "next": "/v1/catalog/cn/playlists/pl.1/tracks?offset=1"
+        }
+      }
+    }
+  ]
+}

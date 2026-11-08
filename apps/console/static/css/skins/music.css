@@ -1,0 +1,3214 @@
+/*
+ * Skin "music": Apple Music, immersive. Artwork leads: running jobs and the
+ * latest-release banner take each album's own Apple colors
+ * (--art-bg, --art-t1..t3, set per element by the page). Large radii, tight
+ * SF Pro Display-style headlines, an Apple Music red accent, inset grouped
+ * lists for the operations data, a blurred bottom tab bar on phones.
+ * Everything here is scoped under :root[data-skin="music"]; colors are
+ * light-dark(<light>, <dark>). Spec: apps/console/skins/music.md.
+ */
+
+/* ---- Tokens -------------------------------------------------------- */
+
+:root[data-skin="music"] {
+  /* Surfaces: page, grouped surface, overlay, and the second grouped level. */
+  --bg-canvas: light-dark(#ffffff, #000000);
+  --bg-surface: light-dark(#f5f5f7, #1c1c1e);
+  --bg-raised: light-dark(#ffffff, #1c1c1e);
+  --bg-hover: light-dark(#ececf0, #2c2c2e);
+  --bg-selected: light-dark(#e3e3e8, #2c2c2e);
+  --bg-chrome: light-dark(rgba(246, 246, 248, 0.86), rgba(28, 28, 30, 0.82));
+  --bg-group: light-dark(#f5f5f7, #2c2c2e);
+  /* A cell or field inside a grouped surface (codec lists, text fields):
+     white on the gray surface in light, the second grouped level in dark. */
+  --bg-inset: light-dark(#ffffff, #2c2c2e);
+  --bg-fill: light-dark(#e8e8ed, #2c2c2e);
+  /* A filled button on a raised frosted bar (save bar, selection bar), where
+     --bg-fill would match the bar in dark. */
+  --fill-raised: light-dark(#e8e8ed, #3a3a3c);
+  --fill-raised-hover: light-dark(#e3e3e8, #48484a);
+  --seg-thumb: light-dark(#ffffff, #636366);
+  --topbar-bg: light-dark(rgba(255, 255, 255, 0.78), rgba(0, 0, 0, 0.72));
+  --toast-bg: light-dark(rgba(255, 255, 255, 0.92), rgba(44, 44, 46, 0.92));
+  /* New download: the compose field (filled at rest, raised while typed
+     in, over a soft red halo) and the dock that floats over the links. */
+  --compose-bg: var(--bg-surface);
+  --compose-bg-hover: light-dark(#f0f0f3, #222224);
+  --compose-bg-focus: light-dark(#ffffff, #222224);
+  --compose-edge: var(--border-subtle);
+  --compose-shadow: 0 1px 2px light-dark(rgba(0, 0, 0, 0.06), transparent), 0 24px 56px -28px light-dark(rgba(250, 45, 72, 0.34), rgba(250, 45, 72, 0.5));
+  --dock-bg: var(--toast-bg);
+  /* The stage glow behind New download: red and purple, or the first
+     cover's colour (--stage-tint) once one has loaded. */
+  --stage-glow-a: light-dark(rgba(250, 45, 72, 0.1), rgba(250, 45, 72, 0.16));
+  --stage-glow-b: light-dark(rgba(137, 68, 171, 0.08), rgba(191, 90, 242, 0.1));
+  --stage-glow-tint: light-dark(color-mix(in srgb, var(--stage-tint) 16%, transparent), color-mix(in srgb, var(--stage-tint) 24%, transparent));
+
+  /* Lines and text. Contrast on --bg-surface: text-secondary 4.66 / 6.61. */
+  --border-subtle: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1));
+  --border-control: light-dark(#86868b, #6e6e73);
+  --text-primary: light-dark(#1d1d1f, #f5f5f7);
+  --text-secondary: light-dark(#636368, #a1a1a6);
+  --text-disabled: light-dark(#86868b, #6e6e73);
+
+  /* Accent: Apple Music red, solid only on the primary action (primary
+     buttons, New download). --accent-text 4.87 / 5.26 on surface; white on
+     --accent 4.72, on hover 5.66, pressed 6.73. */
+  --ink: light-dark(#1d1d1f, #f5f5f7);
+  --on-ink: light-dark(#ffffff, #000000);
+  --accent: #e0213a;
+  --accent-hover: #c81c33;
+  --accent-pressed: #b0172c;
+  --accent-text: light-dark(#d60f2c, #ff4d61);
+  --on-accent: #ffffff;
+  /* Focus rings follow the accent, as in Apple Music; a text field's ring
+     is neutral, so a field being typed in never reads as an error. */
+  --focus: var(--accent-text);
+  --focus-field: light-dark(rgba(29, 29, 31, 0.72), rgba(245, 245, 247, 0.72));
+  /* A disabled button: a neutral fill, its label 4.6 / 4.85 on it. */
+  --disabled-bg: var(--bg-fill);
+  --disabled-text: light-dark(#636366, #98989d);
+  --brand: #e0213a;
+  --brand-top: #ff5c6f;
+  --on-brand: #ffffff;
+  --mark: #fa2d48;
+
+  /* Status roles: mark, tint, text (text measured on --bg-surface). Running is the red. */
+  --info: #fa2d48;
+  --info-tint: light-dark(rgba(250, 45, 72, 0.12), rgba(250, 45, 72, 0.2));
+  --info-text: light-dark(#d60f2c, #ff4d61);
+  --success: light-dark(#248a3d, #30d158);
+  --success-tint: light-dark(rgba(36, 138, 61, 0.12), rgba(48, 209, 88, 0.16));
+  --success-text: light-dark(#1b7a34, #30d158);
+  --danger: light-dark(#d70015, #ff6961);
+  --danger-tint: light-dark(rgba(215, 0, 21, 0.1), rgba(255, 105, 97, 0.16));
+  /* 4.82 on the tint over the surface, 5.74 on the surface. */
+  --danger-text: light-dark(#c4001a, #ff6961);
+  --warning: light-dark(#b25000, #ffd60a);
+  --warning-tint: light-dark(rgba(255, 204, 0, 0.2), rgba(255, 214, 10, 0.13));
+  --warning-text: light-dark(#b25000, #ffd60a);
+  --neutral: light-dark(#77777c, #8e8e93);
+  --neutral-tint: light-dark(#e8e8ed, #2c2c2e);
+  --neutral-text: var(--text-secondary);
+  --skipped: light-dark(#8944ab, #bf5af2);
+  --skipped-tint: light-dark(rgba(137, 68, 171, 0.12), rgba(191, 90, 242, 0.18));
+  --skipped-text: light-dark(#8944ab, #da8fff);
+  /* Glyph on a solid role tile (health icons): 4.3+ in light, 6.6+ in dark. */
+  --on-role: light-dark(#ffffff, #000000);
+
+  /* Data */
+  --track: light-dark(#e8e8ed, #3a3a3c);
+  /* Single-series charts (per-day bars): a quiet blue-gray, not the accent. */
+  --chart-bar: light-dark(#6b7b93, #8d9bb3);
+  --chart-grid: var(--border-subtle);
+  --scrim: light-dark(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6));
+
+  /* Type: system stacks, SF Pro on Apple platforms. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", var(--font-system);
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "PingFang SC", var(--font-system);
+  --font-mono: ui-monospace, "SF Mono", Menlo, var(--font-system-mono);
+  --fs-body: var(--fs-15);
+  --lh-body: var(--lh-15);
+  --tracking-body: -0.01em;
+  --fs-page-title: 34px;
+  --lh-page-title: 40px;
+  --fs-card-title: 22px;
+  --lh-card-title: 28px;
+  --fs-kpi: 30px;
+  --lh-kpi: 34px;
+  --fs-hero-title: 64px;
+  --lh-hero-title: 66px;
+  --fs-live-title: 26px;
+  --lh-live-title: 30px;
+  --fs-artist: 17px;
+  --lh-artist: 22px;
+  --fs-compose: 28px;
+  --lh-compose: 36px;
+  --fs-mono-log: 12.5px;
+  --w-display: var(--w-bold);
+  --w-title: var(--w-bold);
+  --tracking-display: -0.03em;
+  --tracking-title: -0.02em;
+  --tracking-eyebrow: 0.04em;
+
+  /* Shape (DESIGN.md "Radii nest"): an element inside a rounded
+     surface takes the surface's radius minus the inset between them, so both
+     arcs share a centre; one radius per level, on the 4 px grid, never under
+     4. Pills and circles are round; every other corner is --corner. */
+  --corner: superellipse(1.25);
+  --r-badge: 999px;
+  --r-bar: 999px;
+  /* Keys, inline code, loading bars and a chart bar's top. */
+  --r-tag: 4px;
+  /* Fields, controls, artwork, inset lists, notices and icon tiles. */
+  --r-panel: 8px;
+  /* Cards, tiles, live cards, the drawer, dialogs and notices on the page:
+     the panel radius plus the card padding they hold it at (28, 24 on
+     phones). */
+  --r-card: calc(var(--r-panel) + var(--card-pad));
+  /* Floating panes whose items sit 8 px in: the palette and toasts. */
+  --r-float: calc(var(--r-panel) + var(--s-2));
+  /* Data marks (chart and meter bars, worker cells, the equalizer, a
+     checkbox's dash) keep their own small radius under the 4 px floor. */
+  --r-mark: 2px;
+  --r-control: var(--r-panel);
+  --r-control-inner: var(--r-tag);
+  --r-art: var(--r-panel);
+  --r-icon-tile: var(--r-panel);
+  --r-notice: var(--r-panel);
+  --r-overlay: var(--r-float);
+  --r-drawer: 0;
+  /* New download's capsules, the compose field and the dock: their
+     circles' radius plus the inset, half their one-line height. */
+  --r-compose: calc(var(--compose-h) / 2);
+  --r-dock: calc(var(--dock-h) / 2);
+  --bar-h: 6px;
+  --cell-h: 8px;
+  --cell-gap: 3px;
+
+  /* Cards: flat filled surfaces, no borders or shadows. */
+  --card-bg: var(--bg-surface);
+  --card-border: 0 solid transparent;
+  --card-shadow: none;
+  --card-pad: var(--s-5);
+  --card-pad-x: var(--s-5);
+  --card-gap: var(--s-4);
+  --card-divider: 1px solid var(--border-subtle);
+  --row-divider: 1px solid var(--border-subtle);
+  --chrome-border: 1px solid var(--border-subtle);
+
+  /* Layout */
+  --page-gap: var(--s-10);
+  --grid-gap: var(--s-5);
+  --main-x: var(--s-10);
+  --row-pad-y: 10px;
+  --s-2_5: 10px;
+
+  /* Elevation: only artwork and floating layers lift. */
+  --shadow-art: 0 14px 30px -16px light-dark(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.9));
+  --shadow-float: 0 1px 2px light-dark(rgba(0, 0, 0, 0.06), transparent), 0 16px 40px light-dark(rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0.6));
+  --shadow-thumb: 0 1px 4px rgba(0, 0, 0, 0.18);
+
+  /* Toggle chips (log levels, Pause, Wrap). In light the pressed chip is the
+     gray fill and an off chip is outlined, because a white thumb vanishes on
+     the white canvas; in dark the lighter thumb sits on the fill. */
+  --chip-on-bg: light-dark(#e8e8ed, #636366);
+  --chip-on-shadow: 0 1px 4px light-dark(transparent, rgba(0, 0, 0, 0.18));
+  --chip-off-bg: light-dark(transparent, #2c2c2e);
+  --chip-off-ring: inset 0 0 0 1px light-dark(#86868b, transparent);
+
+  /* Categorical series (formats bar): blue, orange, purple, then gray. Red is
+     kept for the primary action and failures. */
+  --series-1: light-dark(#007aff, #0a84ff);
+  --series-2: light-dark(#ff9500, #ff9f0a);
+  --series-3: light-dark(#8944ab, #bf5af2);
+  --series-4: light-dark(#77777c, #8e8e93);
+
+  /* Hero actions (Tracks, Open in Apple Music). */
+  --hero-act-h: 36px;
+  /* Large pills: Download N, dialog and save bar buttons. */
+  --btn-lg-h: 36px;
+  /* Switches and selection circles: a white thumb in both themes. */
+  --switch-thumb: #ffffff;
+  /* A switch that is on is a neutral gray; red stays on the primary action. */
+  --switch-on: light-dark(#636366, #8e8e93);
+  --check-size: 22px;
+  /* The select chevron, drawn in --text-secondary (a data image cannot read a token). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23636368' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="music"]:not([data-theme="light"]) {
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a1a1a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+}
+
+:root[data-skin="music"][data-theme="dark"] {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a1a1a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+@media (min-width: 1680px) {
+  :root[data-skin="music"] {
+    --fs-compose: var(--fs-32);
+    --lh-compose: var(--lh-32);
+  }
+}
+
+@media (max-width: 1023px) {
+  :root[data-skin="music"] {
+    --main-x: var(--s-6);
+    --fs-hero-title: 48px;
+    --lh-hero-title: 52px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="music"] {
+    --fs-page-title: 30px;
+    --lh-page-title: 36px;
+    --fs-card-title: 20px;
+    --lh-card-title: 26px;
+    --fs-kpi: 26px;
+    --lh-kpi: 30px;
+    --fs-hero-title: 34px;
+    --lh-hero-title: 38px;
+    --fs-live-title: 20px;
+    --lh-live-title: 24px;
+    --fs-artist: 15px;
+    --lh-artist: 20px;
+    --fs-compose: var(--fs-20);
+    --lh-compose: var(--lh-20);
+    --page-gap: var(--s-8);
+    --grid-gap: var(--s-3);
+    --card-pad: var(--s-4);
+    --card-pad-x: var(--s-4);
+    --main-x: var(--s-4);
+    --hero-act-h: var(--touch);
+    --btn-lg-h: var(--touch);
+  }
+}
+
+/* Role text for badges and status words, so labels can wear their role. */
+:root[data-skin="music"] [data-role="info"] {
+  --role-text: var(--info-text);
+  --badge-text: var(--info-text);
+}
+
+:root[data-skin="music"] [data-role="success"] {
+  --role-text: var(--success-text);
+  --badge-text: var(--text-secondary);
+}
+
+:root[data-skin="music"] [data-role="danger"] {
+  --role-text: var(--danger-text);
+  --badge-text: var(--danger-text);
+}
+
+:root[data-skin="music"] [data-role="warning"] {
+  --role-text: var(--warning-text);
+  --badge-text: var(--warning-text);
+}
+
+:root[data-skin="music"] [data-role="neutral"] {
+  --role-text: var(--text-secondary);
+  --badge-text: var(--text-secondary);
+}
+
+:root[data-skin="music"] [data-role="skipped"] {
+  --role-text: var(--skipped-text);
+  --badge-text: var(--skipped-text);
+}
+
+/* ---- Base ---------------------------------------------------------- */
+
+/* Continuous-curvature corners where the engine draws them; elsewhere the
+   same radii stay circular arcs. No specificity, so a pill's own
+   corner-shape: round wins, and outlines and shadows follow the shape. */
+@supports (corner-shape: superellipse(1.25)) {
+  :where(:root[data-skin="music"] *),
+  :where(:root[data-skin="music"] *)::before,
+  :where(:root[data-skin="music"] *)::after {
+    corner-shape: var(--corner);
+  }
+}
+
+/* A command on a line of its own is a panel, not an inline chip. */
+:root[data-skin="music"] .account-cmd {
+  border-radius: var(--r-panel);
+}
+
+:root[data-skin="music"] code {
+  border-radius: var(--r-tag);
+  corner-shape: var(--corner);
+  background: var(--bg-fill);
+  /* Secondary text inherited from a note reads 4.15:1 on the fill. */
+  color: var(--text-primary);
+}
+
+:root[data-skin="music"] kbd {
+  border-radius: var(--r-tag);
+  corner-shape: var(--corner);
+  border-color: transparent;
+  background: var(--bg-fill);
+}
+
+:root[data-skin="music"] .link {
+  text-decoration: none;
+}
+
+:root[data-skin="music"] .link:hover {
+  text-decoration: underline;
+}
+
+/* ---- Shell --------------------------------------------------------- */
+
+:root[data-skin="music"] .sidebar {
+  gap: var(--s-4);
+  padding: var(--s-5) var(--s-3) var(--s-4);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+:root[data-skin="music"] .brand {
+  gap: var(--s-2);
+  height: auto;
+  padding: 0 var(--s-2);
+}
+
+:root[data-skin="music"] .brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-control);
+  corner-shape: var(--corner);
+  background: linear-gradient(160deg, var(--brand-top), var(--brand));
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--brand) 70%, transparent);
+}
+
+:root[data-skin="music"] .brand-mark .icon {
+  width: 18px;
+  height: 18px;
+}
+
+:root[data-skin="music"] .brand-name {
+  font-size: var(--fs-20);
+  line-height: var(--lh-16);
+  letter-spacing: var(--tracking-title);
+}
+
+:root[data-skin="music"] .nav-item {
+  gap: var(--s-3);
+  height: 36px;
+  padding: 0 var(--s-2_5);
+  color: var(--text-primary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .sidebar .nav-item .icon-nav {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .sidebar .nav-item[aria-current="page"] .icon-nav {
+  color: var(--text-primary);
+}
+
+:root[data-skin="music"] .nav-item:hover {
+  background: color-mix(in srgb, var(--bg-selected) 60%, transparent);
+}
+
+:root[data-skin="music"] .nav-item[aria-current="page"] {
+  background: var(--bg-selected);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .nav-secondary .nav-item:not([aria-current="page"]) {
+  color: var(--text-secondary);
+  font-weight: var(--w-regular);
+}
+
+:root[data-skin="music"] .nav-badge {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* The top bar is the canvas, frosted, so content scrolling under it stays legible. */
+:root[data-skin="music"] .topbar {
+  padding: 0 var(--main-x);
+  background: var(--topbar-bg);
+  border-bottom: 0;
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+:root[data-skin="music"] .conn {
+  height: 28px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--bg-surface);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .conn:not([data-state="reconnecting"], [data-state="offline"]) {
+  padding: 0 var(--s-3) 0 var(--s-1_5);
+  background: transparent;
+}
+
+:root[data-skin="music"] .conn-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--role) 25%, transparent);
+}
+
+:root[data-skin="music"] .search-trigger {
+  font-size: var(--fs-14);
+}
+
+/* The base's surface pill with a hairline: the secondary placeholder reads
+   4.66 / 6.61 on it. */
+:root[data-skin="music"] .search-trigger:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-hover);
+}
+
+:root[data-skin="music"] .search-trigger-kbd {
+  background: var(--bg-canvas);
+}
+
+:root[data-skin="music"] .main {
+  padding: var(--s-3) var(--main-x) var(--s-16);
+}
+
+/* A large title over its summary line, like an Apple Music header. */
+:root[data-skin="music"] .page-head {
+  display: grid;
+  gap: var(--s-1);
+}
+
+:root[data-skin="music"] .page-head:has(> .page-actions) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+:root[data-skin="music"] .page-head > .page-actions {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+:root[data-skin="music"] .page-sub {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+/* New download: the primary action above the nav, a red pill as tall as a
+   nav row; while its page is open a slightly darker fill marks it current. */
+:root[data-skin="music"] .sidebar .sidebar-new {
+  height: 36px;
+  margin: 0;
+  gap: var(--s-2);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .sidebar .sidebar-new .icon {
+  width: 18px;
+  height: 18px;
+}
+
+:root[data-skin="music"] .sidebar-new[aria-current="page"] {
+  background: var(--accent-hover);
+}
+
+:root[data-skin="music"] .banners {
+  margin-top: calc(var(--s-4) - var(--page-gap));
+}
+
+/* ---- Controls ------------------------------------------------------ */
+
+:root[data-skin="music"] .btn {
+  border-radius: var(--r-full);
+  corner-shape: round;
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .btn-icon {
+  border-radius: var(--r-full);
+  corner-shape: round;
+}
+
+:root[data-skin="music"] .btn-secondary {
+  border-color: transparent;
+  background: var(--bg-fill);
+}
+
+:root[data-skin="music"] .btn-secondary:hover:not(:disabled) {
+  background: var(--bg-selected);
+}
+
+/* The primary action darkens on hover and darker still, a touch smaller,
+   while pressed. */
+:root[data-skin="music"] .btn-primary {
+  transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+:root[data-skin="music"] .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--accent-hover);
+}
+
+:root[data-skin="music"] .btn-primary:active:not(:disabled):not([aria-disabled="true"]) {
+  opacity: 1;
+  background: var(--accent-pressed);
+  transform: scale(0.98);
+}
+
+/* Unavailable reads as gray, not as a faded (pressed-looking) red. */
+:root[data-skin="music"] .btn-primary:disabled,
+:root[data-skin="music"] .btn-primary[aria-disabled="true"] {
+  opacity: 1;
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+}
+
+/* A restart under way is busy, not unavailable: the red fill stays, softer,
+   so the button reads as the same one still working. */
+:root[data-skin="music"] .btn-primary.settings-restart-button[aria-busy="true"] {
+  background: color-mix(in srgb, var(--accent) 68%, var(--bg-raised));
+  color: var(--on-accent);
+  cursor: progress;
+}
+
+/* Destructive actions (Delete, Discard, Cancel job, Log out) are red text,
+   as in Apple's action lists; only the primary action is a red fill. */
+:root[data-skin="music"] .btn-danger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger-text);
+}
+
+:root[data-skin="music"] .btn-danger .icon {
+  color: var(--danger-text);
+}
+
+:root[data-skin="music"] .btn-danger:hover:not(:disabled) {
+  background: var(--danger-tint);
+}
+
+/* Card and section actions read as Apple's red "See All" links. */
+:root[data-skin="music"] .card-actions .btn-ghost {
+  height: auto;
+  padding: 0;
+  gap: 0;
+  color: var(--accent-text);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .card-actions .btn-ghost::after {
+  content: "\203A";
+  margin-left: var(--s-1);
+  font-size: var(--fs-20);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .card-actions .btn-ghost:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+}
+
+/* The chevron marks a link to another page; an action in place (Clear,
+   Reset) is red text alone. */
+:root[data-skin="music"] .card-actions button.btn-ghost::after {
+  content: none;
+}
+
+/* Segmented controls: a filled track with a raised thumb. */
+:root[data-skin="music"] .seg {
+  border: 0;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--bg-fill);
+}
+
+:root[data-skin="music"] .seg-btn {
+  border-radius: var(--r-full);
+  corner-shape: round;
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .seg-btn[aria-pressed="true"] {
+  background: var(--seg-thumb);
+  box-shadow: var(--shadow-thumb);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .seg-count {
+  /* Primary ink in regular weight: secondary text falls under 4.5:1 on the
+     track (light) and on the pressed thumb (dark). */
+  color: var(--text-primary);
+  font-weight: var(--w-regular);
+}
+
+/* Search fields and selects: filled, with the 3:1 --border-control outline so the field reads as a field. */
+:root[data-skin="music"] .search,
+:root[data-skin="music"] .select {
+  border-color: var(--border-control);
+  background: var(--bg-surface);
+  font-size: var(--fs-14);
+}
+
+/* ---- Status -------------------------------------------------------- */
+
+:root[data-skin="music"] .badge {
+  height: auto;
+  padding: 0;
+  gap: var(--s-1_5);
+  background: transparent;
+  color: var(--badge-text, var(--text-primary));
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .status-text {
+  color: var(--role-text, var(--text-primary));
+}
+
+/* A failure is a labelled chip (tint, icon, word), never a solid red block. */
+:root[data-skin="music"] .badge[data-role="danger"],
+:root[data-skin="music"] .status-text[data-role="danger"] {
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--danger-tint);
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+/* Running: a now-playing equalizer instead of the ripple dot. Two bars share
+   ::before (one through box-shadow), the middle one is ::after, out of phase. */
+:root[data-skin="music"] .pulse {
+  width: 11px;
+  height: 10px;
+  margin: 0 var(--s-0_5);
+  border-radius: 0;
+  background: transparent;
+}
+
+:root[data-skin="music"] .pulse::before,
+:root[data-skin="music"] .pulse::after {
+  content: "";
+  position: absolute;
+  inset: auto auto 0 0;
+  width: 3px;
+  height: 100%;
+  border-radius: var(--r-mark);
+  corner-shape: var(--corner);
+  background: var(--role, var(--info));
+  opacity: 1;
+  transform-origin: bottom;
+  animation: music-eq 0.9s ease-in-out infinite alternate;
+}
+
+:root[data-skin="music"] .pulse::before {
+  box-shadow: 8px 0 0 var(--role, var(--info));
+}
+
+:root[data-skin="music"] .pulse::after {
+  left: 4px;
+  animation-delay: -0.45s;
+}
+
+@keyframes music-eq {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+:root[data-skin="music"] .live-tag {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .chip {
+  border-color: var(--border-subtle);
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+}
+
+/* Progress: cells are rounded capsules; remaining ones are outlined, not filled. */
+:root[data-skin="music"] .pcell[data-state="remaining"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-control);
+}
+
+:root[data-skin="music"] .pcell[data-state="failed"] {
+  background: var(--danger-tint);
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+
+:root[data-skin="music"] .jprog-text {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* ---- Cards and sections -------------------------------------------- */
+
+/* Section heads sit above their surface, Apple Music shelf style. */
+:root[data-skin="music"] :where(.card:has(> .card-head)) {
+  gap: var(--s-3);
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-skin="music"] :where(.card:has(> .card-head)) > .card-head {
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+  padding: 0;
+  border-bottom: 0;
+}
+
+:root[data-skin="music"] :where(.card:has(> .card-head)) > .card-body {
+  padding: var(--card-pad);
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+}
+
+:root[data-skin="music"] :where(.card-flush:has(> .card-head)) > .card-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+:root[data-skin="music"] .card-note {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .card-flush {
+  overflow: hidden;
+}
+
+/* A flush shelf's head sits on the canvas; only its body clips (above), so the
+   head's glyph overshoot is never cut by the card's rounded corner. */
+:root[data-skin="music"] .card-flush:has(> .card-head) {
+  overflow: visible;
+  border-radius: 0;
+}
+
+:root[data-skin="music"] .section-title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--w-semibold);
+}
+
+/* Grouped label/value rows (About, Runtime, library sync, account): hairlines between rows. */
+:root[data-skin="music"] .kv {
+  gap: 0;
+}
+
+:root[data-skin="music"] .kv-row {
+  padding: var(--row-pad-y) 0;
+}
+
+:root[data-skin="music"] .kv-row + .kv-row {
+  border-top: var(--row-divider);
+}
+
+/* In a card, hairlines start at the text and run to the card's right edge,
+   the same keyline as the health list. */
+:root[data-skin="music"] .card-body > .kv > .kv-row {
+  margin-right: calc(-1 * var(--card-pad));
+  padding-right: var(--card-pad);
+}
+
+:root[data-skin="music"] .kv dt {
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .kv dd {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+@media (min-width: 640px) {
+  :root[data-skin="music"] .table th,
+  :root[data-skin="music"] .table td {
+    height: 44px;
+  }
+}
+
+/* ---- Now downloading ----------------------------------------------- */
+
+/* Each live job is a card in its album's own colors. */
+:root[data-skin="music"] [data-section="live"] > .card-body {
+  background: transparent;
+  overflow: visible;
+}
+
+:root[data-skin="music"] [data-section="live"] > .card-body:not(:has(> .job-list)) {
+  background: var(--card-bg);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: var(--grid-gap);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-list > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-row {
+  grid-template-columns: 136px minmax(0, 1fr);
+  grid-template-rows: 1fr auto auto 1fr auto;
+  grid-template-areas:
+    "art ."
+    "art status"
+    "art main"
+    "art ."
+    "prog prog";
+  align-items: start;
+  gap: 0 var(--s-5);
+  height: 100%;
+  min-height: 0;
+  padding: var(--s-5);
+  border-radius: var(--r-card);
+  background: linear-gradient(
+    140deg,
+    var(--art-bg, var(--bg-surface)) 30%,
+    color-mix(in srgb, var(--art-bg, var(--bg-surface)) 88%, var(--art-t1, var(--text-primary))) 100%
+  );
+  color: var(--art-t1, var(--text-primary));
+}
+
+:root[data-skin="music"] [data-section="live"] .job-row:focus-visible {
+  outline-offset: 3px;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-row > .art {
+  grid-area: art;
+  width: 136px;
+  height: 136px;
+  box-shadow: 0 16px 34px -14px color-mix(in srgb, var(--art-t1, var(--text-primary)) 60%, transparent);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-main {
+  grid-area: main;
+  gap: var(--s-1);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-status {
+  grid-area: status;
+  margin-bottom: var(--s-2);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-status .badge {
+  color: var(--art-t3, var(--badge-text));
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--w-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .job-status .icon,
+:root[data-skin="music"] [data-section="live"] .has-palette .pulse {
+  --role: var(--art-t3);
+}
+
+/* One line: a card's height then never depends on its title, so the idle
+   card and the first job that replaces it are the same size. */
+:root[data-skin="music"] [data-section="live"] .job-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  font-family: var(--font-display);
+  font-size: var(--fs-live-title);
+  line-height: var(--lh-live-title);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.025em;
+  white-space: normal;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-sub {
+  font-size: var(--fs-artist);
+  line-height: var(--lh-artist);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-facts {
+  display: block;
+  order: 3;
+  text-overflow: ellipsis;
+  margin-top: var(--s-1_5);
+  color: var(--art-t3, var(--text-secondary));
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-fact + .job-fact::before {
+  margin-inline: var(--s-1_5);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-fact[data-key="type"] {
+  display: none;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-fact[data-key="type"] + .job-fact::before {
+  content: none;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-progress {
+  grid-area: prog;
+  min-height: calc(2 * var(--lh-13) + var(--s-2));
+  margin-top: var(--s-5);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog {
+  gap: var(--s-3);
+}
+
+/* Resolving, a job's bar is as tall as the cells that replace it. */
+:root[data-skin="music"] [data-section="live"] .pbar {
+  height: var(--cell-h);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-text {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .job-sub,
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-text {
+  color: var(--art-t2);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .pcell[data-state="remaining"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--art-t1) 75%, transparent);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .pcell[data-state="completed"],
+:root[data-skin="music"] [data-section="live"] .has-palette .pbar-seg[data-role="success"] {
+  background: var(--art-t1);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .pcell[data-state="skipped"],
+:root[data-skin="music"] [data-section="live"] .has-palette .pbar-seg[data-role="skipped"] {
+  background: color-mix(in srgb, var(--art-t1) 55%, transparent);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .pbar {
+  background: color-mix(in srgb, var(--art-t1) 18%, transparent);
+}
+
+:root[data-skin="music"] [data-section="live"] a.job-row:hover {
+  background: linear-gradient(
+    140deg,
+    var(--art-bg, var(--bg-hover)) 30%,
+    color-mix(in srgb, var(--art-bg, var(--bg-hover)) 82%, var(--art-t1, var(--text-primary))) 100%
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-skin="music"] [data-section="live"] a.job-row:hover > .art {
+    transform: scale(1.02);
+  }
+}
+
+/* On the album's colour a running job's progress fills in its foreground,
+   as finished cells do: a translucent fill there barely shows. */
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog {
+  --live-fill: var(--art-t1);
+}
+
+/* The legend under the cells names each shape; states at zero stay out. */
+:root[data-skin="music"] [data-section="live"] .jprog {
+  flex-wrap: wrap;
+  row-gap: var(--s-2);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-legend {
+  display: flex;
+  flex: 1 0 100%;
+  gap: var(--s-1) var(--s-4);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-legend {
+  color: var(--art-t2);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key {
+  gap: var(--s-1_5);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key[data-zero] {
+  display: none;
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key::before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 6px;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--role, var(--track));
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-key[data-state="completed"]::before {
+  background: var(--art-t1);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-key[data-state="skipped"]::before {
+  background: color-mix(in srgb, var(--art-t1) 55%, transparent);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key[data-state="remaining"]::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+/* The server status line is a banner too: under the stacked banners it sits at
+   their gap, not at the page gap. */
+:root[data-skin="music"] .banners:not(:empty) + .page-overview:has(> :is(.health-strip, .health-strips):first-child) {
+  margin-top: calc(var(--s-2) - var(--page-gap));
+}
+
+/* "Needs attention": one tinted card per recent failure, above the live queue. */
+:root[data-skin="music"] [data-section="attention"] > .card-body {
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention {
+  display: grid;
+  gap: var(--s-2);
+  border-top: 0;
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention-row {
+  column-gap: var(--s-4);
+  padding: var(--s-3) var(--s-4) var(--s-3) var(--s-5);
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention-row + .attention-row {
+  border-top: 0;
+}
+
+/* The rows share their columns, so a row with no Retry (a link Apple has
+   nothing at) keeps its time in line with the others. */
+@media (min-width: 640px) {
+  :root[data-skin="music"] [data-section="attention"] .attention {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--s-4);
+  }
+
+  :root[data-skin="music"] [data-section="attention"] .attention-row {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention-title {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--danger-tint);
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention-link {
+  color: var(--text-primary);
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention-time,
+:root[data-skin="music"] [data-section="attention"] .attention-detail {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* Quiet queue: one line, no empty-state block. */
+:root[data-skin="music"] [data-section="live"] .live-idle-card {
+  /* Across every column of the jobs' grid, as wide as the banner below. */
+  grid-column: 1 / -1;
+  /* A job card's progress row (its margin and its two lines), split above
+     and below: as tall as a job's card, with its content in the middle. */
+  --idle-band: calc(var(--s-5) + 2 * var(--lh-13) + var(--s-2));
+  padding-block: calc(var(--s-5) + var(--idle-band) / 2);
+  background: var(--card-bg);
+}
+
+:root[data-skin="music"] [data-section="live"] .live-idle-card > .live-idle-art {
+  box-shadow: none;
+}
+
+:root[data-skin="music"] [data-section="live"] .live-idle-art .icon {
+  width: 32px;
+  height: 32px;
+}
+
+/* ---- Recently completed -------------------------------------------- */
+
+/* The banner and the wall sit on the page, with no card surface behind them. */
+:root[data-skin="music"] [data-section="recent"] > .card-body {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  overflow: visible;
+}
+
+/* Without a banner and a wall there is nothing to sit on the page: the empty
+   and failed states take the card surface the other sections have. */
+:root[data-skin="music"] [data-section="recent"] :is(.empty, .error-note) {
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+}
+
+/* The latest release: an album-colored card, like a running job's. */
+:root[data-skin="music"] .latest {
+  grid-template-columns: 112px minmax(0, 1fr);
+  border-radius: var(--r-card);
+  background: linear-gradient(
+    140deg,
+    var(--art-bg, var(--card-bg)) 30%,
+    color-mix(in srgb, var(--art-bg, var(--card-bg)) 88%, var(--art-t1, var(--text-primary))) 100%
+  );
+}
+
+:root[data-skin="music"] a.latest:hover {
+  background: linear-gradient(
+    140deg,
+    var(--art-bg, var(--bg-hover)) 30%,
+    color-mix(in srgb, var(--art-bg, var(--bg-hover)) 82%, var(--art-t1, var(--text-primary))) 100%
+  );
+}
+
+:root[data-skin="music"] .latest > .art {
+  box-shadow: 0 16px 34px -14px color-mix(in srgb, var(--art-t1, var(--text-primary)) 60%, transparent);
+}
+
+:root[data-skin="music"] .latest-kicker {
+  color: var(--art-t3, var(--text-secondary));
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  letter-spacing: var(--tracking-eyebrow);
+}
+
+:root[data-skin="music"] .latest-title {
+  font-size: var(--fs-live-title);
+  line-height: var(--lh-live-title);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.025em;
+}
+
+:root[data-skin="music"] .latest-artist {
+  font-size: var(--fs-artist);
+  line-height: var(--lh-artist);
+  font-weight: var(--w-medium);
+}
+
+/* A wall on the page surface: no tile fill, so a dark or missing cover is not a black block. */
+:root[data-skin="music"] .wall {
+  gap: var(--s-5);
+}
+
+:root[data-skin="music"] .wall-tile {
+  gap: 0;
+}
+
+:root[data-skin="music"] .wall-tile > .art {
+  margin-bottom: var(--s-2);
+  box-shadow: 0 14px 28px -16px var(--art-bg, transparent), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .wall-title {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .wall-sub {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* ---- Jobs (KPIs) ----------------------------------------------------- */
+
+/* No padding around the cells: a hovered cell fills its whole column, and the
+   card's radius clips the end ones, as a row of a grouped list does. */
+:root[data-skin="music"] [data-section="kpis"] > .card-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+:root[data-skin="music"] .kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+:root[data-skin="music"] .kpi {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-items: center;
+  gap: var(--s-1) var(--s-1_5);
+  min-height: 0;
+  padding: var(--s-3) var(--s-5);
+  border-radius: 0;
+}
+
+:root[data-skin="music"] .kpi + .kpi {
+  box-shadow: inset 1px 0 0 var(--border-subtle);
+}
+
+:root[data-skin="music"] .kpi-icon {
+  position: static;
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--role, var(--text-secondary));
+}
+
+:root[data-skin="music"] .kpi-icon .icon {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+:root[data-skin="music"] .kpi-label {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .kpi-value {
+  grid-column: 1 / -1;
+  align-self: start;
+  margin-top: var(--s-1);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .kpi[data-zero] .kpi-value {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .kpi .skel-kpi {
+  grid-column: 1 / -1;
+  align-self: start;
+}
+
+@media (max-width: 1279px) {
+  :root[data-skin="music"] .kpi {
+    padding: var(--s-3) var(--s-4);
+  }
+}
+
+/* ---- Throughput ---------------------------------------------------- */
+
+:root[data-skin="music"] .tp-totals {
+  gap: var(--s-2) var(--s-8);
+}
+
+:root[data-skin="music"] .tp-totals .fact {
+  flex-direction: column-reverse;
+  gap: 0;
+}
+
+:root[data-skin="music"] .tp-totals .fact-label {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .tp-totals .fact-value {
+  font-family: var(--font-display);
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--w-semibold);
+  letter-spacing: var(--tracking-title);
+}
+
+:root[data-skin="music"] .chart {
+  gap: var(--s-4);
+}
+
+:root[data-skin="music"] .chart-readout {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .chart-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .chart-plot {
+  height: 120px;
+}
+
+:root[data-skin="music"] .chart-bars {
+  gap: 5px;
+  border-top: 1px dashed var(--chart-grid);
+}
+
+:root[data-skin="music"] .chart-bars.has-mid::before {
+  border-top-style: dashed;
+}
+
+:root[data-skin="music"] .chart-bar {
+  border-radius: var(--r-tag) var(--r-tag) var(--r-mark) var(--r-mark);
+  corner-shape: var(--corner);
+}
+
+/* ---- Log tail ------------------------------------------------------ */
+
+:root[data-skin="music"] .log-level {
+  font-size: var(--fs-11);
+  font-weight: var(--w-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+}
+
+:root[data-skin="music"] [data-level="error"] .log-level,
+:root[data-skin="music"] [data-level="warn"] .log-level {
+  color: var(--role-text, var(--text-secondary));
+}
+
+:root[data-skin="music"] .log-dot {
+  width: 7px;
+  height: 7px;
+}
+
+/* ---- Queue --------------------------------------------------------- */
+
+:root[data-skin="music"] [data-section="jobs"] {
+  border-radius: var(--r-card);
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-list > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-row {
+  position: relative;
+  grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 200px) 148px 80px var(--job-trail, 16px);
+  min-height: 68px;
+  padding: var(--row-pad-y) var(--card-pad-x);
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-list > li + li > .job-row::before,
+:root[data-skin="music"] [data-section="jobs"] .job-list > li + li[data-action]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--card-pad-x) + 48px + var(--s-3));
+  border-top: var(--row-divider);
+}
+
+/* A row with a Retry button beside it draws its hairline across the whole item. */
+:root[data-skin="music"] [data-section="jobs"] .job-list > li[data-action] {
+  position: relative;
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-list > li[data-action] > .job-row::before {
+  content: none;
+}
+
+/* In the list (and New download's Submitted list), per-track cells join into
+   one capsule bar: the cell count changes from row to row, so separate
+   capsules would turn into dots, ticks or hairlines depending on the album. */
+:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .pcells {
+  gap: 0;
+  height: var(--bar-h);
+  border-radius: var(--r-bar);
+  corner-shape: round;
+  background: var(--track);
+  overflow: hidden;
+}
+
+:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .pcell {
+  border-radius: 0;
+}
+
+:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .pcell[data-state="remaining"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-row > .art {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-art);
+  box-shadow: 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .job-title {
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .job-sub {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .job-updated {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+@media (max-width: 1279px) {
+  :root[data-skin="music"] [data-section="jobs"] .job-row {
+    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 176px) 148px 72px var(--job-trail, 16px);
+  }
+}
+
+@media (max-width: 1023px) {
+  :root[data-skin="music"] [data-section="jobs"] .job-row {
+    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 128px) 140px var(--job-trail, 16px);
+  }
+}
+
+/* ---- Rows and cells on a grouped surface ------------------------- */
+
+/* A row or cell inside a card fills its whole box on hover and draws its
+   focus ring inside. The ones at the card's corners take its radius, so the
+   fill and the ring follow the corner instead of being cut square by it. */
+:root[data-skin="music"] .card-body > .job-list > li:first-child > .job-row,
+:root[data-skin="music"] .card-body > .job-list.is-selecting > li:first-child {
+  border-start-start-radius: var(--r-card);
+  border-start-end-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .card-body > .job-list:last-child > li:last-child > .job-row,
+:root[data-skin="music"] .card-body > .job-list.is-selecting:last-child > li:last-child {
+  border-end-start-radius: var(--r-card);
+  border-end-end-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .kpi:focus-visible {
+  outline-offset: -2px;
+}
+
+:root[data-skin="music"] .kpi:first-child {
+  border-start-start-radius: var(--r-card);
+  border-end-start-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .kpi:last-child {
+  border-start-end-radius: var(--r-card);
+  border-end-end-radius: var(--r-card);
+}
+
+/* ---- Queue selection ----------------------------------------------- */
+
+/* Select and Pause/Wrap are toggles of one kind: outlined (light) or filled
+   (dark) while off, the pressed fill while on. */
+:root[data-skin="music"] .queue-select[aria-pressed] {
+  background: var(--chip-off-bg);
+  box-shadow: var(--chip-off-ring);
+}
+
+:root[data-skin="music"] .queue-select[aria-pressed="true"] {
+  background: var(--chip-on-bg);
+  box-shadow: var(--chip-on-shadow);
+}
+
+:root[data-skin="music"] .queue-select[aria-pressed]:hover:not(:disabled) {
+  background: var(--bg-selected);
+}
+
+/* The bar floats over the list while it scrolls (it sticks under the top
+   bar), so it is a frosted raised capsule with the float shadow, like the
+   save bar and the toasts. */
+:root[data-skin="music"] .bulk-bar {
+  gap: var(--s-2) var(--s-3);
+  min-height: 52px;
+  padding: var(--s-1_5) var(--s-2) var(--s-1_5) var(--s-1);
+  border: 0;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--toast-bg);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+:root[data-skin="music"] .bulk-count {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .bulk-hint {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .bulk-progress-text {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .bulk-meter-fill {
+  border-radius: var(--r-bar);
+  corner-shape: round;
+}
+
+/* Selection circles, as in an Apple list in edit mode: an outlined ring,
+   then a red disc with a white check (a bar while only some are chosen). */
+:root[data-skin="music"] .job-check-input,
+:root[data-skin="music"] .bulk-check {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: var(--check-size);
+  height: var(--check-size);
+  margin: 0;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--border-control);
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+:root[data-skin="music"] .job-check-input:checked,
+:root[data-skin="music"] .bulk-check:checked {
+  background: var(--ink);
+  box-shadow: none;
+}
+
+:root[data-skin="music"] .bulk-check:indeterminate {
+  background: var(--neutral);
+  box-shadow: none;
+}
+
+:root[data-skin="music"] .job-check-input:checked::after,
+:root[data-skin="music"] .bulk-check:checked::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  width: 6px;
+  height: 11px;
+  border: solid var(--on-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+:root[data-skin="music"] .bulk-check:indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 6px;
+  width: 10px;
+  height: 2px;
+  border-radius: var(--r-mark);
+  background: var(--on-role);
+}
+
+:root[data-skin="music"] .bulk-check:disabled {
+  opacity: 0.55;
+}
+
+/* Rows in selection mode: the checkbox sits one row gap before the cover
+   (the skin's row padding would otherwise widen it), and the hairline starts
+   at the text. The whole row, checkbox included, hovers and selects as one. */
+:root[data-skin="music"] [data-section="jobs"] .job-list.is-selecting > li > .job-row {
+  padding-inline-start: var(--s-3);
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-list.is-selecting > li + li > .job-row::before {
+  left: calc(var(--s-3) + 48px + var(--s-3));
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li:hover {
+  background: var(--bg-hover);
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li[data-selected] {
+  background: var(--bg-selected);
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li > .job-row:hover {
+  background: transparent;
+}
+
+/* ---- Drawer -------------------------------------------------------- */
+
+:root[data-skin="music"] .drawer {
+  border-left: 0;
+}
+
+:root[data-skin="music"] .drawer-bar {
+  border-bottom: 0;
+}
+
+:root[data-skin="music"] .drawer-body {
+  gap: var(--s-6);
+  padding-top: var(--s-1);
+}
+
+/* The head wears the album's colors, like an album page header. */
+:root[data-skin="music"] .drawer-head {
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-5);
+  padding: var(--s-5);
+  border-radius: var(--r-card);
+  background: var(--art-bg, var(--bg-group));
+  color: var(--art-t1, var(--text-primary));
+}
+
+:root[data-skin="music"] .drawer-head > .art {
+  align-self: start;
+  width: 112px;
+  height: 112px;
+  box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--art-t1, var(--text-primary)) 60%, transparent);
+}
+
+/* The cover stays put when a line joins the text: the text is centered
+   beside it while shorter and grows downward past it. */
+:root[data-skin="music"] .drawer-head-text {
+  justify-content: center;
+  min-height: 112px;
+}
+
+:root[data-skin="music"] .drawer-title {
+  font-size: var(--fs-card-title);
+  line-height: var(--lh-card-title);
+  letter-spacing: var(--tracking-title);
+}
+
+:root[data-skin="music"] .drawer-title.is-unresolved {
+  font-family: var(--font-mono);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-regular);
+  letter-spacing: 0;
+}
+
+:root[data-skin="music"] .drawer-artist {
+  color: var(--art-t2, var(--text-secondary));
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .drawer-meta {
+  color: var(--art-t3, var(--text-secondary));
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .drawer-head .badge:not([data-role="danger"]),
+:root[data-skin="music"] .drawer-head .live-tag {
+  color: var(--art-t1, var(--badge-text));
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .drawer-head .badge:not([data-role="danger"]) .icon,
+:root[data-skin="music"] .drawer-head .pulse,
+:root[data-skin="music"] .drawer-head .pulse-static {
+  --role: var(--art-t1, var(--info));
+}
+
+/* The region tag on the album color takes the head's ink, as its facts do. */
+:root[data-skin="music"] .drawer-head .region-tag {
+  border-color: var(--art-t3, var(--border-subtle));
+  color: var(--art-t2, var(--text-secondary));
+}
+
+/* A failure keeps its chip on any album color: the danger tint over an opaque
+   surface, so the red word reads as it does everywhere else. */
+:root[data-skin="music"] .drawer-head .badge[data-role="danger"] {
+  background: linear-gradient(var(--danger-tint), var(--danger-tint)), var(--bg-raised);
+}
+
+:root[data-skin="music"] .drawer-times {
+  gap: 0 var(--s-4);
+  padding: var(--s-1) var(--s-4);
+  border: 0;
+  border-radius: var(--r-notice);
+  background: var(--bg-group);
+}
+
+:root[data-skin="music"] .drawer-times > div {
+  padding: var(--s-2) 0;
+}
+
+:root[data-skin="music"] .drawer-times > div:nth-child(n + 3) {
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .drawer-times dd {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .drawer-actions .btn-ghost {
+  background: var(--bg-group);
+}
+
+:root[data-skin="music"] .drawer-actions .btn-ghost:hover:not(:disabled) {
+  background: var(--bg-selected);
+}
+
+/* Delete is the one destructive cell: red text and glyph, as in an Apple
+   action list; the confirm dialog asks before anything goes. */
+:root[data-skin="music"] .drawer-actions .drawer-delete,
+:root[data-skin="music"] .drawer-delete .icon {
+  color: var(--danger-text);
+}
+
+:root[data-skin="music"] .confirm {
+  border-radius: var(--r-notice);
+}
+
+:root[data-skin="music"] .track {
+  padding: var(--row-pad-y) 0;
+}
+
+:root[data-skin="music"] .track-title {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Stage fills are calm ink; only a track still working shows the running red. */
+:root[data-skin="music"] .stage-fill {
+  background: var(--text-secondary);
+}
+
+:root[data-skin="music"] .track:has(.track-status [data-role="info"]) .stage-fill {
+  background: var(--info);
+}
+
+:root[data-skin="music"] .track:has(.track-status [data-role="success"]) .stage-fill {
+  background: var(--success);
+}
+
+@media (min-width: 640px) {
+  /* A floating sheet with the large radius, inset from the window edge. */
+  :root[data-skin="music"] .drawer {
+    top: var(--s-2);
+    right: var(--s-2);
+    bottom: var(--s-2);
+    width: min(var(--drawer-w), calc(100vw - var(--s-4)));
+    border-radius: var(--r-card);
+    overflow: hidden;
+  }
+}
+
+/* ---- Logs page ----------------------------------------------------- */
+
+:root[data-skin="music"] .level-chip {
+  border-color: transparent;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-control);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .level-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--chip-on-bg);
+  box-shadow: var(--chip-on-shadow);
+  color: var(--text-primary);
+  font-weight: var(--w-semibold);
+}
+
+/* Pause is a toggle pill like the level chips; Wrap lines is a switch. */
+:root[data-skin="music"] .toolbar-logs .btn[aria-pressed] {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-control);
+  color: var(--text-primary);
+}
+
+:root[data-skin="music"] .toolbar-logs .btn[aria-pressed="true"] {
+  background: var(--chip-on-bg);
+  box-shadow: var(--chip-on-shadow);
+}
+
+:root[data-skin="music"] .toolbar-logs .btn[aria-pressed]:hover:not(:disabled) {
+  background: var(--bg-selected);
+}
+
+:root[data-skin="music"] .level-chip[aria-pressed="false"] .log-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--role);
+}
+
+:root[data-skin="music"] .wrap-switch-track {
+  width: 44px;
+  height: 26px;
+}
+
+:root[data-skin="music"] .wrap-switch[aria-pressed="true"] .wrap-switch-track {
+  border-color: transparent;
+  background: var(--switch-on);
+}
+
+:root[data-skin="music"] .wrap-switch-track::before {
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: var(--switch-thumb);
+  box-shadow: var(--shadow-thumb);
+}
+
+:root[data-skin="music"] .wrap-switch[aria-pressed="true"] .wrap-switch-track::before {
+  transform: translateX(18px);
+  background: var(--switch-thumb);
+}
+
+:root[data-skin="music"] .filter-chip {
+  border-color: transparent;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--bg-fill);
+}
+
+:root[data-skin="music"] [data-section="log"] {
+  border-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .log-view {
+  padding: var(--s-2) 0;
+  font-size: var(--fs-mono-log);
+}
+
+:root[data-skin="music"] .log-line {
+  grid-template-columns: 100px 52px 64px minmax(0, 1fr);
+  gap: var(--s-3);
+  min-height: 28px;
+  padding: var(--s-1) var(--s-5);
+}
+
+:root[data-skin="music"] .log-row {
+  padding-right: var(--s-4);
+}
+
+:root[data-skin="music"] .attr-chip {
+  border-color: transparent;
+  background: var(--bg-fill);
+}
+
+:root[data-skin="music"] .log-detail {
+  padding-left: calc(100px + var(--s-5) + var(--s-3));
+}
+
+:root[data-skin="music"] .log-json {
+  border: 0;
+  border-radius: var(--r-notice);
+  background: var(--bg-canvas);
+}
+
+:root[data-skin="music"] .log-view .empty,
+:root[data-skin="music"] .log-view .error-note {
+  font-family: var(--font-sans);
+}
+
+:root[data-skin="music"] .new-lines {
+  border: 0;
+  font-weight: var(--w-semibold);
+}
+
+/* ---- Fields inside grouped surfaces --------------------------------- */
+
+/* Text fields, selects and lists inside a card are inset cells (white on the
+   gray surface in light, the second grouped level in dark), still outlined
+   in --border-control so a field reads as a field. */
+:root[data-skin="music"] .field-input,
+:root[data-skin="music"] .card-body .select {
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .field-key {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ---- New download -------------------------------------------------- */
+
+/* The stage: a glow at the top of the page, under the field. It turns to
+   the first cover's colour once one has loaded. */
+@property --stage-tint {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+:root[data-skin="music"] .main[data-page="new"] {
+  position: relative;
+  isolation: isolate;
+}
+
+:root[data-skin="music"] .page-new {
+  transition: --stage-tint 400ms var(--ease-out);
+}
+
+:root[data-skin="music"] .page-new::before,
+:root[data-skin="music"] .page-new::after {
+  /* Centred on the field: the main column's top padding, the title, the
+     page gap, half the field. */
+  --glow-x: calc(var(--main-x) + var(--compose-w) / 2);
+  --glow-y: calc(var(--s-3) + var(--lh-page-title) + var(--page-gap) + var(--compose-h) / 2);
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: calc(2 * var(--glow-y) + 320px);
+  pointer-events: none;
+  /* Fades in under the top bar and out below, so it has no edge. */
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--glow-y), transparent);
+}
+
+:root[data-skin="music"] .page-new::before {
+  background:
+    radial-gradient(var(--compose-w) 280px at var(--glow-x) var(--glow-y), var(--stage-glow-a), transparent),
+    radial-gradient(calc(var(--compose-w) * 0.6) 240px at calc(var(--glow-x) + var(--compose-w) * 0.55) var(--s-10), var(--stage-glow-b), transparent);
+}
+
+:root[data-skin="music"] .page-new::after {
+  background: radial-gradient(var(--compose-w) 300px at var(--glow-x) var(--glow-y), var(--stage-glow-tint), transparent);
+  opacity: 0;
+  transition: opacity 400ms var(--ease-out);
+}
+
+:root[data-skin="music"] .page-new[data-tinted]::after {
+  opacity: 1;
+}
+
+:root[data-skin="music"] .new-dock-go {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+/* Detected links: Queue-style rows. 48 px covers with an album-tinted
+   shadow, quiet filled tags, hairlines from the text to the right edge. */
+:root[data-skin="music"] .new-links > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-link {
+  position: relative;
+  column-gap: var(--s-3);
+  padding: var(--s-3) var(--s-4) var(--s-3) var(--card-pad-x);
+}
+
+:root[data-skin="music"] .new-links > .new-link + .new-link::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--card-pad-x) + var(--check-size) + 48px + 2 * var(--s-3));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .new-link-art {
+  border-radius: var(--r-art);
+  box-shadow: 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-link.has-palette .new-link-art {
+  box-shadow: 0 10px 20px -12px var(--art-bg), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-link-main {
+  gap: var(--s-0_5);
+}
+
+:root[data-skin="music"] .new-link-head .chip {
+  height: 18px;
+  padding: 0 var(--s-1_5);
+  border-color: transparent;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-link-title {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-link-sub,
+:root[data-skin="music"] .new-link-issue,
+:root[data-skin="music"] .new-link-loading,
+:root[data-skin="music"] .new-link-note,
+:root[data-skin="music"] .new-link-prior {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .new-link-remove {
+  color: var(--text-secondary);
+}
+
+/* A failure chip in a row grows with its text when the reason wraps. */
+:root[data-skin="music"] .new-link-issue[data-role="danger"] {
+  align-self: flex-start;
+  justify-self: start;
+  height: auto;
+  min-height: 22px;
+  max-width: 100%;
+  padding-block: var(--s-0_5);
+  border-radius: var(--r-full);
+  corner-shape: round;
+}
+
+/* Open is a quiet link in a quiet line; red stays with Download. */
+:root[data-skin="music"] .new-link-open {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:root[data-skin="music"] .new-links-more {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* Search hits: Albums, Playlists and Artists sit on the page as Overview's
+   wall (its tile and shadow), Songs are the detected-link rows on a grouped surface,
+   hairlines from the text, no rule across columns. */
+:root[data-skin="music"] :is([data-section="hits-albums"], [data-section="hits-playlists"], [data-section="hits-artists"]) > .card-body {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  overflow: visible;
+}
+
+:root[data-skin="music"] .new-tile-cover {
+  margin-bottom: var(--s-2);
+}
+
+:root[data-skin="music"] .new-tile-cover .art {
+  box-shadow: 0 14px 28px -16px var(--art-bg, transparent), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-hits > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-hits > .new-hit + .new-hit::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--card-pad-x) + 48px + var(--s-3));
+  border-top: var(--row-divider);
+}
+
+@container (min-width: 600px) {
+  :root[data-skin="music"] [data-section="hits-songs"] .new-hits > .new-hit:nth-child(2)::before {
+    content: none;
+  }
+}
+
+@container (min-width: 960px) {
+  :root[data-skin="music"] [data-section="hits-songs"] .new-hits > .new-hit:nth-child(3)::before {
+    content: none;
+  }
+}
+
+:root[data-skin="music"] .new-hit-art {
+  border-radius: var(--r-art);
+  box-shadow: 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-hit.has-palette .new-hit-art,
+:root[data-skin="music"] .new-artist-head.has-palette .new-artist-art {
+  box-shadow: 0 10px 20px -12px var(--art-bg), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-artist-art {
+  border-radius: var(--r-full);
+  corner-shape: round;
+}
+
+:root[data-skin="music"] .new-artist-head.has-palette .new-artist-art {
+  box-shadow: 0 18px 36px -18px var(--art-bg), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-hit-title {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-hit-head .chip {
+  height: 18px;
+  padding: 0 var(--s-1_5);
+  border-color: transparent;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-hit-download {
+  color: var(--text-secondary);
+}
+
+/* Download all: the large pill, as Download in the dock. */
+:root[data-skin="music"] .new-artist-all {
+  height: var(--btn-lg-h);
+  padding: 0 var(--s-5);
+}
+
+:root[data-skin="music"] .new-hit-download:hover:not([aria-disabled="true"]) {
+  color: var(--accent-text);
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="music"] .new-hit {
+    padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4);
+  }
+
+  :root[data-skin="music"] .new-hits > .new-hit + .new-hit::before {
+    left: calc(var(--s-4) + 48px + var(--s-2));
+  }
+}
+
+/* Submitted: Queue rows (covers, capsule bar, hairlines from the text) and
+   the per-link outcomes with their role glyph and word. */
+:root[data-skin="music"] .new-results-summary {
+  position: relative;
+  padding: var(--s-3) var(--card-pad-x);
+  border-bottom: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .new-results-summary::after,
+:root[data-skin="music"] .new-results > li + li > :is(.job-row, .new-result-row)::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .new-results-summary::after {
+  bottom: 0;
+  left: var(--card-pad-x);
+}
+
+:root[data-skin="music"] .new-results > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-results > li + li > :is(.job-row, .new-result-row)::before {
+  top: 0;
+  left: calc(var(--card-pad-x) + 40px + var(--s-3));
+}
+
+:root[data-skin="music"] .new-results .job-row,
+:root[data-skin="music"] .new-result-row {
+  position: relative;
+  padding-top: var(--row-pad-y);
+  padding-bottom: var(--row-pad-y);
+}
+
+:root[data-skin="music"] .new-results .job-row > .art {
+  border-radius: var(--r-art);
+  box-shadow: 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-result-label {
+  color: var(--role-text, var(--text-primary));
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-result-url,
+:root[data-skin="music"] .new-result-msg,
+:root[data-skin="music"] .new-result-detail {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* Browser shortcut: the code is an inset cell, the steps quiet secondary text. */
+:root[data-skin="music"] .new-bookmarklet-code {
+  padding: var(--s-3);
+  border: 0;
+  border-radius: var(--r-art);
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .new-steps {
+  gap: var(--s-1_5);
+}
+
+/* ---- Settings ------------------------------------------------------ */
+
+/* The section list repeats the sidebar: red glyphs, 15 px labels, the
+   current section a filled pill in semibold. */
+:root[data-skin="music"] .settings-nav-list {
+  gap: var(--s-0_5);
+}
+
+:root[data-skin="music"] .settings-nav-item {
+  gap: var(--s-3);
+  min-height: 36px;
+  padding: var(--s-1_5) var(--s-2_5);
+  color: var(--text-primary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .settings-nav-item > .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .settings-nav-item:hover {
+  background: color-mix(in srgb, var(--bg-selected) 60%, transparent);
+}
+
+:root[data-skin="music"] .settings-nav-item[aria-current] {
+  background: var(--bg-selected);
+  font-weight: var(--w-semibold);
+}
+
+/* Fields: grouped rows whose hairlines start at the text and run to the
+   card's right edge (the keyline of every other grouped list here), and so
+   do the lines between Server's groups, fact rows, hooks and action blocks. */
+:root[data-skin="music"] .field,
+:root[data-skin="music"] .settings-group,
+:root[data-skin="music"] .settings-panel,
+:root[data-skin="music"] .account-block + .account-block,
+:root[data-skin="music"] :is(.settings-panel, .account-block) > .kv > .kv-row,
+:root[data-skin="music"] .fact-row,
+:root[data-skin="music"] .settings-hook,
+:root[data-skin="music"] .settings-actions {
+  margin-right: calc(-1 * var(--card-pad));
+  padding-right: var(--card-pad);
+}
+
+:root[data-skin="music"] .field-label {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .field-changed {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .field-revert {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .field-input {
+  height: 34px;
+  padding: 0 var(--s-3);
+}
+
+:root[data-skin="music"] .field .select {
+  height: 34px;
+  padding: 0 var(--s-2_5);
+}
+
+:root[data-skin="music"] .field-unit {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Switch: an Apple toggle, a white thumb with a soft shadow on the gray
+   track, the red accent when on. The outline stays on the off track for
+   3:1. */
+:root[data-skin="music"] .field-switch {
+  width: 44px;
+  height: 26px;
+}
+
+:root[data-skin="music"] .field-switch::before {
+  width: 20px;
+  height: 20px;
+  background: var(--switch-thumb);
+  box-shadow: var(--shadow-thumb);
+}
+
+:root[data-skin="music"] .field-switch:checked::before {
+  transform: translateX(18px);
+  background: var(--switch-thumb);
+}
+
+/* The ordered list (codec priority) is an inset list like the one on New
+   download; hairlines start at the label. */
+:root[data-skin="music"] .list-items::before {
+  border: 0;
+  border-radius: var(--r-art);
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .list-item {
+  position: relative;
+  min-height: 44px;
+  border-top: 0;
+}
+
+:root[data-skin="music"] .list-item + .list-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--s-3) + 20px + var(--s-2));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .list-item[data-sort-slot]::before,
+:root[data-skin="music"] .list-item[data-sort-slot] + .list-item::before {
+  border-top-color: transparent;
+}
+
+:root[data-skin="music"] .list-items[data-empty]::before {
+  border: 1px dashed var(--border-control);
+  background: transparent;
+}
+
+/* As tall as a row; a phone row is taller, as list-editor.css sets. */
+@media (min-width: 640px) {
+  :root[data-skin="music"] .list-empty {
+    min-height: 44px;
+  }
+}
+
+:root[data-skin="music"] .list-label {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+/* The Queue's grip covers the 48 px cover with its corners. */
+:root[data-skin="music"] .job-grip {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-art);
+}
+
+/* A row (its focus ring), the lifted copy and the slot take the list's corners. */
+:root[data-skin="music"] .list-item,
+:root[data-skin="music"] .sortable-ghost > .list-item,
+:root[data-skin="music"] .list-item[data-sort-slot]::after {
+  border-radius: var(--r-art);
+}
+
+/* Touch screens keep fields at 16 px (responsive.css), above the sizes set here. */
+@media (max-width: 639px), (pointer: coarse) {
+  :root[data-skin="music"] :is(textarea, input, .select, .search input) {
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+}
+
+/* The compose field keeps its own size on a touch screen (20 px there). */
+:root[data-skin="music"] .new-compose > .new-compose-input {
+  font-size: var(--fs-compose);
+  line-height: var(--lh-compose);
+}
+
+:root[data-skin="music"] .new-compose[data-dense] > .new-compose-input {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+}
+
+/* A text field's ring is neutral; selects, switches and buttons keep the
+   accent. */
+:root[data-skin="music"] :is(textarea, input:not([type="checkbox"], [type="radio"], [type="range"])):focus-visible,
+:root[data-skin="music"] .search:focus-within {
+  outline-color: var(--focus-field);
+}
+
+/* A field's focus ring sits on its own border: one ring, not the border, a
+   gap and the ring. Buttons, links and switches keep the 2 px offset. */
+:root[data-skin="music"] :is(textarea, select, input:not([type="checkbox"], [type="radio"], [type="range"])):focus-visible,
+:root[data-skin="music"] .search:focus-within {
+  outline-offset: -1px;
+}
+
+/* Selects draw their own chevron 12 px in from the right edge, like the
+   rounded fields around them, instead of the native arrow against the border.
+   :is() keeps this above the card and field rules that set the background
+   and padding. */
+:root[data-skin="music"] :is(.select, .card-body .select, .field .select) {
+  appearance: none;
+  padding-right: calc(var(--s-3) + 12px + var(--s-2));
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--s-3) center;
+  background-size: 12px 12px;
+}
+
+:root[data-skin="music"] .field-error,
+:root[data-skin="music"] .field-warning {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .account-block-head .btn-ghost,
+:root[data-skin="music"] .token-replace {
+  color: var(--accent-text);
+}
+
+:root[data-skin="music"] .account-block-head .btn-ghost:hover:not(:disabled),
+:root[data-skin="music"] .token-replace:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+}
+
+:root[data-skin="music"] .account-name {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Save bar: a frosted floating capsule, like the toasts, above the section. */
+:root[data-skin="music"] .save-bar {
+  gap: var(--s-2) var(--s-4);
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+  border: 0;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--toast-bg);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+:root[data-skin="music"] .save-bar-count {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .save-bar-where {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .save-bar-actions .btn {
+  height: var(--btn-lg-h);
+  padding: 0 var(--s-4);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .bulk-bar .btn-secondary {
+  background: var(--fill-raised);
+}
+
+:root[data-skin="music"] .bulk-bar .btn-secondary:hover:not(:disabled) {
+  background: var(--fill-raised-hover);
+}
+
+/* Discarding and logging out lose something: red text, as .btn-danger. */
+:root[data-skin="music"] .save-bar-discard,
+:root[data-skin="music"] .account-logout {
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger-text);
+}
+
+:root[data-skin="music"] .save-bar-discard:hover:not(:disabled),
+:root[data-skin="music"] .account-logout:hover:not(:disabled) {
+  background: var(--danger-tint);
+}
+
+/* ---- Overlays ------------------------------------------------------ */
+
+:root[data-skin="music"] .palette,
+:root[data-skin="music"] .sheet {
+  border: 0;
+  background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(30px);
+}
+
+:root[data-skin="music"] .palette-input {
+  height: 54px;
+  padding: 0 var(--s-5);
+}
+
+/* The palette opens focused on its only field; the caret shows focus, and a
+   2 px rule across the frosted sheet would read as a heavy divider. */
+:root[data-skin="music"] .palette-input:focus-within {
+  box-shadow: none;
+}
+
+:root[data-skin="music"] .palette-input input {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  letter-spacing: -0.01em;
+}
+
+:root[data-skin="music"] .palette-list {
+  padding: var(--s-2);
+}
+
+:root[data-skin="music"] .palette-group {
+  padding: var(--s-3) var(--s-3) var(--s-1);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .palette-item {
+  min-height: 38px;
+  border-radius: var(--r-control);
+  font-size: var(--fs-15);
+}
+
+:root[data-skin="music"] .palette-item .icon {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .palette-item[aria-selected="true"] {
+  background: var(--bg-hover);
+}
+
+:root[data-skin="music"] .palette-foot {
+  padding: var(--s-2) var(--s-5);
+}
+
+/* Touch: Cancel is red text as in an iOS search field; rows are 44 px. */
+:root[data-skin="music"] .palette-close {
+  height: auto;
+  padding: var(--s-1);
+  color: var(--accent-text);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-regular);
+}
+
+:root[data-skin="music"] .palette-close:hover:not(:disabled) {
+  background: transparent;
+}
+
+@media (hover: none) {
+  :root[data-skin="music"] .palette-item {
+    min-height: var(--touch);
+  }
+}
+
+/* Shortcut sheet: keys and their context words on the left in secondary,
+   what they do in primary. */
+:root[data-skin="music"] .shortcut-group .kv dt {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .shortcut-group .kv dd {
+  color: var(--text-primary);
+}
+
+:root[data-skin="music"] .shortcut-group-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .toast {
+  padding: calc(var(--s-2) + var(--s-0_5)) var(--s-2) calc(var(--s-2) + var(--s-0_5)) var(--s-4);
+  border: 0;
+  border-radius: var(--r-float);
+  background: var(--toast-bg);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+:root[data-skin="music"] .toast-msg {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-medium);
+}
+
+/* ---- Dialogs ------------------------------------------------------- */
+
+:root[data-skin="music"] .sheet {
+  border-radius: var(--r-card);
+}
+
+/* Confirm: an Apple alert. Centered title and consequence, then Cancel and
+   the confirm button as two equal pills. */
+:root[data-skin="music"] .dialog-confirm {
+  width: min(400px, 100%);
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-5) var(--s-5);
+  text-align: center;
+}
+
+:root[data-skin="music"] .dialog-title {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--w-bold);
+}
+
+:root[data-skin="music"] .dialog-body {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .dialog-body > p + p {
+  margin-top: var(--s-2);
+}
+
+:root[data-skin="music"] .dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+:root[data-skin="music"] .dialog-confirm:has(> .dialog-actions[data-choices="3"]) {
+  width: min(520px, 100%);
+}
+
+/* Three choices: one row, the destructive one alone on the left (base). */
+:root[data-skin="music"] .dialog-actions[data-choices="3"] {
+  display: flex;
+  justify-content: flex-end;
+}
+
+:root[data-skin="music"] .dialog-actions[data-choices="3"] .btn {
+  padding: 0 var(--s-4);
+}
+
+/* Phone sheets: the grabber above, the 20 px top radius, and a confirm's
+   choices stacked full width (order in overlays.css). */
+:root[data-skin="music"] [data-placement="bottom"] > [data-dialog] {
+  width: 100%;
+  padding-top: var(--s-6);
+  border-radius: var(--r-card) var(--r-card) 0 0;
+}
+
+:root[data-skin="music"] [data-placement="bottom"] .dialog-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+:root[data-skin="music"] .dialog-actions .btn {
+  height: var(--btn-lg-h);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+/* Qualities: per-slot summaries are grouped cells, each track's formats are
+   filled pills, and hairlines between tracks start at the title. */
+:root[data-skin="music"] .sheet-quality {
+  width: min(760px, 100%);
+  gap: var(--s-4);
+  padding: var(--s-6);
+}
+
+:root[data-skin="music"] .quality-for {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .quality-slot {
+  gap: var(--s-1);
+  padding: var(--s-3) var(--s-4);
+  border: 0;
+  border-radius: var(--r-notice);
+  background: var(--bg-group);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .quality-slot-label {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .quality-track {
+  position: relative;
+  padding: var(--s-2_5) 0;
+}
+
+:root[data-skin="music"] .quality-track + .quality-track {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .quality-track + .quality-track::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(2.5ch + var(--s-2));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .quality-track-name {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .quality-opt {
+  padding: var(--s-0_5) var(--s-2);
+  border: 0;
+  background: var(--bg-group);
+}
+
+:root[data-skin="music"] .quality-opt-label {
+  font-weight: var(--w-semibold);
+}
+
+/* ---- States -------------------------------------------------------- */
+
+:root[data-skin="music"] .notice {
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .notice > .icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+/* A link in a warning or failure notice wears the role's text color,
+   underlined (4.75 / 5.23 on the tints over the canvas); the accent red would
+   fall under 4.5:1 on the red tint. */
+:root[data-skin="music"] .notice[data-role] :is(a, .link, .health-strip-link):not(.health-strip-item) {
+  color: var(--role-text, var(--accent-text));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Overview's status line: each item opens its Settings section but reads
+   as the notice's own words, underlined only under the pointer. */
+:root[data-skin="music"] .notice[data-role] .health-strip-item {
+  color: var(--role-text, var(--accent-text));
+  text-underline-offset: 2px;
+}
+
+/* Beside the green "All systems healthy" the Details link is secondary text,
+   underlined, so a red link does not read as a warning. */
+:root[data-skin="music"] .health-strip[data-state="ok"] .health-strip-link {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:root[data-skin="music"] .skel {
+  border-radius: var(--r-tag);
+  corner-shape: var(--corner);
+}
+
+:root[data-skin="music"] .skel-tile {
+  border-radius: var(--r-art);
+}
+
+:root[data-skin="music"] .empty {
+  gap: var(--s-2);
+}
+
+:root[data-skin="music"] .empty-icon .icon,
+:root[data-skin="music"] .empty-icon {
+  width: 34px;
+  height: 34px;
+}
+
+:root[data-skin="music"] .empty-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .empty-body {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* ---- Icon rail (640-1023) ------------------------------------------- */
+
+@media (max-width: 1023px) {
+  /* The rail is a column: on a phone in landscape it scrolls instead of
+     clipping the last link. */
+  :root[data-skin="music"] .sidebar {
+    padding: var(--s-3) var(--s-1_5);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  :root[data-skin="music"] .brand {
+    padding: 0;
+  }
+
+  :root[data-skin="music"] .nav-item {
+    width: var(--touch);
+    height: 40px;
+    padding: 0;
+  }
+
+  :root[data-skin="music"] .sidebar .nav-item .icon-nav {
+    width: var(--icon-nav);
+    height: var(--icon-nav);
+  }
+
+  :root[data-skin="music"] .nav-badge {
+    background: var(--bg-fill);
+    color: var(--text-primary);
+    font-size: var(--fs-11);
+    line-height: var(--lh-11);
+    font-weight: var(--w-semibold);
+  }
+
+  /* On the rail New download is a red disc above the glyphs. */
+  :root[data-skin="music"] .sidebar .sidebar-new {
+    width: 40px;
+    height: 40px;
+    margin: 0 0 var(--s-1);
+  }
+
+  :root[data-skin="music"] .sidebar .sidebar-new .icon {
+    width: var(--icon-nav);
+    height: var(--icon-nav);
+  }
+
+  :root[data-skin="music"] .settings-nav-item {
+    gap: var(--s-2);
+    padding: var(--s-1_5) var(--s-2);
+    font-size: var(--fs-14);
+    line-height: var(--lh-14);
+  }
+
+  :root[data-skin="music"] .kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+}
+
+/* ---- Phone (<640) --------------------------------------------------- */
+
+@media (max-width: 639px) {
+  :root[data-skin="music"] .topbar {
+    padding: 0 var(--s-2);
+  }
+
+  :root[data-skin="music"] .conn,
+  :root[data-skin="music"] .conn:not([data-state="reconnecting"], [data-state="offline"]) {
+    gap: var(--s-1_5);
+    padding: 0 var(--s-2);
+    background: transparent;
+    font-size: var(--fs-12);
+    line-height: var(--lh-12);
+  }
+
+  /* Reconnecting or offline, keep the word next to the dot: a problem never
+     rests on color alone. */
+  :root[data-skin="music"] .conn:is([data-state="reconnecting"], [data-state="offline"]) .conn-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+
+  :root[data-skin="music"] .search-trigger {
+    background: transparent;
+  }
+
+  :root[data-skin="music"] .main {
+    padding: var(--s-2) var(--main-x) calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-8));
+  }
+
+  :root[data-skin="music"] .banners {
+    margin-top: calc(var(--s-3) - var(--page-gap));
+  }
+
+  /* iOS tab bar: frosted, the current tab in red with no indicator bar. */
+  :root[data-skin="music"] .tabbar {
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+
+  :root[data-skin="music"] .tab .icon-nav {
+    width: 24px;
+    height: 24px;
+  }
+
+  :root[data-skin="music"] .tab-label {
+    font-weight: var(--w-medium);
+  }
+
+  :root[data-skin="music"] .tab[aria-current="page"] {
+    color: var(--accent-text);
+    font-weight: var(--w-semibold);
+  }
+
+  :root[data-skin="music"] .tab[aria-current="page"]::before {
+    display: none;
+  }
+
+  /* New, the center tab: a red capsule around a large plus with a soft red
+     shadow, no word under it. */
+  :root[data-skin="music"] .tab-new-mark {
+    border-radius: var(--r-full);
+    corner-shape: round;
+    box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+
+  :root[data-skin="music"] .tab-new-mark .icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* One 52 px row on a phone: the count, then two 44 px buttons. */
+  :root[data-skin="music"] .save-bar {
+    padding: var(--s-1) var(--s-1) var(--s-1) var(--s-4);
+  }
+
+  :root[data-skin="music"] .save-bar-actions .btn {
+    height: var(--touch);
+  }
+
+  /* Under 360 px the pills give the count its room on the one row. */
+  @media (max-width: 359px) {
+    :root[data-skin="music"] .save-bar-actions .btn {
+      padding: 0 var(--s-3);
+    }
+  }
+
+  /* Its actions can wrap under the count here: the radius is its touch
+     pills' plus the padding, a capsule on one row and nested on two. */
+  :root[data-skin="music"] .bulk-bar {
+    padding: var(--s-2);
+    border-radius: calc(var(--touch) / 2 + var(--s-2));
+  }
+
+  :root[data-skin="music"] :where(.card:has(> .card-head)) > .card-head {
+    padding-right: 0;
+  }
+
+  :root[data-skin="music"] .card-note {
+    flex-basis: 100%;
+    order: 3;
+    font-size: var(--fs-13);
+    line-height: var(--lh-13);
+  }
+
+  /* Live cards: smaller cover beside the text, progress below. */
+  :root[data-skin="music"] [data-section="live"] .job-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+    column-gap: var(--s-4);
+    padding: var(--s-4);
+  }
+
+  :root[data-skin="music"] [data-section="live"] .job-row > .art {
+    width: 96px;
+    height: 96px;
+  }
+
+  :root[data-skin="music"] [data-section="live"] .job-status {
+    margin-bottom: var(--s-1);
+  }
+
+  :root[data-skin="music"] [data-section="live"] .job-facts {
+    font-size: var(--fs-12);
+    line-height: var(--lh-12);
+  }
+
+  :root[data-skin="music"] [data-section="live"] .job-progress {
+    margin-top: var(--s-4);
+  }
+
+  :root[data-skin="music"] [data-section="live"] .live-idle-card {
+    --idle-band: calc(var(--s-4) + 2 * var(--lh-13) + var(--s-2));
+    padding-block: calc(var(--s-4) + var(--idle-band) / 2);
+  }
+
+  :root[data-skin="music"] .latest {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: var(--s-4);
+    padding: var(--s-4);
+  }
+
+  :root[data-skin="music"] .latest > .art {
+    width: 88px;
+    height: 88px;
+  }
+
+  :root[data-skin="music"] .wall {
+    gap: var(--s-4) var(--s-3);
+  }
+
+  /* Two rows of two: the card's corners are the first, second, third and
+     last cells. */
+  :root[data-skin="music"] .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :root[data-skin="music"] .kpi {
+    padding: var(--s-3) var(--s-3);
+  }
+
+  :root[data-skin="music"] .kpi:nth-child(3) {
+    box-shadow: none;
+  }
+
+  :root[data-skin="music"] .kpi:first-child {
+    border-end-start-radius: 0;
+  }
+
+  :root[data-skin="music"] .kpi:nth-child(2) {
+    border-start-end-radius: var(--r-card);
+  }
+
+  :root[data-skin="music"] .kpi:nth-child(3) {
+    border-end-start-radius: var(--r-card);
+  }
+
+  :root[data-skin="music"] .kpi:last-child {
+    border-start-end-radius: 0;
+  }
+
+  :root[data-skin="music"] .kpi:nth-child(n + 3) {
+    border-top: var(--row-divider);
+  }
+
+  /* Queue rows: two-line cards with the cover, hairlines inset to the text. */
+  :root[data-skin="music"] [data-section="jobs"] .job-row {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    min-height: 76px;
+    padding: var(--s-3) var(--s-4);
+  }
+
+  :root[data-skin="music"] [data-section="jobs"] .job-list > li + li > .job-row::before,
+  :root[data-skin="music"] [data-section="jobs"] .job-list > li + li[data-action]::before {
+    left: calc(var(--s-4) + 48px + var(--s-3));
+  }
+
+  :root[data-skin="music"] [data-section="jobs"] .job-row > .art {
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+
+  :root[data-skin="music"] [data-section="jobs"] .job-progress {
+    grid-column: 2 / -1;
+  }
+
+  /* A finished job has one row: the cover is centered beside it. */
+  :root[data-skin="music"] [data-section="jobs"] .job-row[data-progress="off"] > .art {
+    grid-row: 1;
+    align-self: center;
+  }
+
+  /* Submitted rows too: the bar starts under the title, as in the Queue. */
+  :root[data-skin="music"] .new-results .job-row > .art {
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+
+  :root[data-skin="music"] .new-results .job-progress {
+    grid-column: 2 / -1;
+  }
+
+  /* Selecting, the checkbox leads the row: the cover gives its room to the
+     title, the status and the reason, and the hairline starts at the text. */
+  :root[data-skin="music"] [data-section="jobs"] .job-list.is-selecting .job-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  :root[data-skin="music"] [data-section="jobs"] .job-list.is-selecting .job-progress {
+    grid-column: 1 / -1;
+  }
+
+  :root[data-skin="music"] [data-section="jobs"] .job-list.is-selecting > li + li > .job-row::before {
+    left: var(--s-3);
+  }
+
+  /* Drawer: a full-height sheet. */
+  :root[data-skin="music"] .drawer-head {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: var(--s-4);
+    padding: var(--s-4);
+  }
+
+  :root[data-skin="music"] .drawer-head > .art {
+    width: 88px;
+    height: 88px;
+  }
+
+  :root[data-skin="music"] .drawer-head-text {
+    min-height: 88px;
+  }
+
+  :root[data-skin="music"] .drawer-title {
+    font-size: var(--fs-20);
+    line-height: var(--lh-20);
+  }
+
+  :root[data-skin="music"] .log-line {
+    grid-template-columns: 64px 44px minmax(0, 1fr);
+    padding: var(--s-1) var(--s-3);
+  }
+
+  :root[data-skin="music"] .log-detail {
+    padding-left: var(--s-3);
+  }
+
+  :root[data-skin="music"] .palette-input input {
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+
+  /* A floating sheet inset from the screen edge; no keyboard hints on touch. */
+  :root[data-skin="music"] .palette {
+    margin: var(--s-2);
+  }
+
+  :root[data-skin="music"] .palette-foot {
+    display: none;
+  }
+}
+
+/* ---- Motion -------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="music"] .pulse::before,
+  :root[data-skin="music"] .pulse::after {
+    display: block;
+    animation: none;
+  }
+
+  :root[data-skin="music"] .pulse::before {
+    transform: scaleY(0.6);
+  }
+}
+
+@media (forced-colors: active) {
+  :root[data-skin="music"] .pulse::before,
+  :root[data-skin="music"] .pulse::after {
+    background: CanvasText;
+  }
+
+  :root[data-skin="music"] .seg-btn[aria-pressed="true"] {
+    border: 1px solid CanvasText;
+  }
+
+  /* The drawn selection circles lose their fill here; the system box shows the state. */
+  :root[data-skin="music"] .job-check-input,
+  :root[data-skin="music"] .bulk-check {
+    appearance: auto;
+  }
+
+  :root[data-skin="music"] .job-check-input::after,
+  :root[data-skin="music"] .bulk-check::after {
+    content: none;
+  }
+}
