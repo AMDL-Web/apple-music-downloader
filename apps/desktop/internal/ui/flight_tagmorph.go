@@ -107,7 +107,11 @@ func tagMorph(c *ui.Context, from, to string, t float32, ink ui.Color) {
 			if to <= from {
 				return now
 			}
-			return now + (p-from)*(next-now)/(to-from)
+			// By its middle, so a mark that fills the room between two
+			// words, as "/" in "24/96", stays between them as they part
+			// rather than riding the one before.
+			half := width(ps[i].text) / 2
+			return now + (p+half-from)*(next-now)/(to-from) - half
 		case before >= 0:
 			return at(before) + p - x(ps, own, before)
 		case after >= 0:
