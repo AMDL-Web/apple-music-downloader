@@ -22,9 +22,13 @@ type Config struct {
 	// Err says why the last read failed.
 	Err string
 	// Saving names the keys whose change is on its way; Failed holds the
-	// backend's reason for each key whose last change it refused.
-	Saving map[string]bool
-	Failed map[string]string
+	// backend's reason for each key whose last change it refused, and
+	// Refused that change's value, so a field shows the value its reason is
+	// about rather than the saved one. Both stay until the key changes again
+	// or ForgetRefusal drops them.
+	Saving  map[string]bool
+	Failed  map[string]string
+	Refused map[string]any
 	// Reloading is set while the backend reads its config.yaml again, from
 	// ReloadSince; ReloadErr says why that file could not be used, and stays
 	// until the next reload answers.
@@ -73,6 +77,13 @@ type configAnswer struct {
 	Persisted      bool           `json:"persisted"`
 	ReloadError    string         `json:"reload_error"`
 	PendingRestart []string       `json:"pending_restart"`
+}
+
+// ForgetRefusal drops the backend's refusal of key's last change, its
+// reason and its value, as editing or reverting the field does.
+func (cf *Config) ForgetRefusal(key string) {
+	delete(cf.Failed, key)
+	delete(cf.Refused, key)
 }
 
 // Value is key's value, such as "download.cover_size", or nil: the one on
@@ -145,10 +156,10 @@ func (s *Store) SetConfig(key string, v any) {
 		return
 	}
 	if cf.Saving == nil {
-		cf.Saving, cf.Failed, cf.pending, cf.sent = map[string]bool{}, map[string]string{}, map[string]any{}, map[string]time.Time{}
+		cf.Saving, cf.Failed, cf.Refused, cf.pending, cf.sent = map[string]bool{}, map[string]string{}, map[string]any{}, map[string]any{}, map[string]time.Time{}
 	}
 	cf.Saving[key], cf.pending[key], cf.sent[key] = true, v, s.now()
-	delete(cf.Failed, key)
+	cf.ForgetRefusal(key)
 	c, ctx := s.client, s.ctx
 	go func() {
 		var ans configAnswer
@@ -161,7 +172,7 @@ func (s *Store) SetConfig(key string, v any) {
 			delete(cf.pending, key)
 			delete(cf.sent, key)
 			if err != nil {
-				cf.Failed[key] = Reason(err)
+				cf.Failed[key], cf.Refused[key] = Reason(err), v
 				return
 			}
 			cf.Values, cf.Persisted, cf.PendingRestart = ans.Config, ans.Persisted, ans.PendingRestart

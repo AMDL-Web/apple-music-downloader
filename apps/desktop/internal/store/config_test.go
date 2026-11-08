@@ -142,6 +142,14 @@ func TestSetConfigSendsOneKeyAndKeepsTheOldValueWhenRefused(t *testing.T) {
 	if msg := s.Config.Failed["download.max_attempts"]; msg != "download.max_attempts must be between 1 and 10" {
 		t.Errorf("refusal reads %q; want the backend's message", msg)
 	}
+	if v := s.Config.Refused["download.max_attempts"]; v != 11 {
+		t.Errorf("the refused value is %v; want 11, which the field shows with the reason", v)
+	}
+	s.SetConfig("download.max_attempts", 4)
+	if _, ok := s.Config.Refused["download.max_attempts"]; ok || s.Config.Failed["download.max_attempts"] != "" {
+		t.Errorf("a new change kept the old refusal: %q", s.Config.Failed["download.max_attempts"])
+	}
+	settle(func() bool { return !s.Config.Saving["download.max_attempts"] })
 }
 
 func TestCancelEndsTheLoginOnTheBackend(t *testing.T) {

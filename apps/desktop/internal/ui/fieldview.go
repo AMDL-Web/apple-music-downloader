@@ -228,12 +228,16 @@ func rangeText(f *configField) string {
 
 // textField is a one-line input that sends its text with commit on Return
 // or when it loses the keyboard, unless it is the saved value. While it is
-// not edited it shows saved.
+// not edited it shows saved, or the change the backend refused, whose reason
+// shows under it until the text is edited.
 func (a *App) textField(c *ui.Context, k *Tokens, f *configField, saved string, width float32, off bool, commit func(string)) ui.Element {
-	e := &a.set.edit
+	e, cf := &a.set.edit, &a.Store.Config
 	txt, editing := e.text[f.key]
 	if !editing {
 		txt = saved
+		if v, refused := cf.Refused[f.key]; refused {
+			txt = valueText(v)
+		}
 	}
 	box, in := fieldBoxUnit(c, k, f.key, &txt, "", true, f.unit)
 	in.Label(f.label)
@@ -244,6 +248,7 @@ func (a *App) textField(c *ui.Context, k *Tokens, f *configField, saved string, 
 	if in.Changed() {
 		e.text[f.key] = txt
 		delete(e.errs, f.key)
+		cf.ForgetRefusal(f.key)
 	}
 	was := e.focus[f.key]
 	e.focus[f.key] = in.Focused()
@@ -349,10 +354,11 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 
 // pathField edits a folder or a file name template. A key that asks first
 // shows Apply and Revert while it differs from the saved value; the others
-// apply on Return or when the field loses the keyboard. In standalone mode
-// the folders are this computer's, so a folder chooser helps.
+// apply on Return or when the field loses the keyboard. A change the backend
+// refused shows Revert, back to the saved value. In standalone mode the
+// folders are this computer's, so a folder chooser helps.
 func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string, off bool) {
-	e := &a.set.edit
+	e, cf := &a.set.edit, &a.Store.Config
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		a.textField(c, k, f, saved, 0, off, func(s string) {
 			if f.confirm {
@@ -381,12 +387,19 @@ func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string, 
 				})
 			}
 		}
-		if f.confirm && edited && draft != saved {
+		_, refused := cf.Refused[f.key]
+		switch {
+		case f.confirm && edited && draft != saved:
 			if button(c, k, buttonPrimary, "Apply…", nil).Height(32).Clicked() {
 				a.confirmField(f, draft)
 			}
 			if button(c, k, buttonPlain, "Revert", nil).Height(32).Clicked() {
 				delete(e.text, f.key)
+			}
+		case refused && !edited:
+			// Applying it again would be refused again: edit it, or go back.
+			if button(c, k, buttonPlain, "Revert", nil).Height(32).Clicked() {
+				cf.ForgetRefusal(f.key)
 			}
 		}
 	})

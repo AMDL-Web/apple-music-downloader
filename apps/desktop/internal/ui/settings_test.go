@@ -130,6 +130,42 @@ func TestFolderAndNameChangesAskFirst(t *testing.T) {
 	}
 }
 
+// A change the backend refused stays in its field with the reason under it,
+// so the reason is about the text it shows; Revert or an edit drops both.
+func TestRefusedChangeStaysInItsField(t *testing.T) {
+	const key, refused, why = "download.library_path_format", "library/{AlbumName}/{TrackNumber}", "file name needs {SongNumber}"
+	refuse := func(a *App, tt *ui.Tester) {
+		a.Store.Config.Failed = map[string]string{key: why}
+		a.Store.Config.Refused = map[string]any{key: refused}
+		tt.Frame()
+	}
+	a, tt := filesApp(t)
+	refuse(a, tt)
+	if !tt.HasText(why) || !tt.HasText("Revert") {
+		t.Fatalf("the refused change should show its reason and Revert: %q", tt.Texts())
+	}
+	if tt.HasText("Apply…") {
+		t.Errorf("the refused change offers Apply…, which the backend refuses again: %q", tt.Texts())
+	}
+	if err := tt.Click("Revert"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if _, ok := a.Store.Config.Refused[key]; ok || tt.HasText(why) || tt.HasText("Revert") {
+		t.Errorf("Revert should go back to the saved value without the reason: %q", tt.Texts())
+	}
+
+	a, tt = filesApp(t)
+	refuse(a, tt)
+	clickFieldOf(t, tt, "Library")
+	tt.Key(0, ui.KeyEnd)
+	tt.Type("x")
+	tt.Frame()
+	if tt.HasText(why) || a.set.edit.text[key] != refused+"x" {
+		t.Errorf("an edit should start from the refused change and drop its reason: draft %q, %q", a.set.edit.text[key], tt.Texts())
+	}
+}
+
 func TestTemporaryFolderAppliesWithoutAsking(t *testing.T) {
 	_, tt := filesApp(t)
 	clickFieldOf(t, tt, "Temporary folder")
