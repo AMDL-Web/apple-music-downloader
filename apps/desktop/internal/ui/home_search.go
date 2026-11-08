@@ -55,12 +55,11 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 		}
 	}()
 	a.followView(c, q.Artist.ID)
-	// A quick answer shows in place of the last, or of nothing: the
-	// results dim, and the first search's skeleton shows, only once the
-	// read is slow.
-	slow := !q.Sent.IsZero() && waited(c, q.Status == store.SearchLoading, q.Sent)
+	// A quick answer shows in place of the last: the results dim only once
+	// the read is slow. The first search's skeleton is the screen's layout,
+	// there from the frame the field rises (dockMotion).
 	body := ui.Column(c).Width(width)
-	if q.Stale && slow {
+	if q.Stale && !q.Sent.IsZero() && waited(c, q.Status == store.SearchLoading, q.Sent) {
 		body.Opacity(0.5)
 	}
 	// The results and an artist's albums are views of their own: one
@@ -79,10 +78,8 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 				a.regionRow(c, k)
 				searchFailed(c, k, q.Err, s.RetrySearch)
 			case q.Result == nil:
-				if slow {
-					a.groupTabs(c, k)
-					skeletonGroups(c, k, width)
-				}
+				a.groupTabs(c, k)
+				skeletonGroups(c, k, width)
 			case store.NoHits(q.Result):
 				a.regionRow(c, k)
 				searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "")

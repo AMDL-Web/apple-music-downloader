@@ -164,6 +164,9 @@ type ListQuery struct {
 	// NoRecord keeps the runs of no record (resource_kind=none): stations,
 	// a library playlist without a catalog id, the 1.x history.
 	NoRecord bool
+	// Resource keeps the runs of one record, as resource_kind and
+	// resource_id.
+	Resource domain.ResourceRef
 	Search   string
 	// Sort is created_at (the backend's default), updated_at or queue_order.
 	Sort string
@@ -191,6 +194,10 @@ func (q ListQuery) values() url.Values {
 	}
 	if q.NoRecord {
 		v.Set("resource_kind", "none")
+	}
+	if q.Resource.ID != "" {
+		v.Set("resource_kind", string(q.Resource.Kind))
+		v.Set("resource_id", q.Resource.ID)
 	}
 	if q.Search != "" {
 		v.Set("q", q.Search)

@@ -2,12 +2,14 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 
+	"amdl/apps/desktop/internal/region"
 	"amdl/apps/desktop/internal/store"
 	"amdl/apps/desktop/internal/widgets"
 	"amdl/internal/client"
@@ -15,9 +17,11 @@ import (
 	"amdl/internal/format"
 )
 
-// OpenAlbum shows an album or playlist hit's page, which reads its songs, with its
-// download while the feed holds one; Back returns to the screen it was
-// opened from.
+// OpenAlbum shows the page of the record an album or playlist hit stands
+// for, which reads its songs; Back returns to the screen it was opened from.
+// The page is its record's from wherever it opens: its state, track counts
+// and region come from the record, and a run of it only adds the figures
+// that are live while it works.
 func (a *App) OpenAlbum(h client.SearchHit) { a.openAlbumFrom(h, store.PageSource{}) }
 
 // openAlbumFrom is OpenAlbum reading the songs from from.
@@ -44,8 +48,9 @@ func (a *App) openAlbumFrom(h client.SearchHit, from store.PageSource) {
 	a.push(ScreenAlbum)
 }
 
-// OpenJob shows a download's page: an album's or a playlist's is its
-// album's or playlist's page, with its songs. Back returns to the screen it was opened from.
+// OpenJob shows the page of the record run id is a run of: an album's or a
+// playlist's with its songs, else the run's own page. Back returns to the
+// screen it was opened from.
 func (a *App) OpenJob(id string) {
 	s := a.Store
 	h, album := s.JobAlbum(s.Job(id))
@@ -69,8 +74,7 @@ func (a *App) openPage(album domain.ResourceRef, job string) {
 		// Setup leaves the window to the page at once.
 		f.under, f.instant = a.Screen, a.Screen == ScreenSetup
 		f.grow = growsFrom(f.from) && a.PageMotion && !f.still && !f.instant
-		f.growFrom, f.growRadius, f.growTo, f.growToRadius = ui.Rect{}, 0, ui.Rect{}, 0
-		f.growClipTop, f.growClipBottom = 0, 0
+		f.growFrom, f.growRadius = ui.Rect{}, 0
 	}
 	if key := album.ID + "\x00" + job; key != a.pageKey {
 		a.pageKey = key
@@ -170,11 +174,11 @@ func (a *App) pageMotion() (string, Palette) {
 	return al.motion, al.motionPal
 }
 
-// albumScreen is the one page of an album and of a download: an album with
-// its download while there is one, or a download that is not an album's.
-// The head is the cover and title over the palette, the download's figures
-// and bar while there is one, else the album's, and what can be done; the
-// lower panel lists the songs, with the download's activity beside them.
+// albumScreen is the one page of an album's or a playlist's record, or of a
+// run that belongs to no record. The head is the cover and title over the
+// palette, four figures and, while a run holds the page, its bar, and what
+// can be done; the lower panel lists the songs, with the run's activity
+// beside them.
 func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	s := a.Store
 	// Going out, the page shows what it showed.
@@ -183,6 +187,7 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 		a.followAlbumJob()
 	}
 	p, j := &s.Search.Album, s.Detail()
+	s.WatchRun(a.pageNeedsRun(p, j))
 	if p.ID == "" && j == nil {
 		if in {
 			a.Back()
@@ -190,7 +195,7 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 		return
 	}
 	s.WatchConfig()
-	l := pageHero(c, page)
+	l := pageHero(page, a.heroCompact(c))
 	master, _ := a.pageMotion()
 	video := a.motionPlayer(c, master)
 	pal := a.pagePalette(c)
@@ -228,16 +233,15 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	a.flightCopies(c, k)
 }
 
-// pageHead is the album screen's head: the album's names once read, else
-// what the download holds; the download's cover, which stays while the
-// album is read under another address of the same picture.
+// pageHead is the album screen's head: the record's names once read, else
+// what its run holds; the run's cover, which stays while the album is read
+// under another address of the same picture. Its kicker is the type alone;
+// the four figures are pageFigures.
 func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPage, j *store.Job, pal Palette, hc heroColors, video *ui.VideoPlayer) heroSpec {
-	s := a.Store
 	album := p.ID != ""
 	f := albumOf(p)
 	h := heroSpec{colors: hc}
 	var kind string
-	tracks := f.tracks
 	switch {
 	case album && p.Kind() == domain.ResourcePlaylist:
 		kind, h.title, h.artist = "Playlist", f.title, f.artist
@@ -246,12 +250,6 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 		h.artist = f.artist
 	default:
 		kind, h.title, h.artist = j.Kind(), j.Name(), j.By()
-	}
-	if j != nil && (!album || tracks == 0) {
-		tracks = j.TotalItems
-	}
-	if tracks > 0 {
-		kind += " · " + plural(tracks, "track")
 	}
 	h.kicker = kind
 	artwork := f.artwork
@@ -267,7 +265,7 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	// offers.
 	var it *domain.JobItem
 	if j != nil {
-		it = firstWithCodec(j)
+		it = firstWithSpec(j)
 	}
 	var hints []string
 	if it != nil {
@@ -275,16 +273,7 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	} else if hints = qualityHints(f.traits); len(hints) > 0 {
 		h.quality, h.hi, hints = hints[0], hints[0] == "Hi-Res Lossless", hints[1:]
 	}
-	// A download the feed no longer holds put it in the library.
-	inLibrary, share := false, ""
-	if album && j == nil {
-		mark, _ := s.HitMark(p.Hit)
-		inLibrary = mark == store.MarkDone
-		if r := s.HitRecord(p.Hit); mark == store.MarkPartial && r != nil {
-			share = fmt.Sprintf("%d of %d downloaded", r.TracksDone, store.MarkTotal(r, max(f.tracks, p.Hit.TrackCount)))
-		}
-	}
-	if len(hints) > 0 || f.explicit || inLibrary || share != "" {
+	if len(hints) > 0 || f.explicit {
 		h.tags = func() {
 			for _, q := range hints {
 				tag(c, k, q, q == "Hi-Res Lossless", hc.meta)
@@ -292,102 +281,178 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 			if f.explicit {
 				explicitBadge(c, k)
 			}
-			if inLibrary {
-				pill(c, k, pillOK, icCheck, "In your library")
-			}
-			if share != "" {
-				pill(c, k, pillWait, nil, share)
-			}
 		}
 	}
+	figs := a.pageFigures(c, l, p, j, f)
 	h.band = func() {
-		ui.Row(c).Gap(12).MaxWidth(heroBand).Children(func() {
-			if j != nil {
-				jobFigures(c, k, l, j, hc)
-			} else {
-				albumFigures(c, k, l, f, hc, p.Kind() == domain.ResourcePlaylist)
+		ui.Row(c).Gap(heroGap).MaxWidth(heroBand).Children(func() {
+			for _, x := range figs {
+				heroStat(c, k, hc, l, x.name, x.value, x.unit)
 			}
 		})
 		if j != nil {
-			ui.Column(c).FillWidth().MaxWidth(heroBand).Children(func() {
-				albumProgress(c, k, j, "album", 8, hc.title, hc.title.Alpha(0.16), hc.accent, hc.meta, 12)
+			bar := ui.Column(c.Key("bar")).FillWidth().MaxWidth(heroBand)
+			if a.PageMotion && !a.fly.moving {
+				bar.Transition(a.barMotion(bar))
+			}
+			bar.Children(func() {
+				albumProgress(c, k, j, "album", 8, hc.title, hc.title.Alpha(0.16), hc.accent, hc.meta, 12, true)
 			})
 		}
 	}
 	return h
 }
 
-// heroBand is the widest the head's figures and bar run, in a wide window.
-const heroBand = 900
+// heroBand is the widest the head's figures and bar run, in a wide window,
+// and heroGap the room between figures.
+const (
+	heroBand = 900
+	heroGap  = 12
+)
 
-// jobFigures are a download's figures under the title: what landed, which
-// counts the bytes still arriving while it runs, how fast it goes or, done,
-// how long it took, how long it has left or when it finished, and when it
-// started. How many tracks finished
-// is the bar's to say.
-func jobFigures(c *ui.Context, k *Tokens, l heroLayout, j *store.Job, hc heroColors) {
-	b := j.Bytes()
-	if !j.Status.IsTerminal() {
-		b = j.Transferred()
-	}
-	if b > 0 {
-		num, unit, _ := strings.Cut(format.Bytes(b), " ")
-		heroStat(c, k, hc, l, "Size", num, " "+unit)
-	} else {
-		heroStat(c, k, hc, l, "Size", "—", "")
-	}
-	switch sp := j.ShownSpeed(c.Now()); {
-	case j.Status.IsTerminal() && j.StartedAt != nil && j.FinishedAt != nil:
-		// Once it is done, how long it took says more than how fast.
-		heroStat(c, k, hc, l, "Total time", format.Duration(j.FinishedAt.Sub(*j.StartedAt)), "")
-	case sp > 0:
-		v, u := format.Scale(sp)
-		heroStat(c, k, hc, l, "Avg speed", format.Number(v, 1), " "+u+"/s")
-	default:
-		heroStat(c, k, hc, l, "Avg speed", "—", "")
-	}
-	switch r := format.Remaining(j.Remaining); {
-	case r != "":
-		heroStat(c, k, hc, l, "Left", r, "")
-	case j.FinishedAt != nil:
-		heroStat(c, k, hc, l, "Finished", format.Clock(*j.FinishedAt), "")
-	default:
-		heroStat(c, k, hc, l, "Left", "—", "")
-	}
-	if j.StartedAt != nil {
-		heroStat(c, k, hc, l, "Started", format.Clock(*j.StartedAt), "")
-	} else {
-		heroStat(c, k, hc, l, "Created", format.Clock(j.CreatedAt), "")
-	}
-}
+// figure is one figure of the head's band: its name, value and unit.
+type figure struct{ name, value, unit string }
 
-// albumFigures are what an album is under its title, until a download
-// holds it: when it came out, its genre and length; a playlist, which has
-// neither date nor genre, shows how many artists it gathers.
-func albumFigures(c *ui.Context, k *Tokens, l heroLayout, f albumFacts, hc heroColors, playlist bool) {
-	if playlist {
+// pageFigures are the four figures under the head's title, in four equal
+// columns whatever the state: the fourth is always the tracks. The record
+// decides the state: with no run live, an album or playlist shows what it
+// is (when it came out, its genre, its length) until its record is whole,
+// and then what it made (its size, how long it took, its region). A run
+// adds only what is live while it works: the bytes moved, its speed and
+// the time it has left.
+func (a *App) pageFigures(c *ui.Context, l heroLayout, p *store.AlbumPage, j *store.Job, f albumFacts) []figure {
+	s := a.Store
+	size := func(n int64) figure {
+		if n <= 0 {
+			return figure{"Size", "—", ""}
+		}
+		num, unit, _ := strings.Cut(format.Bytes(n), " ")
+		return figure{"Size", num, " " + unit}
+	}
+	took := func(d time.Duration) figure {
+		if d <= 0 {
+			return figure{"Total time", "—", ""}
+		}
+		return figure{"Total time", format.Duration(d), ""}
+	}
+	where := a.regionFigure(c, l, a.pageRegion(p, j))
+	count := func(done, total int) figure {
+		if total > 0 && done >= total {
+			return figure{"Tracks", strconv.Itoa(total), ""}
+		}
+		return figure{"Tracks", fmt.Sprintf("%d / %d", done, max(total, done)), ""}
+	}
+	switch {
+	case j != nil && !j.Status.IsTerminal():
+		b := j.Transferred()
+		out := []figure{size(b), {"Speed", "—", ""}, {"Left", "—", ""}}
+		if sp := j.ShownSpeed(c.Now()); sp > 0 {
+			v, u := format.Scale(sp)
+			out[1] = figure{"Speed", format.Number(v, 1), " " + u + "/s"}
+		}
+		if r := format.Remaining(j.Remaining); r != "" {
+			out[2] = figure{"Left", r, ""}
+		}
+		done, total := jobTracks(j)
+		return append(out, count(done, total))
+	case j != nil:
+		var d time.Duration
+		if j.StartedAt != nil && j.FinishedAt != nil {
+			d = j.FinishedAt.Sub(*j.StartedAt)
+		}
+		done, total := jobTracks(j)
+		return []figure{size(j.Bytes()), took(d), where, count(done, total)}
+	case p.ID == "":
+		return []figure{size(0), took(0), where, count(0, 0)}
+	}
+	mark, _ := s.HitMark(p.Hit)
+	total := max(f.tracks, p.Hit.TrackCount)
+	r := s.HitRecord(p.Hit)
+	if mark == store.MarkDone && r != nil {
+		return []figure{size(p.Run.Size), took(p.Run.Took), where, count(r.TracksDone, store.MarkTotal(r, total))}
+	}
+	n := figure{"Tracks", strconv.Itoa(total), ""}
+	if mark == store.MarkPartial && r != nil {
+		n = count(r.TracksDone, store.MarkTotal(r, total))
+	}
+	length := figure{"Length", "—", ""}
+	if m := int(f.length.Round(time.Minute) / time.Minute); m > 0 {
+		length = figure{"Length", strconv.Itoa(m), " min"}
+	}
+	if p.Kind() == domain.ResourcePlaylist {
 		artists := "—"
 		if f.artists > 0 {
-			artists = fmt.Sprint(f.artists)
+			artists = strconv.Itoa(f.artists)
 		}
-		heroStat(c, k, hc, l, "Artists", artists, "")
-	} else {
-		heroStat(c, k, hc, l, "Released", firstNonEmptyStr(f.year, "—"), "")
-		// A genre's name runs longer than a year or a length.
-		heroStat(c, k, hc, l, "Genre", firstNonEmptyStr(f.genre, "—"), "").Grow(2)
+		return []figure{{"Artists", artists, ""}, length, where, n}
 	}
-	if m := int(f.length.Round(time.Minute) / time.Minute); m > 0 {
-		heroStat(c, k, hc, l, "Length", fmt.Sprint(m), " min")
-	} else {
-		heroStat(c, k, hc, l, "Length", "—", "")
-	}
+	return []figure{{"Released", firstNonEmptyStr(f.year, "—"), ""}, {"Genre", firstNonEmptyStr(f.genre, "—"), ""}, length, n}
 }
 
-// pageActions are what the page's state lets be done, at the title bar's
-// end, as a toolbar's: a download of the album; or, once a download holds
-// it, its folder, cancel or retry, a download again once it is in the
-// library, and delete once it ended. They act only while live: the page
-// going out shows them as they were.
+// jobTracks is how many of a run's tracks are on disk and how many it
+// holds, from its album bar, or its counters before the tracks arrive.
+func jobTracks(j *store.Job) (done, total int) {
+	al := j.Album()
+	if al.Total == 0 {
+		return j.Done(), j.TotalItems
+	}
+	return al.OnDisk, al.Total
+}
+
+// pageNeedsRun reports a page whose record is whole while no run of it is
+// in the store, which has the record's size and time to read (WatchRun).
+func (a *App) pageNeedsRun(p *store.AlbumPage, j *store.Job) bool {
+	if j != nil || p.ID == "" || p.Status != store.SearchReady {
+		return false
+	}
+	mark, _ := a.Store.HitMark(p.Hit)
+	return mark == store.MarkDone
+}
+
+// pageRegion is the region the page's record was read in, by name: a run's
+// storefront, else the record's (read with its size), else the one the page
+// was read from, else
+// the default account's; "—" when none is known.
+func (a *App) pageRegion(p *store.AlbumPage, j *store.Job) string {
+	sf := ""
+	if j != nil {
+		sf = j.Storefront
+	}
+	if sf == "" {
+		sf = p.Run.Storefront
+	}
+	if sf == "" {
+		sf = p.Storefront
+	}
+	if rs := a.Store.SearchRegions(); sf == "" && len(rs) > 0 {
+		sf = rs[0]
+	}
+	return sf
+}
+
+// regionFigure is the Region figure for storefront sf: its name where the
+// name fits its column at the figure's size, else its code in capitals, and
+// "—" for none; never an ellipsis.
+func (a *App) regionFigure(c *ui.Context, l heroLayout, sf string) figure {
+	if sf == "" {
+		return figure{"Region", "—", ""}
+	}
+	size, band := float32(22), min(float32(heroBand), l.width)
+	if l.compact {
+		size = 18
+	}
+	name := region.Name(sf)
+	if w, _ := c.MeasureText(0, ui.Span{Text: name, Font: MonoFont, Size: size, Weight: 600}); w > (band-3*heroGap)/4 {
+		name = strings.ToUpper(sf)
+	}
+	return figure{"Region", name, ""}
+}
+
+// pageActions are what the record's state lets be done, at the title bar's
+// end, as a toolbar's: a download of it, or the rest of it, or a download
+// again once it is whole; and, while a run of it is in the store, that
+// run's folder, cancel or retry, and delete once it ended. They act only
+// while live: the page going out shows them as they were.
 func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store.Job, hc heroColors, live bool) {
 	s := a.Store
 	h := p.Hit
@@ -413,7 +478,7 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 				a.download(h)
 			}
 		case mark == store.MarkActive:
-			// A download the feed does not hold, past the newest it lists.
+			// The record names a run the store does not hold.
 			pill(c, k, pillRun, icDown, "In the queue")
 		case mark == store.MarkPaused:
 			if clicked(button(c, k, buttonOnArt, "Resume", nil).Label("Resume " + h.Name)) {

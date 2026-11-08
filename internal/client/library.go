@@ -223,3 +223,44 @@ func (c *Client) ResetLibrary(ctx context.Context, what string, states, flags []
 	err = c.do(ctx, http.MethodPost, "/api/v1/library/reset", nil, body, &out, http.StatusOK)
 	return out.Reset, out.SkippedActive, err
 }
+
+// RecordFiles is what GET /api/v1/library/{kind}s/{id} says of a record's
+// files: Size is its tracks' main slots' bytes added up, and Storefront the
+// one it is pinned to, else the one it was read in.
+type RecordFiles struct {
+	Size       int64
+	Storefront string
+}
+
+// RecordFiles reads the record's files.
+func (c *Client) RecordFiles(ctx context.Context, ref domain.ResourceRef) (RecordFiles, error) {
+	var d struct {
+		PinnedStorefront string `json:"pinned_storefront"`
+		StorefrontRead   string `json:"storefront_read"`
+		Tracks           []struct {
+			Files []struct {
+				Slot     string `json:"slot"`
+				FileSize int64  `json:"file_size"`
+			} `json:"files"`
+		} `json:"tracks"`
+	}
+	path := "/api/v1/library/albums/"
+	if ref.Kind == domain.ResourcePlaylist {
+		path = "/api/v1/library/playlists/"
+	}
+	if err := c.do(ctx, http.MethodGet, path+url.PathEscape(ref.ID), nil, nil, &d); err != nil {
+		return RecordFiles{}, err
+	}
+	out := RecordFiles{Storefront: d.PinnedStorefront}
+	if out.Storefront == "" {
+		out.Storefront = d.StorefrontRead
+	}
+	for _, t := range d.Tracks {
+		for _, f := range t.Files {
+			if f.Slot == "main" {
+				out.Size += f.FileSize
+			}
+		}
+	}
+	return out, nil
+}

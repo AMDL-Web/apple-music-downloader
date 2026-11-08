@@ -44,6 +44,9 @@ func (a *App) home(c *ui.Context, k *Tokens, page float32) {
 	// A download's sheet reads the server's codec priority (download).
 	s.WatchConfig()
 	docked := strings.TrimSpace(s.Omni.Text) != ""
+	if docked != a.docked {
+		a.docked, a.dockedAt = docked, c.Now()
+	}
 	_, h := c.Size()
 	padX := float32(32)
 	if a.compact {
@@ -82,6 +85,9 @@ func (a *App) home(c *ui.Context, k *Tokens, page float32) {
 					}
 				})
 			}).Grow(1).FillWidth()
+			if len(s.Omni.Links) == 0 && !long {
+				results.Transition(a.dockMotion(c))
+			}
 			// The album page's lower panel flies from the results' top and
 			// back, clear of the tiles.
 			a.flyEdge(results)
@@ -90,6 +96,20 @@ func (a *App) home(c *ui.Context, k *Tokens, page float32) {
 			a.dock(c, k, min(width, 600))
 		}
 	})
+}
+
+// dockFade is the glide that docks the field, as a fade.
+var dockFade = ui.Animation{Duration: heroGlide, Ease: ui.EaseOut}
+
+// dockMotion is the Transition of what the first search shows below the
+// field: it comes in as the field rises, on the same curve, so the two are
+// one motion.
+func (a *App) dockMotion(c *ui.Context) ui.ElementTransition {
+	if !a.PageMotion || c.Now().Sub(a.dockedAt) >= heroGlide {
+		return ui.ElementTransition{}
+	}
+	// Only its opacity: it moves with the field, at once.
+	return ui.ElementTransition{Animation: &dockFade, Colors: true, Enter: &fadeOut}
 }
 
 // homeField is the one field: paste links to download, or type words to

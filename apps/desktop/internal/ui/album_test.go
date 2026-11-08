@@ -83,17 +83,20 @@ func TestAlbumOpensFromSearchAndBackReturnsThere(t *testing.T) {
 		{ID: "t2", DiscNumber: 2, TrackNumber: 1, Name: "Second Song", ArtistName: "Yorushika & suis", DurationMS: 61_000, ContentRating: "explicit"},
 	}}
 	tt.Frame()
-	for _, want := range []string{"Album 0", "In your library", "Download again", "DISC 1", "DISC 2", "First Song", "Second Song", "Yorushika & suis", "3:20", "1:01", "ALBUM · 2 TRACKS"} {
+	for _, want := range []string{"Album 0", "Download again", "DISC 1", "DISC 2", "First Song", "Second Song", "Yorushika & suis", "3:20", "1:01", "ALBUM"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q on the album page: %q", want, tt.Texts())
 		}
 	}
-	// A download the feed does not hold has no figures to show: the
-	// album's stay.
-	for _, want := range []string{"RELEASED", "GENRE", "LENGTH"} {
+	// A whole record with no run in the store shows what it made, in the
+	// figures a finished run has, and no pill for being in the library.
+	for _, want := range []string{"SIZE", "TOTAL TIME", "REGION", "TRACKS"} {
 		if !tt.HasText(want) {
-			t.Errorf("no %q for an album whose download the feed does not hold", want)
+			t.Errorf("no %q for a whole record with no run in the store", want)
 		}
+	}
+	if tt.HasText("In your library") {
+		t.Errorf("a pill says the record is in the library: %q", tt.Texts())
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
@@ -286,8 +289,10 @@ func TestAPlaylistOpensItsPageWithItsSongs(t *testing.T) {
 	}
 	// The demo's playlist takes two songs from each of its eight albums,
 	// its cover's (Glass Weather) first.
-	if !tt.HasText("PLAYLIST · 16 TRACKS") || !tt.HasText("ARTISTS") {
-		t.Errorf("no playlist kicker or artists: %q", tt.Texts())
+	for _, want := range []string{"PLAYLIST", "ARTISTS", "LENGTH", "REGION", "TRACKS", "16"} {
+		if !tt.HasText(want) {
+			t.Errorf("no %q on the playlist's head: %q", want, tt.Texts())
+		}
 	}
 	for _, name := range []string{"Glass Weather", "Paper Satellites", "Tidal Rooms"} {
 		if !tt.HasText(name) {

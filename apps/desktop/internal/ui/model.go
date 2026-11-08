@@ -162,6 +162,10 @@ type App struct {
 	// fieldDrawn is the height the field was dragged to, in DIPs, which it
 	// keeps whatever its text until it empties; 0 while it fits its text.
 	fieldDrawn float32
+	// docked is whether home's field was at the top as home last built it,
+	// and dockedAt when it last went there.
+	docked   bool
+	dockedAt time.Time
 	// focusField asks home to put the keyboard in its field as it builds
 	// it, in the view that does: a render beside the window binds the
 	// field too, which an unaddressed Handle.Focus refuses.
@@ -224,6 +228,10 @@ type App struct {
 	// nowShown is the job the sidebar's now card shows, kept while the
 	// card closes after it.
 	nowShown *store.Job
+	// heroNamesW is how wide each queue hero's names were last laid out,
+	// the one downloading now's and the latest download's, which its
+	// title breaks at (titleBreak).
+	heroNamesW [2]float32
 	// panelH is the height the tray panel was last fitted to.
 	panelH float32
 }

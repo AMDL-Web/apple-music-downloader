@@ -8,7 +8,6 @@ import "github.com/egoist/mygo/ui"
 func (a *App) flyRise(el ui.Element) {
 	if a.fly.growing() {
 		el.Opacity(a.lateShown())
-		a.growEdges(el)
 		return
 	}
 	if a.fly.moving {
@@ -77,7 +76,6 @@ func (f *flight) groundShown() float32 { return unit(2 * f.cross()) }
 func (a *App) flyRows(el ui.Element) {
 	if f := &a.fly; f.growing() {
 		el.Opacity(a.lateShown())
-		a.growEdges(el)
 	} else if f.moving {
 		f.fade(el, unit(2*f.cross()-1))
 	}
@@ -110,7 +108,6 @@ func (a *App) flyBand(el ui.Element) {
 func (a *App) flyFade(el ui.Element) {
 	if f := &a.fly; f.growing() {
 		el.Opacity(a.lateShown())
-		a.growEdges(el)
 	} else if f.moving {
 		from := f.partsFrom()
 		f.fade(el, unit((f.q-from)/(1-from)))

@@ -82,6 +82,11 @@ func (a *App) flyText(c *ui.Context, el ui.Element, part flightPart, span ui.Spa
 	f.matched = true
 	f.paired[part] = morphs
 	f.texts[part] = flightText{box: dst, size: size, color: color}
+	if w, ok := wordMorph(c, src, span, dst); ok {
+		f.words[part] = w
+		el.Invisible()
+		return
+	}
 	t := f.travel()
 	in := a.Screen == ScreenAlbum
 	// The lines it left grow with it: past the page's room, it takes the

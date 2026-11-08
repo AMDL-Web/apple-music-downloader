@@ -27,6 +27,7 @@ func (b *Backend) libraryRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /api/v1/library/pending", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"items": []any{}})
 	})
+	m.HandleFunc("GET /api/v1/library/albums/{id}", b.recordDo(b.recordDetail))
 	m.HandleFunc("POST /api/v1/library/albums/{id}/download", b.recordDo(b.downloadRecord))
 	m.HandleFunc("POST /api/v1/library/albums/{id}/reset", b.recordDo(b.resetRecord))
 	m.HandleFunc("POST /api/v1/library/albums/{id}/pause", b.recordDo(b.pauseRecord(true)))
@@ -197,6 +198,43 @@ func (b *Backend) recordDo(fn func(http.ResponseWriter, *http.Request, *album, t
 		}
 		fn(w, r, a, b.now())
 	}
+}
+
+// recordDetail is a's record with its tracks and their main slots, as GET
+// /library/albums/{id} answers; a slot's size is the one its last run wrote.
+func (b *Backend) recordDetail(w http.ResponseWriter, r *http.Request, a *album, now time.Time) {
+	rec, _ := b.albumRecord(a)
+	type slot struct {
+		Slot       string            `json:"slot"`
+		AudioState domain.AudioState `json:"audio_state"`
+		FileSize   int64             `json:"file_size,omitempty"`
+		Failures   int               `json:"failures"`
+	}
+	type track struct {
+		SongID string `json:"song_id"`
+		Name   string `json:"name"`
+		Files  []slot `json:"files"`
+	}
+	var items []domain.JobItem
+	if j := b.lastRun(a); j != nil {
+		items = j.items
+	}
+	out := struct {
+		albumResource
+		Sources []string `json:"sources"`
+		Tracks  []track  `json:"tracks"`
+	}{albumResource: rec, Sources: []string{"manual"}, Tracks: []track{}}
+	for i, t := range a.tracks {
+		s := slot{Slot: "main", AudioState: domain.AudioPending}
+		if b.onDisk(songID(a, i)) {
+			s.AudioState = domain.AudioDone
+			if i < len(items) {
+				s.FileSize = items[i].FileSize
+			}
+		}
+		out.Tracks = append(out.Tracks, track{SongID: songID(a, i), Name: t, Files: []slot{s}})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // activeRun is a's queued or running job, nil for none.

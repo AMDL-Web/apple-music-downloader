@@ -200,6 +200,9 @@ type flight struct {
 	// copy in its match's.
 	texts [flightParts]flightText
 	own   [flightParts]bool
+	// words are the texts that morph word by word, as their match and the
+	// page break them into lines differently (wordMorph).
+	words [flightParts]*wordFlight
 	// tag is the page's quality tag, as this frame lays it out, when it
 	// morphs, and label its label, when it swaps.
 	tag   flightTag
@@ -222,11 +225,9 @@ type flight struct {
 	views, viewsPrev []ui.Rect
 	// grow is set while the page shown opened from a cover it grows out of
 	// (flight_grow.go); main is the main column's box in the window as the
-	// frame before laid it out; ride is where the growing page's origin is
-	// in this frame, from the main column's, ridePrev in the frame before;
-	// growFrom
-	// and growRadius the cover's box and corners it grows from, as last
-	// seen, growTo and growToRadius the page's, as last laid out.
+	// frame before laid it out; ride is how far the surface carries the page
+	// from its place in this frame, ridePrev in the frame before; growFrom
+	// and growRadius the cover's box and corners it grows from, as last seen.
 	grow bool
 	main ui.Rect
 	// wall are the queue's recent covers as this frame builds them under
@@ -236,18 +237,9 @@ type flight struct {
 	ride, ridePrev ui.Point
 	growFrom       ui.Rect
 	growRadius     float32
-	growTo         ui.Rect
-	growToRadius   float32
-	// growClipTop and growClipBottom are how much of the cover grown from
-	// its list's bars cut (flightClip).
-	growClipTop, growClipBottom float32
-	// page is the growing page's box in the window, at scale, which
-	// puts its cover where the flying cover is (growBox).
-	page  ui.Rect
-	scale float32
-	// surface is the growing page's surface in this frame, in the window
-	// (growSurface).
-	surface ui.Rect
+	// card is the whole card the page opened from grows out of, rather than
+	// its cover, as this frame builds it: the sidebar's (flySourceCard).
+	card flightSrc
 	// pick is the box of the cover clicked to open the page, for as long as
 	// the page is in, which of several elements of one name is the
 	// flight's source (sourceNearer).
@@ -263,7 +255,8 @@ type flightWall struct {
 
 // openingFrom names the element the next OpenAlbum or OpenJob opens from,
 // whose cover flies to the page's: "hero:" and the job's ID for the queue's
-// hero, "wall:", "row:", "hit:" and "song:" for the others.
+// hero, "wall:", "row:", "now:" (the sidebar's card), "hit:" and "song:"
+// for the others.
 func (a *App) openingFrom(from string) { a.fly.next = from }
 
 // flightQ moves q towards the page while the album screen is shown, else
@@ -286,8 +279,9 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	f.out = target == 0 && !f.still && a.PageMotion
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
 	f.srcWas = f.src
-	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
+	f.src, f.texts, f.words, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, [flightParts]*wordFlight{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	f.viewsPrev, f.views = f.views, f.viewsPrev[:0]
+	f.card = flightSrc{}
 	f.wall = f.wall[:0]
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.

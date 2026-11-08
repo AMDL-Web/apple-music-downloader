@@ -4,6 +4,9 @@
 package widgets
 
 import (
+	"math"
+	"time"
+
 	"github.com/egoist/mygo/ui"
 
 	"amdl/internal/progress"
@@ -68,6 +71,7 @@ type stageDraw struct {
 	fill    [progress.StageCount]float32
 	current progress.Stage
 	reduce  bool
+	phase   stripePhase
 	fn      func(*ui.Painter, ui.Rect)
 }
 
@@ -106,7 +110,10 @@ func (d *stageDraw) draw(p *ui.Painter, r ui.Rect) {
 		done := ui.Rect{X: seg.X, Y: seg.Y, W: max(seg.W*min(f, 1), min(seg.W, h)), H: h}
 		p.Fill(done, color, radius)
 		if b.Running && progress.Stage(i) == current && current < progress.StageCount {
-			stripes(p, done, radius, d.reduce)
+			stripes(p, done, radius, d.phase.shift(p.Now(), d.reduce))
+			if !d.reduce {
+				p.AnimationFrameRate(30)
+			}
 		}
 	}
 }
@@ -128,15 +135,26 @@ var stripeBands struct {
 	path  ui.Path
 }
 
-// stripes draws the moving diagonal stripes of a running segment.
-func stripes(p *ui.Painter, r ui.Rect, radius float32, still bool) {
-	s := &stripeBands
-	s.p, s.r, s.shift = p, r, 0
-	if !still {
-		ms := p.Now().UnixMilli() % 1000
-		s.shift = stripePeriod * float32(ms) / 1000
-		p.AnimationFrameRate(30)
+// stripePhase is how far a bar's stripes have moved: a period a second
+// while they move, held where they are while still, and on from there
+// after, so a flight or a scroll that stills them leaves no jump.
+type stripePhase struct {
+	at   float32
+	last time.Time
+}
+
+func (s *stripePhase) shift(now time.Time, still bool) float32 {
+	if !still && !s.last.IsZero() && now.After(s.last) {
+		s.at = float32(math.Mod(float64(s.at)+stripePeriod*now.Sub(s.last).Seconds(), stripePeriod))
 	}
+	s.last = now
+	return s.at
+}
+
+// stripes draws the diagonal stripes of a running segment, shift along.
+func stripes(p *ui.Painter, r ui.Rect, radius, shift float32) {
+	s := &stripeBands
+	s.p, s.r, s.shift = p, r, shift
 	p.Clip(r, radius, fillStripes)
 	s.p = nil
 }

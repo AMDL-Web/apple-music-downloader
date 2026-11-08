@@ -39,15 +39,9 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 	over := ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough()
 	o, t := over.LayoutBounds(), f.travel()
 	if f.growing() {
-		// Where the page is placed in this frame, not where it was in the
-		// frame before, and at the window's scale, not the page's.
+		// Where the surface carries the layer in this frame, not where it
+		// did in the frame before.
 		o.X, o.Y = o.X-f.ridePrev.X+f.ride.X, o.Y-f.ridePrev.Y+f.ride.Y
-		if k := f.scale; k > 0 && k != 1 {
-			// Drawn where the page's scale puts the layer, at 1/k of it.
-			over.TransformOrigin(0, 0).Scale(1/k, 1/k)
-			px, py := f.main.X+f.ride.X, f.main.Y+f.ride.Y
-			o.X, o.Y = px+k*(o.X-px), py+k*(o.Y-py)
-		}
 	}
 	over.Children(func() {
 		if f.paired[partTag] == morphs {
@@ -93,6 +87,10 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 			at(label(c, k, dst.text).TextColor(dst.color), dst.box.W).Opacity(unit((t - 0.4) / 0.4))
 		}
 		for part, src := range f.src {
+			if w := f.words[part]; w != nil {
+				drawWords(c, flightPart(part), w, src, f.texts[part], o, t)
+				continue
+			}
 			if f.paired[part] != morphs || f.own[part] || src.build == nil {
 				continue
 			}

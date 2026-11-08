@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -18,15 +19,21 @@ import (
 
 // albumProgress is a job's album bar with how many tracks finished under
 // its left end, the failed ones counted apart, and the overall percent
-// under its right, which a job that failed or was cancelled leaves out:
-// it no longer measures anything. ink is the text color the bar's live
-// fill is drawn from.
-func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32, ink, track, working, text ui.Color, size float32) {
+// under its right, which a job that failed or was cancelled leaves out
+// (the album page's, page, keeps it, as done over wanted). ink is the text
+// color the bar's live fill is drawn from.
+func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32, ink, track, working, text ui.Color, size float32, page bool) {
 	a := j.Album()
 	done, failed, total := a.OnDisk, a.Failed, a.Total
 	if total == 0 {
-		// Before the tracks arrive the list feed still has the counts.
+		// Before the tracks arrive the list feed still has the counts, and
+		// the bar is drawn from them.
 		done, failed, total = j.Done(), j.FailedItems, j.TotalItems
+		a = countsBar(done, failed, total, a)
+	}
+	if page && j.Status.IsTerminal() && total > 0 {
+		// A run that ended shares what its tracks figure counts.
+		a.Percent = int(math.Round(float64(done) * 100 / float64(total)))
 	}
 	short := j.Status == domain.JobFailed || j.Status == domain.JobCancelled
 	resolving := total == 0 && (j.Status == domain.JobQueued || j.Status == domain.JobRunning)
@@ -44,7 +51,7 @@ func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32
 				}
 				mono(c, count, size).TextColor(text)
 				ui.Spacer(c)
-				if !short {
+				if !short || page {
 					mono(c, fmt.Sprintf("%d%%", a.Percent), size).TextColor(text)
 				}
 			}
@@ -52,13 +59,44 @@ func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32
 	})
 }
 
-func firstWithCodec(j *store.Job) *domain.JobItem {
+// countsBar is the bar of a run whose tracks are not here yet, drawn from
+// its counters: done tracks, then failed ones, of total; empty (as al) while
+// there is no total.
+func countsBar(done, failed, total int, al progress.Album) progress.Album {
+	if total <= 0 {
+		return al
+	}
+	share := func(n int) float64 { return float64(n) / float64(total) }
+	out := progress.Album{Total: total, Lit: done + failed, OnDisk: done, Failed: failed,
+		Done: share(done + failed), Live: share(done + failed), Percent: int(math.Round(share(done) * 100))}
+	if done > 0 {
+		out.Runs = append(out.Runs, progress.Run{Status: domain.ItemCompleted, Share: share(done)})
+	}
+	if failed > 0 {
+		out.Runs = append(out.Runs, progress.Run{Status: domain.ItemFailed, Share: share(failed)})
+	}
+	if total > 1 && total <= progress.TickMax {
+		out.Ticks = total
+	}
+	return out
+}
+
+// firstWithSpec is the first of j's tracks whose stream is known
+// (specKnown), the one the head's quality tag tells.
+func firstWithSpec(j *store.Job) *domain.JobItem {
 	for i := range j.Items {
-		if j.Items[i].Codec != "" {
+		if specKnown(j.Items[i]) {
 			return &j.Items[i]
 		}
 	}
 	return nil
+}
+
+// specKnown reports whether a track's stream is known in full: its codec
+// and, for ALAC, its depth and rate, which a run learns after the codec.
+// Until then a quality tag keeps what it said, never a bare "ALAC".
+func specKnown(it domain.JobItem) bool {
+	return it.Codec != "" && (!strings.EqualFold(it.Codec, "alac") || it.BitDepth > 0 && it.SampleRate > 0)
 }
 
 // savedDir is the folder a job's tracks went to, from the first track's

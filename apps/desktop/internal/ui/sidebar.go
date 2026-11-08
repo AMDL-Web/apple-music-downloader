@@ -319,11 +319,14 @@ func (a *App) nowCard(c *ui.Context, k *Tokens, j *store.Job) {
 	accent := AccentFor(pal, k)
 	card := ui.ButtonBase(c.Key("now")).Height(nowHeight).Padding(8).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label("Downloading now")
 	card.Background(sideFill(card, k, k.Wash, k.Track))
+	a.flySourceCard(card, "now:"+j.ID, radiusControl)
 	if card.Clicked() {
+		a.openingFrom("now:" + j.ID)
 		a.OpenJob(j.ID)
 	}
 	card.Cursor(ui.CursorPointer).Children(func() {
-		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 80), Placeholder: pal.Bg, Size: 40, Radius: radiusInner, Color: 1}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 80), Placeholder: pal.Bg, Size: 40, Radius: radiusInner, Color: 1}.Show(c)
+		a.flySourceCoverShown(cover, "now:"+j.ID, radiusInner)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(12).FontWeight(600).Ellipsis("…").SingleLine()
 			line := fmt.Sprintf("%d of %d", j.Done(), j.TotalItems)

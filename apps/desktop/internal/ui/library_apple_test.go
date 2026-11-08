@@ -359,3 +359,50 @@ func TestTheLibraryAddsFromTheAppleLibrary(t *testing.T) {
 		t.Errorf("the added album still offers Add: %q", tt.Texts())
 	}
 }
+
+// An album opened from the Library has its catalog link, so its page offers
+// the download as a search result's does: Download while the record has
+// nothing, the rest while it holds part, Download again once it is whole.
+func TestAnAppleAlbumOpenedFromTheLibraryOffersItsDownload(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		done int
+		want string
+	}{
+		{"none", 0, "Download Salt & Static"},
+		{"partial", 1, "Download the rest of Salt & Static"},
+		{"done", 9, "Download Salt & Static again"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, run := demoApp(t)
+			s := a.Store
+			run(func() bool { return s.Loaded })
+			a.Go(ScreenLibrary)
+			tt := ui.NewTester(a.View, 1280, 800)
+			tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+			tt.Frame()
+			run(func() bool { return s.Library.AppleStatus == store.SearchReady })
+			it := appleItem(s, "Salt & Static")
+			if it.URL == "" || s.AlbumJob(domain.ResourceAlbum, it.CatalogID) != "" {
+				t.Fatalf("Salt & Static needs a catalog link and no job: %+v", it)
+			}
+			for i := range s.Library.Apple.Items {
+				if s.Library.Apple.Items[i].ID == it.ID {
+					s.Library.Apple.Items[i].TrackCount = 9
+				}
+			}
+			it = appleItem(s, "Salt & Static")
+			if c.done > 0 {
+				s.Library.Kept[it.CatalogID] = true
+				s.Library.Marks[domain.ResourceRef{Kind: domain.ResourceAlbum, ID: it.CatalogID}] = &domain.ResourceMark{Kind: domain.ResourceAlbum,
+					ID: it.CatalogID, State: domain.RecordComplete, TracksDone: c.done, TracksWanted: c.done}
+			}
+			a.openAppleAlbum(it)
+			tt.Advance(time.Second)
+			tt.Frame()
+			if _, ok := tt.Find(c.want); !ok {
+				t.Errorf("no %q on the page of an album opened from the Library: %q", c.want, tt.Texts())
+			}
+		})
+	}
+}
