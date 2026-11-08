@@ -44,6 +44,9 @@ func (a *App) setupLocal(c *ui.Context, k *Tokens) {
 				place = 1
 			}
 			segmented(c, k, "wrapper-place", &place, []string{"This computer", "Another machine"}, nil)
+			if place == 1 && !f.elsewhere {
+				f.wrapperAuto = true
+			}
 			f.elsewhere = place == 1
 		})
 		if f.elsewhere {
@@ -252,7 +255,9 @@ func (a *App) wrapperAddressRow(c *ui.Context, k *Tokens, applied bool) setup.St
 				f.wrapperChecks = nil
 			}
 			test := buttonOff(c, k, buttonPlain, "Test connection", nil, slow || f.wrapperAddr == "")
-			if (test.Clicked() || in.Submitted()) && !f.wrapperTesting && f.wrapperAddr != "" {
+			auto := f.wrapperAuto && f.wrapperTested != f.wrapperAddr
+			f.wrapperAuto = false
+			if (auto || test.Clicked() || in.Submitted()) && !f.wrapperTesting && f.wrapperAddr != "" {
 				addr := f.wrapperAddr
 				f.wrapperTesting, f.wrapperTested, f.wrapperFrom = true, addr, c.Now()
 				a.Act.TestWrapper(addr, func(checks []mode.Check) {

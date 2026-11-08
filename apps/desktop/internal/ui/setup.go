@@ -43,6 +43,9 @@ type setupForm struct {
 	wrapperTesting bool
 	wrapperTested  string
 	wrapperFrom    time.Time
+	// wrapperAuto asks the address row to test on its next frame, set when
+	// the wrapper is switched to another machine.
+	wrapperAuto bool
 	// serverFrom is when the test of serverAddr that is running began.
 	serverFrom time.Time
 	// consent names the tool whose install command shows with Run.
