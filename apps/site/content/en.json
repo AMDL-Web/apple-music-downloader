@@ -21,16 +21,18 @@
     "home": "AMDL home"
   },
   "nav": {
-    "product": "Product",
+    "desktop": "Desktop",
+    "console": "Console",
+    "terminal": "Terminal",
+    "agents": "Agents",
     "specs": "Specs",
-    "run": "Ways in",
     "install": "Install",
     "docs": "Docs"
   },
   "hero": {
     "eyebrow": "2.0 in development · Self-hosted · Open source",
     "title": "Apple Music,\non your own disk.",
-    "lead": "Paste a song, album, playlist, artist or station link, or search the catalog. AMDL downloads, decrypts, remuxes and tags every track into a finished `.m4a`, and keeps a record of what is on your disk.",
+    "lead": "Paste a song, album, playlist, artist or station link, or search the catalog. AMDL downloads, decrypts, remuxes and tags every track into a finished `.m4a`, and keeps a record of what is on your disk. Use it from a desktop app, a web console, a terminal, or an AI agent.",
     "install": "Install",
     "source": "Source on GitHub",
     "fine": "AGPL-3.0 · macOS, Windows, Linux and Docker",
@@ -56,159 +58,275 @@
     ],
     "strip": "One track's waveform in four parts, one for each stage, ending in a tagged .m4a file"
   },
-  "product": {
+  "shown": "Illustrations of the real screens, with made-up music. Like the apps themselves, they are in English.",
+  "desktop": {
     "index": "01",
-    "kicker": "Product",
-    "title": "Search it, queue it, keep it.",
-    "lead": "Three screens of the web console and the desktop app, drawn by hand with made-up music. Each one has a button that works.",
-    "tabs": {
-      "search": {
-        "label": "Search",
-        "text": "Songs, albums, artists and playlists from Apple's catalog, with the formats each one comes in."
-      },
-      "queue": {
-        "label": "Queue",
-        "text": "One row per album or playlist. The running one shows each track's stage; failed tracks retry on their own."
-      },
-      "library": {
-        "label": "Library",
-        "text": "The record of an album: every track, every quality, and where its file is."
-      }
-    },
-    "note": "Illustrations: the albums and artists are made up, and nothing is downloaded.",
-    "search": {
-      "page": "New download",
-      "query": "mira solenne",
-      "preset": "ALAC · up to 24-bit/192 kHz",
-      "tags": [
-        "Hi-Res Lossless",
-        "Lossless",
-        "Dolby Atmos"
+    "kicker": "Desktop app",
+    "title": "A native app, with a server or without one.",
+    "lead": "Built with MyGo for macOS, Windows and Linux. On its first launch it asks where downloads run: on a server on your network, or on this computer, where it runs the backend itself and sets up ffmpeg, QEMU and the wrapper for you.",
+    "facts": [
+      [
+        "Runs on",
+        "macOS (Apple silicon and Intel), Windows and Linux (amd64; Linux needs GTK 3)"
       ],
+      [
+        "Two modes",
+        "A client of your AMDL server, or standalone with the backend inside the app, sharing one history with `amdl` on the same machine"
+      ],
+      [
+        "Inside",
+        "Search, album pages, the queue, the library, your Apple Music library, accounts and hooks. Drop a link on the window to download it."
+      ],
+      [
+        "Status",
+        "Ships with 2.0. The packages are not signed yet, so macOS and Windows each block the first launch once."
+      ]
+    ],
+    "doc": "Installing the desktop app",
+    "views": {
+      "queue": "Queue",
+      "library": "Library",
+      "album": "Album"
+    },
+    "labels": {
+      "queue": "The desktop app's Queue: the running album at the top, then the queue with its filters",
+      "library": "The desktop app's Library: album records as a grid of covers, each marked downloaded or downloading",
+      "album": "The desktop app's album page: an album mid-download, track by track, with the folder it is saved to"
+    }
+  },
+  "console": {
+    "index": "02",
+    "kicker": "Web console",
+    "title": "The server's own page, in any browser.",
+    "lead": "`amdl serve` puts the console on the same port as the API. Run it on a NAS, a Docker host or the machine under your desk, and use it from any phone or laptop on the network, with nothing to install there.",
+    "facts": [
+      [
+        "Starts with",
+        "`amdl serve`, `amdl service install` or the Docker image; then open `http://<host>:18080/`"
+      ],
+      [
+        "Pages",
+        "New download, Overview, Activity (the queue, reordered by dragging), Settings and Logs, plus your Apple Music library once you switch it on"
+      ],
+      [
+        "Settings",
+        "Sign in to Apple Music with two-step verification, every config key with a save bar and restart, and the hooks editor"
+      ],
+      [
+        "Fits",
+        "Light and dark, a command palette and keyboard shortcuts; a sidebar, an icon rail or bottom tabs, down to a phone"
+      ]
+    ],
+    "doc": "The web console",
+    "views": {
+      "new": "New download",
+      "overview": "Overview",
+      "logs": "Logs"
+    },
+    "labels": {
+      "new": "The console's New download page: search results for a made-up artist, albums with their quality and songs with a download button",
+      "overview": "The console's Overview: a link that failed, under Needs attention, then the live queue as cards in each album's colors",
+      "logs": "The console's Logs page: the backend's log records with their level and component"
+    },
+    "queued": "In the queue now"
+  },
+  "terminal": {
+    "index": "03",
+    "kicker": "Terminal",
+    "title": "For people at a prompt, and for scripts.",
+    "lead": "The same `amdl` binary is the client for both, talking to your server, the one this machine runs, or a backend it starts itself with `--server embedded`.",
+    "tui": {
+      "title": "Terminal UI",
+      "text": "`amdl` with no arguments opens an interactive interface that prints into your scrollback. Paste a link, or type to search; up to three jobs follow as cards, with an album bar and each track's stage.",
+      "facts": [
+        [
+          "Starts with",
+          "`amdl`, or `amdl tui`"
+        ],
+        [
+          "Commands",
+          "`/quality` orders the codecs, `/queue` reorders the queue, and `/library`, `/jobs`, `/retry`, `/logs` and `/login` do what they say"
+        ],
+        [
+          "Keys",
+          "Enter downloads, Space selects, Tab filters, shift+↑↓ moves a job; `/help` lists them all"
+        ],
+        [
+          "Colors",
+          "Follows a light or dark terminal; with `NO_COLOR` the bars still read by their shapes"
+        ]
+      ],
+      "doc": "The terminal interface",
+      "label": "The terminal UI: the banner, a running album as a card with each track's stage, the prompt and search results for a made-up artist"
+    },
+    "cli": {
+      "title": "Command line",
+      "text": "Every command prints one JSON value on stdout, and an error as JSON on stderr with its own exit status, so it pipes into `jq` and scripts. Streams are NDJSON.",
+      "facts": [
+        [
+          "Commands",
+          "`search`, `download`, `jobs`, `library`, `apple-library`, `accounts`, `hooks`, `config`, `wrapper`, `logs`, `system`"
+        ],
+        [
+          "Safety",
+          "`--dry-run` on every change, a confirmation before anything destructive, and `--fields` to keep only what you need"
+        ],
+        [
+          "Finding one",
+          "`amdl cli search \"<what you want>\"` and `amdl schema <command>`"
+        ],
+        [
+          "Setup",
+          "`amdl doctor` checks the server, ffmpeg, the wrapper and the service, and prints the command that installs what is missing"
+        ]
+      ],
+      "doc": "The command line",
+      "label": "A terminal session: a catalog search piped into jq, a download streaming its tracks through download, decrypt, remux and tag, and a job list"
+    }
+  },
+  "agents": {
+    "index": "04",
+    "kicker": "Agents and automation",
+    "title": "Hand it to an agent, or wire it into your setup.",
+    "lead": "An MCP server for AI agents, an HTTP API for your own tools, and hooks that tell the rest of your setup when a download is done.",
+    "mcp": {
+      "title": "MCP server",
+      "text": "`amdl mcp` serves the command line's capabilities as 37 MCP tools over stdio. `amdl cli setup` prints the config for Claude Code, Codex or any `mcpServers` client, and an agent skill. No tool signs in, so an Apple ID password never passes through a model.",
+      "you": "You",
+      "agent": "Agent",
+      "ask": "Download the new Mira Solenne album in Dolby Atmos.",
+      "reply": "Done: Glass Weather (2025), all 12 tracks in Dolby Atmos, saved to `/volume1/music/library/Mira Solenne/Glass Weather/`.",
+      "label": "An agent conversation: the agent calls search_catalog, start_download and wait_for_job, then says where the album was saved",
+      "tools": "All 37 tools",
       "groups": {
-        "artists": "Artists",
-        "albums": "Albums",
-        "songs": "Songs",
-        "playlists": "Playlists"
+        "catalog": "Catalog",
+        "jobs": "Jobs",
+        "library": "Records",
+        "apple": "Apple Music library",
+        "system": "Server and accounts"
       },
-      "artistMeta": "Pop · 3 albums",
-      "albumMeta": [
-        "2025 · 12 songs",
-        "2022 · 9 songs"
-      ],
-      "playlist": "Mira Solenne Essentials",
-      "playlistMeta": "Apple Music · 25 songs",
-      "download": "Download",
-      "queued": "In the queue",
-      "label": "An illustration of the New download page: search results for a made-up artist"
+      "config": "The client config `amdl cli setup` prints",
+      "doc": "The MCP server"
     },
-    "queue": {
-      "page": "Queue",
-      "tabs": [
-        "All",
-        "Active",
-        "Done",
-        "Failed"
-      ],
-      "stages": {
-        "downloading": "Downloading",
-        "decrypting": "Decrypting",
-        "remuxing": "Remuxing",
-        "tagging": "Tagging"
-      },
-      "track": "Track {n} of {total}",
-      "queued": "Queued",
-      "done": "Done",
-      "failed": "Failed",
-      "retryIn": "2 tracks retry in 30 min",
-      "retry": "Retry",
-      "drag": "Drag to reorder",
-      "label": "An illustration of the Queue: one album running, two queued, one done and one failed"
+    "api": {
+      "title": "HTTP API",
+      "text": "REST and Server-Sent Events under `/api/v1`, on the console's port. The OpenAPI 3.1 spec is in the repository, every error has the same shape, and a stream picks up where it left off.",
+      "doc": "API reference"
     },
-    "library": {
-      "page": "Library",
-      "partial": "Partial · 4 of 5",
-      "complete": "Complete",
-      "meta": "Album · 2025 · 5 tracks · us",
-      "trackCol": "Track",
-      "qualities": [
-        "ALAC 24/96",
-        "Dolby Atmos"
-      ],
-      "states": {
-        "done": "Downloaded",
-        "missing": "Missing",
-        "waiting": "Waiting"
-      },
-      "actions": [
-        "Download missing",
-        "Download again",
-        "Add quality",
-        "Check files"
-      ],
-      "savedTo": "Saved to",
-      "label": "An illustration of an album's record: five tracks in two qualities, one file missing from disk"
+    "hooks": {
+      "title": "Hooks",
+      "text": "Call a webhook or run a command when a job is queued, finishes, fails or is cancelled. Presets fill in ntfy, Bark or Telegram notifications and Plex, Jellyfin or Emby library refreshes, and a notification waits until a failure will not be retried.",
+      "label": "The console's Settings › Hooks: the switch that runs hooks, and the presets to add one from",
+      "doc": "Automation"
     }
   },
   "specs": {
-    "index": "02",
+    "index": "05",
     "kicker": "Specs",
-    "title": "The parts you would otherwise script.",
-    "lead": "One server keeps the queue, the records of what you own and the folder they live in, and runs them for you.",
+    "title": "What happens behind every link.",
+    "lead": "One server keeps the queue, the records of what you own and the folder they live in.",
     "formats": {
       "term": "Formats",
-      "text": "List the codecs you want, in order. Each gets its own retries; when one runs out, the next takes over, with AAC-LC as the last resort."
+      "text": "List the codecs you want, in order: ALAC, Dolby Atmos, Dolby Digital and three kinds of AAC. Each gets its own retries; when one runs out, the next takes over, with AAC-LC as the last resort. ALAC goes up to 24-bit/192 kHz, or a ceiling you set."
     },
     "records": {
       "term": "Records",
-      "text": "Each album and playlist is kept per track and per quality. A failed track is retried by later runs on its own, and a disk check finds files that went missing.",
+      "text": "Each album and playlist is kept per track and per quality. A failed track is retried by later runs, after 30 minutes and then 2 hours, until it gives up. Pause, resume, download again, add a second quality as its own file, or check the disk for files that went missing.",
       "label": "Twelve tracks of a record: ten downloaded, one waiting to retry, one missing"
     },
     "library": {
       "term": "One library",
-      "text": "Songs, albums and artists share one folder tree, laid out by a template. A file already in place is adopted, not downloaded again."
+      "text": "Songs, albums and artists share one folder tree, laid out by a template; playlists and stations get folders of their own. A file already in place is adopted, not downloaded again."
     },
     "accounts": {
       "term": "Accounts",
-      "text": "A wrapper-manager holds up to ten Apple Music accounts. A link is read in its own region's catalog when one of them serves it."
+      "text": "A wrapper-manager holds up to ten Apple Music accounts. A link is read in its own region's catalog when one of them serves it, and an album missing from one region is tried in the others."
+    },
+    "wrapper": {
+      "term": "The wrapper",
+      "text": "Your Apple login stays in the wrapper, never in amdl. Use wrapper-manager v2 (up to ten accounts) or a single wrapper-lite, or let `amdl wrapper install` run one: natively on Linux x86_64, in a QEMU guest on macOS, Windows and arm64. A wrapper behind a gateway takes a `wrapper.token`, and there is a Cloudflare template for one."
     },
     "lyrics": {
       "term": "Lyrics and artwork",
-      "text": "Tags, cover art and lyrics go into the file: LRC timed by line or by word, with translation and romanization if you want them."
+      "text": "Tags, a cover up to 5000×5000 and lyrics go into the file: LRC timed by line or by word, with translation and romanization if you want them, and `.lrc` or `.ttml` files beside it. Album, artist and playlist covers are saved next to the music."
     },
-    "automation": {
-      "term": "Automation",
-      "text": "Call a webhook or run a command when a job is queued or ends, for example to refresh your media server. Library sync downloads the album behind each song you add in Apple Music."
-    },
-    "agents": {
-      "term": "Agents",
-      "text": "Every result is JSON on stdout and every error has its own exit status. `amdl mcp` serves the same commands as MCP tools, and none of them signs in, so a password never passes through a model."
+    "sync": {
+      "term": "Library sync",
+      "text": "Add a song to your Apple Music library on your phone, and its whole album downloads at home: amdl checks each account you switch on every 15 minutes. It browses a copy of your Apple Music library, too."
     }
   },
-  "run": {
-    "index": "03",
-    "kicker": "Ways in",
-    "title": "One core, four ways in.",
-    "lead": "Every product runs on the same Go core. Deploy the server once, then use whichever fits the moment.",
-    "server": {
-      "title": "Server and web console",
-      "text": "`amdl serve`: one Go process with SQLite, a REST and Server-Sent Events API under `/api/v1`, and the console on the same port. Jobs survive a restart; images for amd64 and arm64 are on GHCR."
-    },
-    "desktop": {
-      "title": "Desktop app",
-      "text": "A native app for macOS, Windows and Linux, drawn with MyGo: a client of your server, or a backend of its own. It ships with 2.0, and its packages are not signed yet: [installing it]({blob}/docs/install.md#the-desktop-app)."
-    },
-    "terminal": {
-      "title": "CLI and TUI",
-      "text": "`amdl` on its own opens an interactive interface: paste a link, or type to search. `amdl service install` runs the backend on this machine, starting at login."
-    },
-    "agents": {
-      "title": "AI agents",
-      "text": "`amdl cli setup` prints the MCP config a coding agent needs. From a search to a download takes two tools, `search_catalog` and `start_download`."
-    }
+  "more": {
+    "index": "06",
+    "kicker": "Everything else",
+    "title": "The rest of the list.",
+    "groups": [
+      {
+        "title": "Links",
+        "items": [
+          "Songs, albums, playlists (shared `pl.u-` ones too), artists and radio stations, from music.apple.com and classical.music.apple.com",
+          "Up to 100 links at once; `amdl download -` reads them from stdin",
+          "A preview and a quality check before anything downloads",
+          "Not supported: music videos, and live radio such as Apple Music 1"
+        ]
+      },
+      {
+        "title": "Queue",
+        "items": [
+          "Reorder by dragging, with shift+↑↓ in the TUI, or `amdl jobs move`; Download now jumps the line",
+          "Three jobs at a time and sixteen parallel transfers by default, both adjustable",
+          "Jobs survive a restart, and an interrupted transfer resumes"
+        ]
+      },
+      {
+        "title": "Your files",
+        "items": [
+          "No decrypted whole track is written to disk: the samples go straight into ffmpeg",
+          "An integrity check after each track",
+          "Downloading again replaces a file only once the new one is complete",
+          "Apple's rate limits are respected, with a cooldown when Apple asks for one"
+        ]
+      },
+      {
+        "title": "Running it",
+        "items": [
+          "`amdl service install` starts the backend at login: a LaunchAgent, a systemd user unit or a Task Scheduler task",
+          "Simulate mode runs the whole pipeline without a wrapper or ffmpeg, to try it out",
+          "Settings apply at once; the few that need a restart get it from the console",
+          "Recent logs, live in the console or `amdl logs tail`"
+        ]
+      },
+      {
+        "title": "Docker and NAS",
+        "items": [
+          "One image for linux/amd64 and linux/arm64, with ffmpeg inside, a health check and `PUID`/`PGID`",
+          "Notes for Synology shares, `/dev/kvm` and reverse proxies"
+        ]
+      },
+      {
+        "title": "Speed",
+        "items": [
+          "Decryption runs inside amdl: a 12-track ALAC album now takes about 39–41 s instead of 51–55 s",
+          "AMDL-Web's wrapper fork served 3,450 keys in a row without a failure, with the median key time down from about 1.17 s to 0.59 s"
+        ]
+      },
+      {
+        "title": "From 1.x",
+        "items": [
+          "The database migrates on the first start; back it up first, since 1.x cannot read it afterwards",
+          "The image, the wrapper and the path settings changed: [the upgrade guide]({blob}/docs/upgrading-to-2.0.md) has the checklist"
+        ]
+      },
+      {
+        "title": "Languages",
+        "items": [
+          "The apps are in English; names, genres and lyric translations follow `catalog.language`",
+          "This site and the README are in English and Simplified Chinese"
+        ]
+      }
+    ]
   },
   "install": {
-    "index": "04",
+    "index": "07",
     "kicker": "Install",
     "title": "Up and running in a few minutes.",
     "lead": "You need an Apple Music subscription and a wrapper: the service that holds your Apple Music login. Run the wrapper on a Linux box, or let amdl run it on your own machine: natively on Linux x86_64, in a QEMU guest elsewhere.",
@@ -261,7 +379,8 @@
       "text": "The wrapper needs user namespaces: `unshare -Ur true` must succeed. On a host without them, such as Synology DSM, use wrapper-manager v2's QEMU variant, which needs `/dev/kvm`.",
       "link": "Wrapper setup"
     },
-    "more": "Every option of both paths is in the [install guide]({blob}/docs/install.md) and the [deployment guide]({blob}/docs/deployment.md). Coming from 1.x? Read [upgrading to 2.0]({blob}/docs/upgrading-to-2.0.md) first."
+    "more": "Every option of both paths is in the [install guide]({blob}/docs/install.md) and the [deployment guide]({blob}/docs/deployment.md). Coming from 1.x? Read [upgrading to 2.0]({blob}/docs/upgrading-to-2.0.md) first.",
+    "prerelease": "Until 2.0.0 is released, the script and the `latest` image still mean an older release: pass a 2.0 release candidate's tag with `--version` (`-Version` on Windows), and use that tag in place of `latest` in the Compose file. Homebrew and Scoop arrive with 2.0.1."
   },
   "notice": "AMDL needs your own Apple Music subscription and is for personal use: each install serves one person. It relies on Apple's undocumented web-player API, which can change without notice.",
   "footer": {

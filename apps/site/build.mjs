@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { ICON, NOSCRIPT_TABS, codeBlock, codeLines, esc, tabs } from './blocks.mjs';
-import { heroStrip, productViews, specDemo } from './mocks.mjs';
+import { ICON, NOSCRIPT_TABS, codeBlock, esc, tabs } from './blocks.mjs';
+import { agentChat, cliSession, consoleViews, desktopViews, heroStrip, hooksPanel, MCP_TOOLS, mcpConfig, specDemo, tuiScreen } from './mocks.mjs';
 import { serve } from './serve.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -112,13 +112,24 @@ const CODE = {
   },
 };
 
-// A few lines of each way in, the same in every language.
-const SNIPPETS = {
-  server: ['$ docker compose up -d', '# the console: http://localhost:18080/'],
-  desktop: ['# macOS · Windows · Linux', '# client of a server, or standalone'],
-  terminal: ['$ amdl', '$ amdl download <link>'],
-  agents: ['$ amdl cli setup', '$ amdl mcp'],
+// Each product's guide in the repository.
+const DOCS = {
+  desktop: `${BLOB}/docs/install.md#the-desktop-app`,
+  console: `${REPO}#web-console`,
+  tui: `${BLOB}/docs/cli.md#terminal-interface`,
+  cli: `${BLOB}/docs/cli.md`,
+  mcp: `${BLOB}/docs/cli.md#mcp-server`,
+  api: `${BLOB}/docs/api.md`,
+  hooks: `${BLOB}/docs/automation.md#job-hooks`,
 };
+
+// The API in two calls: queue an album, then follow every job's milestones.
+const API_LINES = [
+  "$ curl -X POST http://nas.local:18080/api/v1/downloads \\",
+  "    -H 'Content-Type: application/json' \\",
+  `    -d '{"urls":["https://music.apple.com/us/album/glass-weather/920001"]}'`,
+  '$ curl -N http://nas.local:18080/api/v1/downloads/events',
+];
 
 // Loopback and LAN addresses: the pages must not show one.
 export const PRIVATE_ADDRESS = /\b(?:127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)\b/;
@@ -168,31 +179,60 @@ function hero(h, ui) {
 </section>`;
 }
 
-// The three product views behind a vertical tab list; site.js wires the tabs
-// as it does blocks.mjs#tabs, which draws the first one open.
-function product(p) {
-  const views = productViews(p);
-  const keys = ['search', 'queue', 'library'];
-  const tablist = `<div class="view-tabs" role="tablist" aria-label="${esc(p.kicker)}" aria-orientation="vertical">${keys
-    .map(
-      (k, i) =>
-        `<button type="button" role="tab" id="tab-${k}" aria-controls="panel-${k}" aria-selected="${i === 0}"${i ? ' tabindex="-1"' : ''}><span class="idx">${String(i + 1).padStart(2, '0')}</span><b>${esc(p.tabs[k].label)}</b><span class="vt-text">${esc(p.tabs[k].text)}</span></button>`,
-    )
-    .join('')}</div>`;
-  const panels = keys
-    .map((k, i) => `<div class="panel view" id="panel-${k}" role="tabpanel" aria-labelledby="tab-${k}"${i ? ' hidden' : ''}>${views[k]}</div>`)
-    .join('');
-  return `<section class="sec" id="product" aria-labelledby="product-title">
+// A product's facts: what it is in a few rows, and the guide that has the rest.
+const facts = (list, doc, href) =>
+  `<dl class="facts">${list.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${inline(d)}</dd></div>`).join('')}</dl><p class="doc-link"><a href="${href}">${esc(doc)}<span aria-hidden="true"> →</span></a></p>`;
+
+// A section that shows one app: its screens at full width, behind tabs when
+// it has several (blocks.mjs#tabs, wired by site.js), then its facts.
+function appSection(id, s, shown, screens, href) {
+  const keys = Object.keys(screens);
+  const stage =
+    keys.length > 1
+      ? tabs(s.kicker, keys.map((k) => ({ id: `${id}-${k}`, label: s.views[k], html: screens[k] })))
+      : screens[keys[0]];
+  return `<section class="sec" id="${id}" aria-labelledby="${id}-title">
 <div class="wrap">
-${secHead(p, 'product-title')}
-<div class="views">${tablist}<div class="view-stage">${panels}</div></div>
-<p class="note">${esc(p.note)}</p>
+${secHead(s, `${id}-title`)}
+<div class="prod-wide">${stage}<p class="note">${esc(shown)}</p>${facts(s.facts, s.doc, href)}</div>
+</div>
+</section>`;
+}
+
+// A product within a section: its name, a paragraph, its facts, its screen.
+const part = (p, screen, href, extra = '') =>
+  `<div class="prod prod-part"><div class="prod-info"><h3>${esc(p.title)}</h3><p class="prod-text">${inline(p.text)}</p>${p.facts ? facts(p.facts, p.doc, href) : `<p class="doc-link"><a href="${href}">${esc(p.doc)}<span aria-hidden="true"> →</span></a></p>`}${extra}</div><div class="prod-stage">${screen}</div></div>`;
+
+function terminal(t, shown) {
+  return `<section class="sec" id="terminal" aria-labelledby="terminal-title">
+<div class="wrap">
+${secHead(t, 'terminal-title')}
+${part(t.tui, tuiScreen(t.tui.label), DOCS.tui)}
+${part(t.cli, cliSession(t.cli.label), DOCS.cli)}
+<p class="note">${esc(shown)}</p>
+</div>
+</section>`;
+}
+
+function agents(a, ui) {
+  const m = a.mcp;
+  const tools = `<div class="tools-all"><p class="tools-head">${esc(m.tools)}</p>${Object.entries(MCP_TOOLS)
+    .map(([g, list]) => `<div class="tool-group"><p>${esc(m.groups[g])}</p><span>${list.map((t) => `<code>${t}</code>`).join('')}</span></div>`)
+    .join('')}<p class="tools-head">${inline(m.config)}</p><pre class="code-plain"><code>${esc(mcpConfig())}</code></pre></div>`;
+  return `<section class="sec" id="agents" aria-labelledby="agents-title">
+<div class="wrap">
+${secHead(a, 'agents-title')}
+${part(m, agentChat(m, inline), DOCS.mcp, tools)}
+<div class="pair">
+<div class="pair-api"><h3>${esc(a.api.title)}</h3><p class="prod-text">${inline(a.api.text)}</p>${codeBlock(ui, API_LINES, { label: 'HTTP' })}<p class="doc-link"><a href="${DOCS.api}">${esc(a.api.doc)}<span aria-hidden="true"> →</span></a></p></div>
+<div class="pair-hooks"><h3>${esc(a.hooks.title)}</h3><p class="prod-text">${inline(a.hooks.text)}</p>${hooksPanel(a.hooks.label)}<p class="doc-link"><a href="${DOCS.hooks}">${esc(a.hooks.doc)}<span aria-hidden="true"> →</span></a></p></div>
+</div>
 </div>
 </section>`;
 }
 
 function specs(s) {
-  const keys = ['formats', 'records', 'library', 'accounts', 'lyrics', 'automation', 'agents'];
+  const keys = ['formats', 'records', 'library', 'accounts', 'wrapper', 'lyrics', 'sync'];
   return `<section class="sec" id="specs" aria-labelledby="specs-title">
 <div class="wrap">
 ${secHead(s, 'specs-title')}
@@ -206,17 +246,11 @@ ${secHead(s, 'specs-title')}
 </section>`;
 }
 
-function waysIn(r) {
-  const keys = ['server', 'desktop', 'terminal', 'agents'];
-  return `<section class="sec" id="run" aria-labelledby="run-title">
+function more(m) {
+  return `<section class="sec sec-more" aria-labelledby="more-title">
 <div class="wrap">
-${secHead(r, 'run-title')}
-<div class="ways">${keys
-    .map(
-      (k, i) =>
-        `<article class="way" id="${k}"><p class="way-idx">${'ABCD'[i]}</p><h3>${esc(r[k].title)}</h3><p>${inline(r[k].text)}</p><pre class="way-code" aria-hidden="true"><code>${codeLines(SNIPPETS[k])}</code></pre></article>`,
-    )
-    .join('')}</div>
+${secHead(m, 'more-title')}
+<div class="more-grid">${m.groups.map((g) => `<div class="more-group"><h3>${esc(g.title)}</h3><ul>${g.items.map((i) => `<li>${inline(i)}</li>`).join('')}</ul></div>`).join('')}</div>
 </div>
 </section>`;
 }
@@ -236,6 +270,7 @@ ${tabs(q.kicker, [
   { id: 'binary', label: q.tabs.binary, html: steps(q.binary.steps, CODE.install.binary) },
   { id: 'docker', label: q.tabs.docker, html: steps(q.docker.steps, CODE.install.docker) },
 ])}
+<aside class="callout"><p class="callout-label">2.0</p><p>${inline(q.prerelease)}</p></aside>
 <aside class="callout"><p class="callout-label">${esc(q.nas.label)}</p><p>${inline(q.nas.text)} <a href="${BLOB}/docs/deployment.md#the-wrapper">${esc(q.nas.link)}</a></p></aside>
 <p class="more">${inline(q.more)}</p>
 </div>
@@ -282,7 +317,7 @@ export function renderPage(c, ctx) {
   const header = `<header class="top">
 <div class="wrap top-in">
 <a class="brand" href="./" aria-label="${esc(ui.home)}"><span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>AMDL</a>
-<nav class="top-nav" aria-label="${esc(ui.nav)}"><a href="#product">${esc(n.product)}</a><a href="#specs">${esc(n.specs)}</a><a href="#run">${esc(n.run)}</a><a href="#install">${esc(n.install)}</a><a href="${BLOB}/docs/README.md">${esc(n.docs)}</a></nav>
+<nav class="top-nav" aria-label="${esc(ui.nav)}"><a href="#desktop">${esc(n.desktop)}</a><a href="#console">${esc(n.console)}</a><a href="#terminal">${esc(n.terminal)}</a><a href="#agents">${esc(n.agents)}</a><a href="#specs">${esc(n.specs)}</a><a href="#install">${esc(n.install)}</a><a href="${BLOB}/docs/README.md">${esc(n.docs)}</a></nav>
 <div class="top-tools">
 <a class="lang" href="../${other.code}/" hreflang="${other.code}" lang="${other.code}" title="${esc(ui.otherLangLabel)}">${esc(ui.otherLang)}</a>
 ${themeSwitch(ui)}
@@ -309,9 +344,12 @@ ${head.join('\n')}
 ${header}
 <main id="main">
 ${hero(c.hero, ui)}
-${product(c.product)}
+${appSection('desktop', c.desktop, c.shown, desktopViews(c.desktop), DOCS.desktop)}
+${appSection('console', c.console, c.shown, consoleViews(c.console), DOCS.console)}
+${terminal(c.terminal, c.shown)}
+${agents(c.agents, ui)}
 ${specs(c.specs)}
-${waysIn(c.run)}
+${more(c.more)}
 ${install(c.install, ui)}
 </main>
 ${footer}
@@ -367,7 +405,7 @@ export function build({ out, base = '' }) {
   const staticDir = path.join(here, 'static');
   const read = (rel) => fs.readFileSync(path.join(staticDir, rel), 'utf8');
   const shared = {
-    css: squeeze(read('site.css')),
+    css: squeeze(`${read('site.css')}\n${read('mocks.css')}`),
     js: read('site.js').trim(),
     base,
   };

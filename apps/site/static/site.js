@@ -82,91 +82,42 @@
     });
   }
 
-  // The product views (mocks.mjs). Search: Download puts a result in the
-  // queue. Queue: the running album moves through the stages while its view
-  // is open, and Retry queues the failed one again. Library: Download missing
-  // fetches the missing file and the record becomes complete.
-  for (const button of document.querySelectorAll('[data-dl]')) {
-    const queued = button.closest('[data-queued]').dataset.queued;
+  // The products' screens (mocks.mjs), each with at most one control.
+  // Desktop queue: Pause stops the running album, and Resume starts it again.
+  for (const button of document.querySelectorAll('[data-pause]')) {
+    const frame = button.closest('.dk');
+    button.setAttribute('aria-pressed', 'false');
     button.addEventListener('click', () => {
-      if (button.classList.contains('is-queued')) return;
-      button.classList.add('is-queued');
-      button.querySelector('span').textContent = queued;
-      button.setAttribute('aria-label', queued);
+      const paused = frame.classList.toggle('dk-paused');
+      const label = button.textContent;
+      button.textContent = button.dataset.alt;
+      button.dataset.alt = label;
+      button.setAttribute('aria-pressed', String(paused));
+    });
+  }
+
+  // Console search: a song's download button puts it in the queue, and its
+  // row says so, as the real page does.
+  for (const button of document.querySelectorAll('[data-dl]')) {
+    button.addEventListener('click', () => {
+      if (button.classList.contains('is-done')) return;
+      button.classList.add('is-done');
+      button.closest('li').classList.add('is-q');
+      button.setAttribute('aria-label', button.dataset.done);
       button.setAttribute('aria-disabled', 'true');
     });
   }
 
-  const retry = document.querySelector('[data-retry]');
-  retry?.addEventListener('click', () => {
-    const row = retry.closest('.q-row');
-    const pill = row.querySelector('.pill');
-    pill.className = 'pill pill-wait';
-    pill.querySelector('span').textContent = retry.dataset.queued;
-    retry.remove();
-  });
-
-  const still = matchMedia('(prefers-reduced-motion: reduce)');
-  const run = document.querySelector('[data-run]');
-  if (run) {
-    const stages = JSON.parse(run.dataset.stages);
-    const order = Object.keys(stages);
-    const pill = run.querySelector('[data-stage]');
-    const pillText = run.querySelector('[data-stage-text]');
-    const trackText = run.querySelector('[data-track-text]');
-    const bar = run.querySelector('[data-bar]');
-    const TOTAL = 12;
-    let track = 8;
-    let stage = 1;
-    let timer = 0;
-    const draw = () => {
-      pill.dataset.stage = order[stage];
-      pillText.textContent = stages[order[stage]];
-      trackText.textContent = run.dataset.track.replace('{n}', track).replace('{total}', TOTAL);
-      bar.style.setProperty('--p', `${Math.round(((track - 1 + stage / order.length) / TOTAL) * 100)}%`);
-    };
-    const step = () => {
-      stage++;
-      if (stage === order.length) {
-        stage = 0;
-        track = track === TOTAL ? 7 : track + 1;
-      }
-      draw();
-    };
-    const panel = run.closest('[role="tabpanel"]');
-    const sync = (visible) => {
-      clearInterval(timer);
-      if (visible && !panel.hidden && !still.matches) timer = setInterval(step, 1100);
-    };
-    let onScreen = false;
-    new IntersectionObserver((entries) => {
-      onScreen = entries.some((e) => e.isIntersecting);
-      sync(onScreen);
-    }).observe(panel.parentElement);
-    new MutationObserver(() => sync(onScreen)).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
+  // Console hooks: Run hooks switches them on and off, and the head says so.
+  for (const sw of document.querySelectorAll('[data-switch]')) {
+    const pill = sw.closest('.cn-hooks').querySelector('[data-pill]');
+    const word = pill.querySelector('span');
+    const off = word.textContent;
+    sw.addEventListener('click', () => {
+      const on = sw.getAttribute('aria-checked') !== 'true';
+      sw.setAttribute('aria-checked', String(on));
+      pill.classList.toggle('is-on', on);
+      word.textContent = on ? pill.dataset.on : off;
+    });
   }
-
-  const fix = document.querySelector('[data-fix]');
-  fix?.addEventListener('click', () => {
-    const rec = fix.closest('[data-record]');
-    const cell = rec.querySelector('[data-missing]');
-    const path = rec.querySelector('[data-path]');
-    const badges = rec.closest('.lib').querySelectorAll('[data-badge]');
-    fix.disabled = true;
-    const done = () => {
-      cell.className = 'slot is-done';
-      cell.querySelector('svg').outerHTML = rec.querySelector('.slot.is-done svg').outerHTML;
-      cell.querySelector('.slot-word').textContent = rec.dataset.done;
-      for (const badge of badges) {
-        badge.className = 'badge badge-ok';
-        badge.textContent = rec.dataset.complete;
-      }
-      path.textContent = path.dataset.fixed;
-    };
-    if (still.matches) done();
-    else {
-      cell.className = 'slot is-busy';
-      setTimeout(done, 900);
-    }
-  });
 })();

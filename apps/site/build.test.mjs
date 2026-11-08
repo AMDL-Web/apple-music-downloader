@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { commands } from './blocks.mjs';
 import { LANGS, PRIVATE_ADDRESS, REF, REPO, UsageError, build, inline, loadContent, parseArgs } from './build.mjs';
-import { glassPath } from './mocks.mjs';
+import { glassPath, MCP_TOOLS } from './mocks.mjs';
 import { OG_SIZE, findChrome, ogHtml, pngSize, renderOg } from './og.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -65,13 +65,6 @@ describe('content', () => {
     for (const other of rest) assert.deepEqual(other, first);
   });
 
-  test('a template placeholder survives translation', () => {
-    for (const lang of LANGS) {
-      const c = loadContent(lang.code);
-      assert.match(c.product.queue.track, /\{n\}.*\{total\}/, lang.code);
-    }
-  });
-
   test('a copy button takes whole commands, continuation lines included', () => {
     const block = ["$ curl -X POST http://x/downloads \\", "    -d '{}'", '{"accepted":1}', '', '$ curl -N http://x/events', 'PS> irm http://x | iex'];
     assert.equal(commands(block), "curl -X POST http://x/downloads \\\n    -d '{}'\ncurl -N http://x/events\nirm http://x | iex");
@@ -89,6 +82,14 @@ describe('content', () => {
 
   // The Library view and the specs show where a track lands; that is the
   // default library_path_format, so the page cannot drift from the config.
+  // The page lists the MCP server's tools; capability.go is where they are
+  // declared, so a tool added or renamed there shows up here.
+  test('the page lists exactly the MCP tools capability.go declares', () => {
+    const src = fs.readFileSync(path.join(here, '..', '..', 'internal', 'capability', 'capability.go'), 'utf8');
+    const declared = [...new Set([...src.matchAll(/Tool: "([a-z_]+)"/g)].map((m) => m[1]))].sort();
+    assert.deepEqual(Object.values(MCP_TOOLS).flat().sort(), declared);
+  });
+
   test('the path the page shows follows the default library template', () => {
     const config = fs.readFileSync(path.join(here, '..', '..', 'configs', 'config.example.yaml'), 'utf8');
     const template = /^\s*library_path_format:\s*"([^"]+)"/m.exec(config)[1];
@@ -153,23 +154,78 @@ describe('built site', () => {
     }
   });
 
-  test('each page shows the three product views, each with its one button', () => {
+  const attr = (text) => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const section = (html, id) => {
+    const start = html.search(new RegExp(`<section [^>]*id="${id}"`));
+    assert.ok(start > 0, `no #${id} section`);
+    return html.slice(start, html.indexOf('</section>', start));
+  };
+
+  test('every nav link leads to a section', () => {
+    for (const lang of LANGS) {
+      const html = pages[`${lang.code}/index.html`];
+      const nav = /<nav[\s\S]*?<\/nav>/.exec(html)[0];
+      const anchors = [...nav.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
+      assert.deepEqual(anchors, ['desktop', 'console', 'terminal', 'agents', 'specs', 'install'], lang.code);
+      for (const id of anchors) section(html, id);
+    }
+  });
+
+  test('the desktop app and the console each show three screens as tabs', () => {
     for (const lang of LANGS) {
       const html = pages[`${lang.code}/index.html`];
       const c = loadContent(lang.code);
-      for (const [view, button] of [
-        ['search', 'data-dl'],
-        ['queue', 'data-retry'],
-        ['library', 'data-fix'],
+      for (const [product, views] of [
+        ['desktop', ['queue', 'library', 'album']],
+        ['console', ['new', 'overview', 'logs']],
       ]) {
-        const start = html.indexOf(`id="panel-${view}"`);
-        assert.ok(start > 0, `${lang.code}: no ${view} panel`);
-        const panel = html.slice(start, html.indexOf('</div></div></div>', start));
-        assert.match(panel, new RegExp(`role="group" aria-label="${c.product[view].label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`), `${lang.code} ${view}`);
-        assert.ok(html.includes(`<p class="app-title">${c.product[view].page}</p>`), `${lang.code}: ${view} title`);
-        assert.ok(html.slice(start).includes(button), `${lang.code}: ${view} has no ${button}`);
-        assert.match(html, new RegExp(`role="tab" id="tab-${view}" aria-controls="panel-${view}"`));
+        const sec = section(html, product);
+        for (const view of views) {
+          const id = `${product}-${view}`;
+          assert.match(sec, new RegExp(`role="tab" id="tab-${id}" aria-controls="panel-${id}"`), `${lang.code} ${id} tab`);
+          const start = sec.indexOf(`id="panel-${id}"`);
+          assert.ok(start > 0, `${lang.code}: no ${id} panel`);
+          assert.ok(sec.slice(start).includes(`aria-label="${attr(c[product].labels[view])}"`), `${lang.code} ${id} label`);
+        }
       }
+      // The desktop frames use the app's monospaced face; the console's, its system one.
+      assert.match(html, /\.dk\{[^}]*font:[^;}]*"JetBrains Mono"/);
+    }
+  });
+
+  test('each mock has its one interaction, and the others are pictures', () => {
+    for (const lang of LANGS) {
+      const html = pages[`${lang.code}/index.html`];
+      const c = loadContent(lang.code);
+      const panel = (id) => {
+        const start = html.indexOf(`id="panel-${id}"`);
+        const ends = [html.indexOf('id="panel-', start + 1), html.indexOf('</section>', start)].filter((i) => i > 0);
+        return html.slice(start, Math.min(...ends));
+      };
+      assert.match(panel('desktop-queue'), /<button[^>]+data-pause data-alt="Resume"/, `${lang.code}: Pause`);
+      assert.match(panel('console-new'), new RegExp(`<button type="button" class="cn-dl" data-dl data-done="${attr(c.console.queued)}"`), `${lang.code}: Download`);
+      assert.match(section(html, 'agents'), /<button type="button" class="cn-switch" role="switch" aria-checked="false"[^>]*data-switch>/, `${lang.code}: Run hooks`);
+      for (const view of ['desktop-library', 'desktop-album', 'console-overview', 'console-logs']) {
+        assert.doesNotMatch(panel(view), /<button/, `${lang.code}: ${view} has a button`);
+      }
+    }
+  });
+
+  test('the terminal, the agents and the hero show their pictures', () => {
+    for (const lang of LANGS) {
+      const html = pages[`${lang.code}/index.html`];
+      const c = loadContent(lang.code);
+      const term = section(html, 'terminal');
+      assert.ok(term.includes(`class="term term-tui" role="img" aria-label="${attr(c.terminal.tui.label)}"`), `${lang.code}: TUI`);
+      assert.ok(term.includes(`class="term term-cli" role="img" aria-label="${attr(c.terminal.cli.label)}"`), `${lang.code}: CLI`);
+      // The TUI at 100 columns, and its own 46-column layout for a phone.
+      assert.match(term, /<pre class="tui tui-wide">/);
+      assert.match(term, /<pre class="tui tui-narrow">/);
+      for (const phase of ['downloading', 'decrypting', 'remuxing', 'tagging']) assert.ok(term.includes(`"${phase}"`), `${lang.code}: ${phase}`);
+      const agents = section(html, 'agents');
+      assert.ok(agents.includes(`class="chat" role="img" aria-label="${attr(c.agents.mcp.label)}"`), `${lang.code}: chat`);
+      for (const tool of Object.values(MCP_TOOLS).flat()) assert.ok(agents.includes(`<code>${tool}</code>`), `${lang.code}: ${tool}`);
+      assert.ok(agents.includes('&quot;mcpServers&quot;') || agents.includes('"mcpServers"'), `${lang.code}: mcpServers`);
       // The hero's waveform: four stages, one group each.
       assert.equal([...html.matchAll(/<g class="st-\d">/g)].length, 4);
     }

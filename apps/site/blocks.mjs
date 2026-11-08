@@ -101,7 +101,8 @@ export const codeBlock = (ui, lines, { label = '', copy = true, wrap = false } =
 
 // A tab list over panels, drawn with the first one open so the page does not
 // move when site.js wires it up. Without scripts, NOSCRIPT_TABS shows every
-// panel, one after another, and no tab list; the product views' too.
+// panel, one after another, and no tab list, and hides the controls that need
+// a script: the copy buttons and the theme switch.
 export const tabs = (label, items) =>
   `<div class="tabs"><div class="tablist" role="tablist" aria-label="${esc(label)}">${items
     .map((t, i) => `<button type="button" role="tab" id="tab-${t.id}" aria-controls="panel-${t.id}" aria-selected="${i === 0}"${i ? ' tabindex="-1"' : ''}>${esc(t.label)}</button>`)
@@ -109,5 +110,5 @@ export const tabs = (label, items) =>
 
 // Its style is listed in the page's Content-Security-Policy, so the page
 // keeps it apart as well.
-const NOSCRIPT_STYLE = '.tablist,.view-tabs{display:none}.views{display:block}.panel[hidden]{display:block!important}.panel+.panel{margin-top:24px}';
+const NOSCRIPT_STYLE = '.tablist,.copy,.theme{display:none}.panel[hidden]{display:block!important}.panel+.panel{margin-top:24px}';
 export const NOSCRIPT_TABS = { style: NOSCRIPT_STYLE, html: `<noscript><style>${NOSCRIPT_STYLE}</style></noscript>` };
