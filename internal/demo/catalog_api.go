@@ -66,8 +66,7 @@ func (b *Backend) search(w http.ResponseWriter, r *http.Request) {
 	g := b.hits(match)
 	if len(g.artists)+len(g.albums)+len(g.playlists)+len(g.songs) == 0 {
 		// Visitors search for real artists, which the made-up catalog lacks:
-		// a term that matches nothing answers with the whole catalog, as the
-		// website's console demo does (apps/site/demo/fake-api.js).
+		// a term that matches nothing answers with the whole catalog.
 		g = b.hits(func(...string) bool { return true })
 	}
 	res := client.SearchResult{Term: q.Get("term"), Storefront: "us"}

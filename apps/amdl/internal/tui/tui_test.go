@@ -102,8 +102,7 @@ func TestEveryLineFitsTheTerminal(t *testing.T) {
 	}
 }
 
-// The sample's frames, colours included, are testdata/frame-<width>.ansi
-// (the website shows frame-100.ansi; Makefile site);
+// The sample's frames, colours included, are testdata/frame-<width>.ansi;
 // go test ./apps/amdl/internal/tui -run TestFrames -update rewrites them
 // after a deliberate change to the look (review the diff with cat -v, or in
 // a terminal with cat).
