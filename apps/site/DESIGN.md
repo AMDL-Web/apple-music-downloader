@@ -150,14 +150,9 @@ width, as in the reference.
 Padding: 96px top (64px phone), 80px bottom. All centered.
 
 1. **Eyebrow**: a pill: `--surface` background, `--surface-ink` text, 13px, weight 500,
-   6px 12px padding, radius 999px. Margin below 24px. It holds two parts:
-   - `<span class="prerelease">`: a 6px dot in `--accent`, 6px gap, `hero.prereleaseBadge`
-     (the 2.0 status), then a 1px × 12px `--line-strong` divider with 10px on each side.
-     This whole span is temporary: on release day it is deleted with its key (section 9).
-   - `hero.eyebrow`: the permanent part (plain facts that stay true after release).
-
-   On phones (≤700px) the two parts stack instead of wrapping around the divider: the pill
-   becomes a column (2px row gap, padding 6px 14px, radius 14px) and the divider is hidden.
+   6px 12px padding, radius 999px. Margin below 24px. It holds `hero.eyebrow` (plain facts
+   that stay true across releases). Until the 2.0.0 release it also led with a temporary
+   2.0 status badge, deleted on release day (section 9).
 2. **Headline** `<h1 id="hero-title">`: `hero.title` holds two lines separated by `\n`.
    Line one in `--ink`, line two in `--accent`; each line is a block `<span>`. Size
    `--title-hero`, see 4.2. Max width 900px.
@@ -487,12 +482,10 @@ Below 1024px the card is one column: the cover 240×240 centered above the file 
    | 4 | `http://wrapper-manager:8080` (an output line, no prompt; the value to paste), then the paragraph `install.docker.steps.3.after` |
 
    (These are `CODE.install` in today's `build.mjs`; keep that structure.)
-4. Two callouts under the tabs, max 760px, 16px apart:
-   - **2.0 note** (shown until release, see section 9): `--citrus` background, `--ink`
-     text, radius 12px, padding 16px 20px, a label
-     pill `install.prereleaseLabel` (11px uppercase weight 700, `--ink` on `#fff` at 60%),
-     then `install.prerelease` (15px).
-   - **NAS**: `--surface` background, `--surface-ink` text, same shape, label
+4. A callout under the tabs, max 760px (until the 2.0.0 release a 2.0 note in `--citrus`
+   sat above it; it was removed on release day, section 9):
+   - **NAS**: `--surface` background, `--surface-ink` text, radius 12px, padding 16px
+     20px, a label pill (11px uppercase weight 700), label
      `install.nas.label`, text `install.nas.text`, then the link `install.nas.link` →
      `{blob}/docs/deployment.md#the-wrapper`.
 5. `install.more` (15px, `--muted`, centered, max 640px): links to the install guide,
@@ -567,7 +560,7 @@ under `:root[data-theme="dark"] { … }` (the theme switch sets `data-theme`). `
 | `--surface` | `#e8effb` | `#18222e` | eyebrow pill, format card, NAS callout, segmented track |
 | `--surface-ink` | `#233f60` | `#c4d8ff` | text on `--surface` |
 | `--stage` | `#eef2f8` | `#141c26` | the apps stage |
-| `--citrus` | `#edf4bd` | `#2e3318` | hero highlight, 2.0 callout |
+| `--citrus` | `#edf4bd` | `#2e3318` | hero highlight |
 | `--tint-peach` | `#ffe1cc` | `#352720` | card A |
 | `--tint-blue` | `#dceaff` | `#1c2a3d` | card B, file chip icon tile, ladder value tags |
 | `--tint-green` | `#d4efd5` | `#1b3024` | card C |
@@ -1730,11 +1723,10 @@ half sun on the horizon right of center, a dark cable line.
 Every claim the page may make. The copy brief (section 8) refers to these ids. A claim not
 in this table does not go on the page.
 
-**Status first.** AMDL 2.0 is not released yet: `v2.0.0-rc.13` is its last release
-candidate (`.github/release-notes/v2.0.0-rc.13.md`) and the site's repository links follow
-`dev` (`apps/site/build.mjs#REF`). Every claim below describes 2.0; the page says 2.0 is in
-development until release day (section 9). Facts marked **[unreleased]** are announced
-for a later version and must be phrased as such.
+**Status first.** AMDL 2.0.0 is released (`.github/release-notes/v2.0.0.md`) and the
+site's repository links follow `main` (`apps/site/build.mjs#REF`). Every claim below
+describes 2.0. Facts marked **[unreleased]** are announced for a later version and must be
+phrased as such.
 
 | Id | Fact | Source |
 | --- | --- | --- |
@@ -1749,7 +1741,7 @@ for a later version and must be phrased as such.
 | F09 | Audio only: music videos are not supported; live radio such as Apple Music 1 is not supported; a station is a rolling list of what Apple offers now | `README.md#limits` |
 | F10 | License: AGPL-3.0 | `LICENSE`, `README.md#license` |
 | F11 | Repository: `https://github.com/AMDL-Web/apple-music-downloader` | `apps/site/build.mjs#REPO` |
-| F12 | 2.0 is in development (release candidates; rc.13 is the last) **[unreleased]** | `.github/release-notes/v2.0.0-rc.13.md`, `apps/site/build.mjs#REF` |
+| F12 | 2.0.0 is released; release candidates rc.1 to rc.13 came before it | `.github/release-notes/v2.0.0.md`, `apps/site/build.mjs#REF` |
 | F13 | Codecs, in a priority list you order: `alac` (Apple Lossless), `ec3` (Dolby Digital Plus / Dolby Atmos), `ac3` (Dolby Digital), `aac`, `aac-binaural`, `aac-downmix`. AAC-LC is always appended as the last fallback and is not listed | `configs/config.example.yaml#download.quality_priority` |
 | F14 | Default priority `["alac"]`. With `codec_alternative` on (default), a codec that runs out of attempts hands over to the next; each codec has its own attempts | `configs/config.example.yaml#download.quality_priority`, `configs/config.example.yaml#download.codec_alternative`, `README.md#how-it-works` |
 | F15 | ALAC up to 24-bit / 192 kHz by default; a lower ceiling can be set. Apple serves ALAC at 44.1 kHz and above, 16- and 24-bit | `configs/config.example.yaml#download.alac_max_sample_rate`, `configs/config.example.yaml#download.alac_max_bit_depth` |
@@ -1780,7 +1772,6 @@ for a later version and must be phrased as such.
 | F40 | wrapper-manager v2 holds up to 10 Apple Music accounts and has the login the console's Account page uses (two-step codes are asked for there) | `docs/deployment.md#the-wrapper`, `GLOSSARY.md` (wrapper-manager) |
 | F41 | Docker sign-in: open `http://localhost:18080/`, Settings › Account, set Session service to `http://wrapper-manager:8080`, save and restart from the notice, sign in with the Apple ID, paste a link into New download; files land in `./data/downloads` | `README.md#quick-start` |
 | F42 | Binary installs save music to `~/Music/AMDL` (`%UserProfile%\Music\AMDL` on Windows) | `docs/install.md#where-files-go` |
-| F43 | Until 2.0.0 is released, the install script and the `latest` image mean an older release: pass a 2.0 release candidate's tag with `--version` (`-Version` on Windows), for example `v2.0.0-rc.13`, and in the Compose file replace `latest` with the same version without the `v` (`2.0.0-rc.13`; images are tagged without it). A database written by rc.1 to rc.7 cannot be opened **[unreleased: removed on release day]** | `deploy/install/install.sh` (`--version`), `.github/workflows/docker-publish.yml` (`type=semver,pattern={{version}}`), `docs/deployment.md`, `apps/site/README.md#release-day` |
 | F44 | Coming from 1.x: the database migrates on first start and 1.x cannot read it afterwards; back it up and read the upgrade guide first | `README.md#upgrading-from-1x`, `docs/upgrading-to-2.0.md` |
 | F45 | The apps are in English; this site and the README are in English and Simplified Chinese | `apps/console/DESIGN.md#principles`, `README.zh-CN.md` |
 
@@ -1898,7 +1889,7 @@ copywriter gets; they are repeated here to be read.
     "F09": "Audio only: music videos are not supported; live radio such as Apple Music 1 is not supported; a station is a rolling list of what Apple offers now",
     "F10": "License: AGPL-3.0",
     "F11": "Repository: `https://github.com/AMDL-Web/apple-music-downloader`",
-    "F12": "2.0 is in development (release candidates; rc.13 is the last) [unreleased]",
+    "F12": "2.0.0 is released; release candidates rc.1 to rc.13 came before it",
     "F13": "Codecs, in a priority list you order: `alac` (Apple Lossless), `ec3` (Dolby Digital Plus / Dolby Atmos), `ac3` (Dolby Digital), `aac`, `aac-binaural`, `aac-downmix`. AAC-LC is always appended as the last fallback and is not listed",
     "F14": "Default priority `[\"alac\"]`. With `codec_alternative` on (default), a codec that runs out of attempts hands over to the next; each codec has its own attempts",
     "F15": "ALAC up to 24-bit / 192 kHz by default; a lower ceiling can be set. Apple serves ALAC at 44.1 kHz and above, 16- and 24-bit",
@@ -1929,7 +1920,6 @@ copywriter gets; they are repeated here to be read.
     "F40": "wrapper-manager v2 holds up to 10 Apple Music accounts and has the login the console's Account page uses (two-step codes are asked for there)",
     "F41": "Docker sign-in: open `http://localhost:18080/`, Settings › Account, set Session service to `http://wrapper-manager:8080`, save and restart from the notice, sign in with the Apple ID, paste a link into New download; files land in `./data/downloads`",
     "F42": "Binary installs save music to `~/Music/AMDL` (`%UserProfile%\\Music\\AMDL` on Windows)",
-    "F43": "Until 2.0.0 is released, the install script and the `latest` image mean an older release: pass a 2.0 release candidate's tag with `--version` (`-Version` on Windows), for example `v2.0.0-rc.13`, and in the Compose file replace `latest` with the same version without the `v` (`2.0.0-rc.13`; images are tagged without it). A database written by rc.1 to rc.7 cannot be opened [unreleased: removed on release day]",
     "F44": "Coming from 1.x: the database migrates on first start and 1.x cannot read it afterwards; back it up and read the upgrade guide first",
     "F45": "The apps are in English; this site and the README are in English and Simplified Chinese"
   },
@@ -1963,8 +1953,7 @@ copywriter gets; they are repeated here to be read.
 
     "header.install": {"purpose": "The header's primary button, jumps to the install section.", "facts": [], "maxChars": 14, "maxCharsZh": 9, "marks": []},
 
-    "hero.prereleaseBadge": {"purpose": "Temporary first part of the eyebrow pill: AMDL 2.0 is in development. Deleted with its markup on release day.", "facts": ["F12"], "maxChars": 24, "maxCharsZh": 18, "marks": [], "verbatim": ["2.0"]},
-    "hero.eyebrow": {"purpose": "Permanent part of the small pill above the headline: two plain facts that stay true after release (for example self-hosted and open source). No version state; that is hero.prereleaseBadge.", "facts": ["F03", "F10"], "maxChars": 40, "maxCharsZh": 24, "marks": []},
+    "hero.eyebrow": {"purpose": "Permanent part of the small pill above the headline: two plain facts that stay true after release (for example self-hosted and open source). No version state.", "facts": ["F03", "F10"], "maxChars": 40, "maxCharsZh": 24, "marks": []},
     "hero.title": {"purpose": "The headline, two lines separated by \\n. Line 1 names the service, line 2 (shown in the accent color) says where the music ends up. Each line at most 28 characters.", "facts": ["F01"], "maxChars": 57, "maxCharsZh": 35, "marks": []},
     "hero.lead": {"purpose": "One or two sentences under the shelf of album covers: what goes in, what comes out, how it is used. Contains exactly one **highlighted** phrase (the outcome).", "facts": ["F01", "F02", "F07", "F22"], "maxChars": 230, "maxCharsZh": 138, "marks": ["strong"]},
     "hero.source": {"purpose": "Small text link at the end of the Runs-on row, after the platform names: opens the GitHub repository (for example 'View source'). The hero has no buttons.", "facts": ["F11"], "maxChars": 18, "maxCharsZh": 11, "marks": []},
@@ -2073,8 +2062,6 @@ copywriter gets; they are repeated here to be read.
     "install.docker.steps.3.title": {"purpose": "Step 4 title: point at the wrapper and sign in.", "facts": ["F41"], "maxChars": 28, "maxCharsZh": 17, "marks": []},
     "install.docker.steps.3.text": {"purpose": "Step 4 text, before the address block: open http://localhost:18080/, go to Settings › Account and set Session service to the address below, then save and restart from the notice. Addresses in `code`, UI labels in **bold**.", "facts": ["F41"], "maxChars": 150, "maxCharsZh": 146, "marks": ["code", "strong"], "verbatim": ["http://localhost:18080/", "Settings › Account", "Session service"]},
     "install.docker.steps.3.after": {"purpose": "Step 4 text, after the address block: sign in with your Apple ID and paste a link into New download; finished files land in ./data/downloads. Paths in `code`, UI labels in **bold**.", "facts": ["F41"], "maxChars": 140, "maxCharsZh": 112, "marks": ["code", "strong"], "verbatim": ["New download", "./data/downloads"]},
-    "install.prereleaseLabel": {"purpose": "Label pill of the 2.0 note, for example the version number with a word for 'note'.", "facts": ["F12"], "maxChars": 16, "maxCharsZh": 10, "marks": []},
-    "install.prerelease": {"purpose": "The 2.0 note (removed on release day): until 2.0.0 is released, pass a release candidate's tag to the install script with --version (-Version on Windows), for example v2.0.0-rc.13, and in the Compose file replace latest with the same version without the v (2.0.0-rc.13); Homebrew and Scoop arrive with 2.0.1; a database from rc.1 to rc.7 cannot be opened.", "facts": ["F43", "F35"], "maxChars": 320, "maxCharsZh": 238, "marks": ["code"], "verbatim": ["--version", "-Version", "v2.0.0-rc.13", "2.0.0-rc.13", "latest"]},
     "install.nas.label": {"purpose": "Label pill of the NAS note.", "facts": [], "maxChars": 12, "maxCharsZh": 8, "marks": []},
     "install.nas.text": {"purpose": "NAS note: the wrapper needs Linux x86_64 with user namespaces (unshare -Ur true must succeed); on arm64, or on a host without user namespaces such as Synology DSM, use wrapper-manager v2's QEMU variant, which needs /dev/kvm.", "facts": ["F39"], "maxChars": 190, "maxCharsZh": 138, "marks": ["code"], "verbatim": ["unshare -Ur true", "/dev/kvm"]},
     "install.nas.link": {"purpose": "Link label to the wrapper setup docs.", "facts": [], "maxChars": 24, "maxCharsZh": 15, "marks": []},

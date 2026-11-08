@@ -18,7 +18,7 @@ export const REPO = 'https://github.com/AMDL-Web/apple-music-downloader';
 // Links into the repository, the install scripts and the Compose file follow the
 // branch the published site describes, so a visitor reads and installs what the
 // page shows.
-export const REF = 'dev';
+export const REF = 'main';
 const BLOB = `${REPO}/blob/${REF}`;
 const RAW = `https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/${REF}`;
 
@@ -194,7 +194,7 @@ function hero(h) {
   ];
   return `<section class="hero" aria-labelledby="hero-title">
 <div class="wrap">
-<p class="eyebrow"><span class="prerelease"><i class="prerelease-dot" aria-hidden="true"></i>${esc(h.prereleaseBadge)}<i class="prerelease-rule" aria-hidden="true"></i></span><span>${esc(h.eyebrow)}</span></p>
+<p class="eyebrow"><span>${esc(h.eyebrow)}</span></p>
 <h1 id="hero-title"><span>${esc(line1)}</span><span class="accent">${esc(line2)}</span></h1>
 ${shelf(h.shelfLabel)}
 <p class="lead hero-lead">${markLead(h.lead)}</p>
@@ -311,7 +311,6 @@ function install(s, ui) {
     { cls: 'install-tabs', listCls: 'seg' },
   )}
 <div class="callouts">
-<aside class="callout callout-prerelease"><p><span class="callout-label">${esc(s.prereleaseLabel)}</span>${inline(s.prerelease)}</p></aside>
 <aside class="callout callout-nas"><p><span class="callout-label">${esc(s.nas.label)}</span>${inline(s.nas.text)} <a href="${BLOB}/docs/deployment.md#the-wrapper">${esc(s.nas.link)}</a></p></aside>
 </div>
 <p class="install-more">${inline(s.more)}</p>`;

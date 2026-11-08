@@ -7,7 +7,7 @@ name: Pages
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
     paths:
       - apps/site/**
       - Makefile

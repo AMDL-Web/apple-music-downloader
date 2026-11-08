@@ -26,7 +26,7 @@
     "F09": "Audio only: music videos are not supported; live radio such as Apple Music 1 is not supported; a station is a rolling list of what Apple offers now",
     "F10": "License: AGPL-3.0",
     "F11": "Repository: `https://github.com/AMDL-Web/apple-music-downloader`",
-    "F12": "2.0 is in development (release candidates; rc.13 is the last) [unreleased]",
+    "F12": "2.0.0 is released; release candidates rc.1 to rc.13 came before it",
     "F13": "Codecs, in a priority list you order: `alac` (Apple Lossless), `ec3` (Dolby Digital Plus / Dolby Atmos), `ac3` (Dolby Digital), `aac`, `aac-binaural`, `aac-downmix`. AAC-LC is always appended as the last fallback and is not listed",
     "F14": "Default priority `[\"alac\"]`. With `codec_alternative` on (default), a codec that runs out of attempts hands over to the next; each codec has its own attempts",
     "F15": "ALAC up to 24-bit / 192 kHz by default; a lower ceiling can be set. Apple serves ALAC at 44.1 kHz and above, 16- and 24-bit",
@@ -57,7 +57,6 @@
     "F40": "wrapper-manager v2 holds up to 10 Apple Music accounts and has the login the console's Account page uses (two-step codes are asked for there)",
     "F41": "Docker sign-in: open `http://localhost:18080/`, Settings › Account, set Session service to `http://wrapper-manager:8080`, save and restart from the notice, sign in with the Apple ID, paste a link into New download; files land in `./data/downloads`",
     "F42": "Binary installs save music to `~/Music/AMDL` (`%UserProfile%\\Music\\AMDL` on Windows)",
-    "F43": "Until 2.0.0 is released, the install script and the `latest` image mean an older release: pass a 2.0 release candidate's tag with `--version` (`-Version` on Windows), for example `v2.0.0-rc.13`, and in the Compose file replace `latest` with the same version without the `v` (`2.0.0-rc.13`; images are tagged without it). A database written by rc.1 to rc.7 cannot be opened [unreleased: removed on release day]",
     "F44": "Coming from 1.x: the database migrates on first start and 1.x cannot read it afterwards; back it up and read the upgrade guide first",
     "F45": "The apps are in English; this site and the README are in English and Simplified Chinese"
   },
@@ -91,8 +90,7 @@
 
     "header.install": {"purpose": "The header's primary button, jumps to the install section.", "facts": [], "maxChars": 14, "maxCharsZh": 9, "marks": []},
 
-    "hero.prereleaseBadge": {"purpose": "Temporary first part of the eyebrow pill: AMDL 2.0 is in development. Deleted with its markup on release day.", "facts": ["F12"], "maxChars": 24, "maxCharsZh": 18, "marks": [], "verbatim": ["2.0"]},
-    "hero.eyebrow": {"purpose": "Permanent part of the small pill above the headline: two plain facts that stay true after release (for example self-hosted and open source). No version state; that is hero.prereleaseBadge.", "facts": ["F03", "F10"], "maxChars": 40, "maxCharsZh": 24, "marks": []},
+    "hero.eyebrow": {"purpose": "Permanent part of the small pill above the headline: two plain facts that stay true after release (for example self-hosted and open source). No version state.", "facts": ["F03", "F10"], "maxChars": 40, "maxCharsZh": 24, "marks": []},
     "hero.title": {"purpose": "The headline, two lines separated by \\n. Line 1 names the service, line 2 (shown in the accent color) says where the music ends up. Each line at most 28 characters.", "facts": ["F01"], "maxChars": 57, "maxCharsZh": 35, "marks": []},
     "hero.lead": {"purpose": "One or two sentences under the shelf of album covers: what goes in, what comes out, how it is used. Contains exactly one **highlighted** phrase (the outcome).", "facts": ["F01", "F02", "F07", "F22"], "maxChars": 230, "maxCharsZh": 138, "marks": ["strong"]},
     "hero.source": {"purpose": "Small text link at the end of the Runs-on row, after the platform names: opens the GitHub repository (for example 'View source'). The hero has no buttons.", "facts": ["F11"], "maxChars": 18, "maxCharsZh": 11, "marks": []},
@@ -201,8 +199,6 @@
     "install.docker.steps.3.title": {"purpose": "Step 4 title: point at the wrapper and sign in.", "facts": ["F41"], "maxChars": 28, "maxCharsZh": 17, "marks": []},
     "install.docker.steps.3.text": {"purpose": "Step 4 text, before the address block: open http://localhost:18080/, go to Settings › Account and set Session service to the address below, then save and restart from the notice. Addresses in `code`, UI labels in **bold**.", "facts": ["F41"], "maxChars": 150, "maxCharsZh": 146, "marks": ["code", "strong"], "verbatim": ["http://localhost:18080/", "Settings › Account", "Session service"]},
     "install.docker.steps.3.after": {"purpose": "Step 4 text, after the address block: sign in with your Apple ID and paste a link into New download; finished files land in ./data/downloads. Paths in `code`, UI labels in **bold**.", "facts": ["F41"], "maxChars": 140, "maxCharsZh": 112, "marks": ["code", "strong"], "verbatim": ["New download", "./data/downloads"]},
-    "install.prereleaseLabel": {"purpose": "Label pill of the 2.0 note, for example the version number with a word for 'note'.", "facts": ["F12"], "maxChars": 16, "maxCharsZh": 10, "marks": []},
-    "install.prerelease": {"purpose": "The 2.0 note (removed on release day): until 2.0.0 is released, pass a release candidate's tag to the install script with --version (-Version on Windows), for example v2.0.0-rc.13, and in the Compose file replace latest with the same version without the v (2.0.0-rc.13); Homebrew and Scoop arrive with 2.0.1; a database from rc.1 to rc.7 cannot be opened.", "facts": ["F43", "F35"], "maxChars": 320, "maxCharsZh": 238, "marks": ["code"], "verbatim": ["--version", "-Version", "v2.0.0-rc.13", "2.0.0-rc.13", "latest"]},
     "install.nas.label": {"purpose": "Label pill of the NAS note.", "facts": [], "maxChars": 12, "maxCharsZh": 8, "marks": []},
     "install.nas.text": {"purpose": "NAS note: the wrapper needs Linux x86_64 with user namespaces (unshare -Ur true must succeed); on arm64, or on a host without user namespaces such as Synology DSM, use wrapper-manager v2's QEMU variant, which needs /dev/kvm.", "facts": ["F39"], "maxChars": 190, "maxCharsZh": 138, "marks": ["code"], "verbatim": ["unshare -Ur true", "/dev/kvm"]},
     "install.nas.link": {"purpose": "Link label to the wrapper setup docs.", "facts": [], "maxChars": 24, "maxCharsZh": 15, "marks": []},

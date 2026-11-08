@@ -354,9 +354,6 @@ svg { flex: none; }
   letter-spacing: 0.01em;
 }
 :lang(zh-CN) .eyebrow { letter-spacing: 0; }
-.prerelease { display: inline-flex; align-items: center; }
-.prerelease-dot { width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent); }
-.prerelease-rule { width: 1px; height: 12px; margin: 0 10px; background: var(--line-strong); }
 .hero h1 { max-width: 900px; margin: 0 auto; font-size: var(--title-hero); line-height: 1.06; letter-spacing: -0.045em; }
 .hero h1 span { display: block; }
 .hero h1 .accent { color: var(--accent); }
@@ -646,7 +643,6 @@ svg { flex: none; }
 
 .callouts { display: grid; gap: 16px; max-width: 760px; margin: 48px auto 0; }
 .callout { padding: 16px 20px; border-radius: 12px; font-size: 15px; line-height: 1.6; }
-.callout-prerelease { background: var(--citrus); color: var(--ink); }
 .callout-nas { background: var(--surface); color: var(--surface-ink); }
 .callout-label { display: inline-block; margin-right: 10px; padding: 2px 8px; border-radius: var(--radius-round); background: var(--plate); color: var(--ink); font-size: 11px; font-weight: 700; line-height: 1.6; letter-spacing: 0.06em; text-transform: uppercase; vertical-align: 1px; }
 .callout-nas .callout-label { color: var(--surface-ink); }
@@ -731,9 +727,6 @@ svg { flex: none; }
   .btn.top-install { position: relative; height: 36px; padding: 0 12px; font-size: 14px; }
   .top-install::after { content: ""; position: absolute; inset: -4px 0; }
   .hero { padding: 64px 0 80px; }
-  /* The eyebrow's two parts stack instead of wrapping around the divider. */
-  .eyebrow { flex-direction: column; row-gap: 2px; padding: 6px 14px; border-radius: 14px; }
-  .prerelease-rule { display: none; }
   .hero h1 { font-size: 2.5rem; }
   .shelf-wide { display: none; }
   .shelf-phone { display: block; }

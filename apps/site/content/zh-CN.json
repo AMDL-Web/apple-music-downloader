@@ -35,7 +35,6 @@
     "install": "安装 AMDL"
   },
   "hero": {
-    "prereleaseBadge": "2.0 开发中",
     "eyebrow": "自托管 · AGPL-3.0 开源",
     "title": "将 Apple Music 音乐\n保存在你自己的磁盘上",
     "lead": "输入单曲、专辑、歌单、艺人或电台链接，或直接搜索曲库。AMDL 会在本地完成下载、解密、混流与标签写入，**在你的磁盘上生成完整的 .m4a 文件**，并提供网页控制台、终端界面、CLI 与 MCP 服务。",
@@ -204,8 +203,6 @@
         }
       ]
     },
-    "prereleaseLabel": "2.0 说明",
-    "prerelease": "在 2.0.0 正式版发布前，请向安装脚本传入候选版本标签，如 `--version` `v2.0.0-rc.13`（Windows 下为 `-Version`），并在 Compose 文件中将 `latest` 替换为不带 `v` 的 `2.0.0-rc.13`。Homebrew 与 Scoop 软件源将于 2.0.1 提供；rc.1 至 rc.7 生成的数据库无法打开。",
     "nas": {
       "label": "NAS 说明",
       "text": "wrapper 要求 Linux x86_64 支持用户命名空间（`unshare -Ur true` 需成功）；在 arm64 或不支持用户命名空间的宿主机（如群晖 DSM）上，请改用需要 `/dev/kvm` 的 wrapper-manager v2 QEMU 版。",

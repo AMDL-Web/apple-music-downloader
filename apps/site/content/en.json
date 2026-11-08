@@ -35,7 +35,6 @@
     "install": "Install AMDL"
   },
   "hero": {
-    "prereleaseBadge": "2.0 in development",
     "eyebrow": "Self-hosted · AGPL-3.0 open source",
     "title": "Apple Music,\non your own disk",
     "lead": "Pass a link or search. AMDL downloads, decrypts, and tags tracks into **finished .m4a files on your disk** via web console, terminal UI, CLI, or MCP.",
@@ -204,8 +203,6 @@
         }
       ]
     },
-    "prereleaseLabel": "2.0 note",
-    "prerelease": "Until 2.0.0 is released, pass a release candidate tag to the install script with `--version` (`-Version` on Windows), such as `v2.0.0-rc.13`, and in the Compose file replace `latest` with `2.0.0-rc.13` (no `v`). Homebrew and Scoop arrive in 2.0.1. Databases from rc.1 to rc.7 cannot be opened.",
     "nas": {
       "label": "NAS & ARM",
       "text": "The wrapper needs Linux x86_64 with user namespaces (`unshare -Ur true` must succeed). On arm64 or a host without them like Synology DSM, use wrapper-manager v2's QEMU variant with `/dev/kvm`.",
