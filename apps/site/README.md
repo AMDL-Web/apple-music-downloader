@@ -13,16 +13,14 @@ nothing from another host.
 
 | Path | What it holds |
 | --- | --- |
-| `build.mjs` | The template and the build: renders `content/<lang>.json` into a page and inlines the stylesheets and `static/site.js` |
+| `build.mjs` | The template and the build: renders `content/<lang>.json` into a page, inlines `static/site.css` and `static/site.js`, and writes the Content-Security-Policy that allows exactly those |
+| `mocks.mjs` | The hand-drawn product views (Search, Queue, Library), the hero's waveform and the small figures beside the specs, as HTML on made-up data |
 | `blocks.mjs` | The template's pieces that do not depend on the content: escaping, icons, code blocks with copy buttons, tab lists |
 | `content/` | The page text, one file per language with the same keys. Strings may use `` `code` ``, `**strong**` and `[text](href)`; an href may start with `{repo}` or `{blob}` |
-| `static/` | Stylesheets (`site.css`, and `demo.css` for the live demos), script, favicon, the Open Graph card's template (`og.html`), the hero animation (`hero.html`), and the CLI and MCP samples |
-| `ansi.mjs` | Turns a frame of the terminal interface, with its color escapes, into the HTML the page shows |
+| `static/` | The stylesheet (`site.css`), the script (`site.js`), the favicon and the Open Graph card's template (`og.html`) |
 | `og.mjs` | Draws `og.png` from `static/og.html` and the English hero with headless Chrome |
-| `demo/` | The live console demo: the fake backend (`fake-api.js`, its config in `fake-config.js`, its records in `fake-records.js`), its made-up catalog, the module that installs it (`boot.js`), and `bundle.mjs`, which puts the demo into the build |
 | `serve.mjs` | The preview server behind `--serve` |
-| `build.test.mjs` | Content parity, links and anchors, local-only resources, the terminal frame, the Open Graph card, arguments |
-| `demo.test.mjs` | The fake backend answers every console call, stays on its own origin, and runs jobs to the end |
+| `build.test.mjs` | Arguments, content parity, the product views, links and anchors, local-only resources, the Content-Security-Policy, the Open Graph card |
 
 ## Build and preview
 
@@ -51,60 +49,33 @@ node --test apps/site/
 
 runs the tests; `make node-test` includes them.
 
-That preview has the console demo only. The page as published also has the desktop and
-terminal demos, a frame of the terminal interface and the Open Graph card, which
-`make site` adds; it needs Go, Node.js and Chrome, and writes `apps/site/dist/`
-(`SITE_OUT` elsewhere):
+`make site` builds the page as published: the same build with `--base
+https://amdl.lyjw.me/`, then `og.mjs`, which draws `og.png` into the built site with
+headless Chrome. `CHROME` names the browser binary when it is not in the usual places.
+It writes `apps/site/dist/` (`SITE_OUT` elsewhere).
 
-- `make desktop-web` builds the desktop app's web build, given to `--desktop`, and
-  `make tui-web` the terminal interface's, given to `--tui-web`.
-- `--tui` takes `apps/amdl/internal/tui/testdata/frame-100.ansi`, the 100-column frame
-  the TUI's golden test keeps current (`go test ./apps/amdl/internal/tui -run TestFrames
-  -update` rewrites it); `ansi.mjs` turns it into HTML, and the build refuses a frame that
-  shows a private address.
-- `og.mjs` draws `og.png` into the built site; `CHROME` names the browser binary when it
-  is not in the usual places.
+## Product views
 
-## Live demo
+The products section shows three views of the web console and the desktop app: Search
+(the New download page), the Queue and an album's record in the Library. They are not
+the apps: each is a few dozen lines of HTML in `mocks.mjs`, styled by `site.css` with the
+console's colors, on a made-up catalog (the artists and albums of `internal/demo`, with
+each cover a CSS color field). Their words come from the content files, so both
+languages show them.
 
-Under the hero, a window runs the real web console on made-up data, with a second tab
-for the desktop app; the products section shows more views of the same console. The page
-has no screenshots.
+Each view has one thing that works, in `site.js`: a search result's Download button
+queues it, the failed album's Retry puts it back in the queue, and the record's Download
+missing fills its missing track. The running album moves through its stages on a timer
+while its view is on screen, unless the visitor prefers reduced motion. Without
+JavaScript the three views are shown one after another.
 
-- The build copies `apps/console/static` to `demo/console/` and loads `demo/boot.js` in
-  front of the console's `main.js`. boot.js replaces `fetch`: calls under `/api/v1`, the
-  event and log streams included, go to `demo/fake-api.js`, which keeps the jobs in memory
-  and moves the running ones on a timer (`demo/boot.js#TICK_MS`) while the window is on
-  screen; the console's own files load as usual; any other host fails like a network
-  error, and the page's Content-Security-Policy allows only its own origin. Links out of
-  the demo do nothing.
-- Artists, albums, playlists and covers come from `demo/catalog.js`: made up, with each
-  cover drawn as an SVG color field.
-- `demo.test.mjs` checks that every `/api/v1` call in `apps/console/static/js/api.js`
-  gets an answer, so a new console call needs a handler in `fake-api.js`. Nothing checks
-  that a response keeps its shape: click through the demo after changing one.
-- The products section's console views are the demo opened at a route and drawn at a
-  fixed size, scaled to fit, taking no input: `demo/bundle.mjs#SCENES` lists each one's
-  route, size and crop, and `demo.test.mjs` checks that its job or search exists in the
-  demo. Each console, the window's included, loads as it nears the screen and stops its
-  jobs while off screen.
-- Given the desktop app's web build with `--desktop <dir>` (a directory with its
-  `index.html`), the build copies it to `demo/desktop/` and adds the desktop tab: the app's
-  icon and a button that starts it. It is several megabytes of wasm, so it loads only
-  then. Where the window is narrower than 820 px, the app's minimum, it draws the app at
-  1280 x 800 scaled to fit. The page passes its theme in as `data-mygo-theme`.
-- Up to 720 px wide the console window is a scaled-down live view; a tap opens
-  `demo/console/` full screen, where the console lays itself out for the screen.
-- Given the terminal interface's web build with `--tui-web <dir>`, the build copies it to
-  `demo/terminal/`, and the terminal frame becomes its poster: a button over the frame
-  loads the real TUI, on the demo backend and in its dark palette, in the frame's box.
-  `--tui-web` needs `--tui`, since that frame is what the page shows until then.
+When the console or the desktop app changes a name or a layout the views borrow, change
+the view to match; nothing checks it.
 
 ## Publishing
 
 GitHub Pages serves the site, built by `.github/workflows/pages.yml`. A push to the
-branch in `build.mjs#REF` that touches the site, the console, the desktop app, the TUI,
-the Makefile or the workflow runs `make site` (see [Build and preview](#build-and-preview))
+branch in `build.mjs#REF` that touches the site, the Makefile or the workflow runs `make site` (see [Build and preview](#build-and-preview))
 and deploys the result; `gh workflow run pages.yml --ref <branch>` runs it by hand. The
 workflow refuses a branch other than the one `REF` names, so the page's install commands
 and repository links point at the branch it was built from. The `github-pages`
@@ -118,10 +89,9 @@ gh api repos/AMDL-Web/apple-music-downloader/environments/github-pages/deploymen
 The domain is in the maintainer's Cloudflare zone: `amdl` is a CNAME to
 `amdl-web.github.io` with the proxy on, and the repository's Pages settings name
 `amdl.lyjw.me` as the custom domain. Cloudflare holds the certificate, redirects `http`
-to `https` (the zone's Always Use HTTPS) and sends the files Brotli-compressed, the
-desktop demo's `.wasm` included: GitHub Pages answers with gzip, which Cloudflare would
-pass through, so a compression rule on `amdl.lyjw.me` (Brotli first, then Auto) has it
-re-encode them. It reaches
+to `https` (the zone's Always Use HTTPS) and sends the files Brotli-compressed: GitHub Pages answers with
+gzip, which Cloudflare would pass through, so a compression rule on `amdl.lyjw.me`
+(Brotli first, then Auto) has it re-encode them. It reaches
 GitHub over HTTPS without checking GitHub's certificate (the zone's SSL mode Full):
 GitHub cannot issue a certificate for a proxied name, so Pages' own certificate and its
 Enforce HTTPS setting stay off.
@@ -157,20 +127,17 @@ The site follows `dev` until a release and `main` from the release on.
   is written for Chinese readers, not translated word for word.
 - Every claim comes from the repository: the root README, `docs/`, or what the code
   does. A feature that is not released says so.
-- There are no screenshots to update: the console views are the demo, the terminal frame
-  comes from the TUI's snapshot test, and `og.png` from `static/og.html` and the English
-  hero, all at build time. A view that should show something else changes its route in
-  `demo/bundle.mjs#SCENES` or the demo's world in `demo/fake-api.js`.
-- `static/hero.html` is the hero animation: one inline SVG with its own `<style>`
-  (`ah-*` classes, `--ah-*` custom properties for both themes) and an optional script
-  that pauses it off screen and adds pointer parallax. Its ids are `ah-*`, so a page holds
-  one. `--ah-hole` is the page background, the color the record's centre hole shows.
-- In the terminal frame each run of one style is a span with an inline color, and a wide
-  (CJK) character sits in a `<span class="w">` so the columns line up.
+- There are no screenshots to update: the product views are HTML in `mocks.mjs`, and
+  `og.png` is drawn from `static/og.html` and the English hero at build time.
+- The views' data is made up. A path a view shows follows the default
+  `library_path_format` in `configs/config.example.yaml`, which a test checks.
+- The page carries no `style` attributes or inline handlers, since the
+  Content-Security-Policy allows only the hashed inline stylesheet and scripts: a width
+  is a class (`w-60`), and `site.js` sets custom properties with `style.setProperty`.
 
 ## Theme and language
 
-The page follows `prefers-color-scheme` until the visitor picks a theme with the toggle,
-which sets `data-theme` on `<html>` and keeps the choice in `localStorage`
-(`amdl-site-theme`). Each language page records itself as the visitor's language
+The page follows `prefers-color-scheme` until the visitor picks Light or Dark in the
+header's three-way switch, which sets `data-theme` on `<html>` and keeps the choice in
+`localStorage` (`amdl-site-theme`); System goes back to following the browser. Each language page records itself as the visitor's language
 (`amdl-site-lang`) for the root page to use next time.
