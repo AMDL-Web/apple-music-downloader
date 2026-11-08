@@ -231,7 +231,7 @@
     },
     "records": {
       "term": "Records",
-      "text": "Each album and playlist is kept per track and per quality. A failed track is retried by later runs, after 30 minutes and then 2 hours, until it gives up. Pause, resume, download again (only the lyrics or the covers, if that is all you want), add a second quality as its own file, or check the disk for files that went missing: a check that finds more than half missing stops, so an unmounted share is not written off.",
+      "text": "Each album and playlist is kept per track and per quality. A failed track is retried by later runs, after 30 minutes and then 2 hours, until it gives up. Pause, resume, download again (only the lyrics or the covers, if that is all you want), add a second quality as its own file, delete a record and keep its files, or check the disk for files that went missing: a check that finds more than half missing stops, so an unmounted share is not written off.",
       "label": "Twelve tracks of a record: ten downloaded, one waiting to retry, one missing"
     },
     "library": {
@@ -240,7 +240,7 @@
     },
     "accounts": {
       "term": "Accounts",
-      "text": "A wrapper-manager holds up to ten Apple Music accounts. A link is read in its own region's catalog when one of them serves it, and an album missing from one region is tried in the others."
+      "text": "A wrapper-manager holds up to ten Apple Music accounts. A link is read in its own region's catalog when one of them serves it, and an album missing from one region is tried in the others. One is the default, the order decides which one serves a region, and `amdl accounts delete` removes one."
     },
     "wrapper": {
       "term": "The wrapper",
@@ -268,7 +268,7 @@
           "A preview and a quality check before anything downloads",
           "A station is a rolling list: the tracks Apple offers now, not a fixed one",
           "An album link with `?i=` downloads that one song (`catalog.album_track_url_mode` can make it the album); an artist link adds every album, or only the albums without singles",
-          "Search another region's catalog with `--storefront`",
+          "Search another region's catalog with `--storefront`, and open an artist's albums a page at a time (→ in the TUI)",
           "Not supported: music videos, and live radio such as Apple Music 1"
         ]
       },
@@ -361,7 +361,7 @@
         },
         {
           "title": "Check ffmpeg",
-          "text": "Every track goes through ffmpeg. `amdl doctor` says whether this machine has it, and prints the command that installs it if not."
+          "text": "Every track goes through ffmpeg, 8 or later. `amdl doctor` says whether this machine has it, and prints the command that installs it if not."
         },
         {
           "title": "Get a wrapper",
