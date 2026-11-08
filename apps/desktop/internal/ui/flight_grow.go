@@ -12,11 +12,11 @@ import (
 // bar included, is laid out at its full size and scaled and placed so that
 // its own cover is the flying cover, which goes on q from the cover clicked
 // to its place on the page; it shows through an opaque surface whose
-// rounded box is the flying cover's until the page's parts start to show
-// and then opens from it to the whole page as they fade in (lateShown).
-// Whatever of the surface shows is the page, and nothing under it shows
-// through it. The screen under it stays whole, blurred and dimmed as far
-// as the surface has opened (motionTune). The page's light comes in from
+// rounded box opens on q, from the moment the cover leaves, from the cover
+// clicked to the whole column, while the page's parts fade in late
+// (lateShown). Nothing under the surface shows through it. The screen under
+// it stays whole, blurred and dimmed as far as the page has come
+// (motionTune). The page's light comes in from
 // the plain ground. Going out runs the same way back. The hero's page morphs
 // into place instead (flight.go).
 
@@ -36,11 +36,6 @@ func (a *App) lateShown() float32 {
 	return smoothstep(from, min(1, from+0.35), a.fly.q)
 }
 
-// opened is how far the growing surface has opened from the flying cover
-// to the whole page: as far as the page's parts show (lateShown), so that
-// no more of its ground shows than they fill.
-func (a *App) opened() float32 { return a.lateShown() }
-
 func smoothstep(a, b, x float32) float32 {
 	if b <= a {
 		if x >= b {
@@ -57,9 +52,9 @@ func smoothstep(a, b, x float32) float32 {
 // radius, and the page's: its box, at its scale, which puts its own cover
 // where the flying cover is. The flying cover goes on q from the cover the
 // page opened from (the last box it was seen at) to the page's (the last
-// place it was laid out); the surface opens that far (open) from the part
-// of it its list shows to the page's box.
-func (f *flight) growBox(main ui.Rect, open float32) (box ui.Rect, radius float32, page ui.Rect) {
+// place it was laid out); the surface goes on q from the part of the cover
+// clicked its list shows to the whole column.
+func (f *flight) growBox(main ui.Rect) (box ui.Rect, radius float32, page ui.Rect) {
 	full := ui.Rect{W: main.W, H: main.H}
 	if !f.growing() {
 		return full, 0, full
@@ -84,13 +79,11 @@ func (f *flight) growBox(main ui.Rect, open float32) (box ui.Rect, radius float3
 	scale := cover.W / to.W
 	at := ui.Point{X: to.X - main.X, Y: to.Y - main.Y}
 	page = ui.Rect{X: cover.X - scale*at.X, Y: cover.Y - scale*at.Y, W: scale * full.W, H: scale * full.H}
-	shown := cover
-	if cut := 1 - unit(q); cut > 0 {
-		shown.Y += f.growClipTop * cut
-		shown.H = max(0, shown.H-(f.growClipTop+f.growClipBottom)*cut)
-	}
-	box = ui.Rect{X: lerp(shown.X, page.X, open), Y: lerp(shown.Y, page.Y, open), W: lerp(shown.W, page.W, open), H: lerp(shown.H, page.H, open)}
-	return box, lerp(lerp(f.growRadius, f.growToRadius, unit(q)), 0, open), page
+	shown := from
+	shown.X, shown.Y = shown.X-main.X, shown.Y-main.Y+f.growClipTop
+	shown.H = max(0, shown.H-f.growClipTop-f.growClipBottom)
+	box = ui.Rect{X: lerp(shown.X, 0, q), Y: lerp(shown.Y, 0, q), W: lerp(shown.W, full.W, q), H: lerp(shown.H, full.H, q)}
+	return box, lerp(f.growRadius, 0, unit(q)), page
 }
 
 // growSurface builds the album page as the surface it grows on: over the
@@ -99,7 +92,7 @@ func (f *flight) growBox(main ui.Rect, open float32) (box ui.Rect, radius float3
 func (a *App) growSurface(c *ui.Context, k *Tokens, sidebar bool, page float32) {
 	f := &a.fly
 	main := f.main
-	box, radius, pg := f.growBox(main, a.opened())
+	box, radius, pg := f.growBox(main)
 	f.ridePrev, f.ride = f.ride, ui.Point{X: pg.X, Y: pg.Y}
 	f.surface = ui.Rect{X: main.X + box.X, Y: main.Y + box.Y, W: box.W, H: box.H}
 	f.page = ui.Rect{X: main.X + pg.X, Y: main.Y + pg.Y, W: pg.W, H: pg.H}
@@ -211,10 +204,8 @@ func (a *App) growEdges(el ui.Element) {
 }
 
 // underGone is how far the screen under the growing page has gone back,
-// blurred and dimmed: as far as the surface has opened over it (opened),
-// so that going back the screen under is clear as the page goes into its
-// cover rather than over q's last frames after.
-func (a *App) underGone() float32 { return a.opened() }
+// blurred and dimmed: as far as the page has come.
+func (a *App) underGone() float32 { return unit(a.fly.q) }
 
 // growUnder shows the content column under the growing page, el, blurred
 // as far as it has gone back (underGone).
