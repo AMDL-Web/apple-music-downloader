@@ -1,14 +1,9 @@
 package ui
 
 import (
-	"os"
-	"path/filepath"
-	"strconv"
 	"testing"
 
 	"amdl/apps/desktop/internal/store"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // A page 957 wide, lyjw's 1189-wide window less the sidebar, is wide
@@ -29,7 +24,6 @@ func TestAPageAsWideAsTheFullHerosTakesTheFullHead(t *testing.T) {
 		a.OpenJob(done.ID)
 		tt := stillTester(a.View, w, 838)
 		run(func() bool { tt.Frame(); _, ok := tt.Find(done.Name()); return ok })
-		look(t, tt, "page", w)
 		r, _ := tt.Find(done.Name())
 		return r.H
 	}
@@ -38,11 +32,4 @@ func TestAPageAsWideAsTheFullHerosTakesTheFullHead(t *testing.T) {
 		t.Errorf("the title is %.0f tall in a 1189-wide window, %.0f in a 1400-wide one", lyjw, wide)
 	}
 	title(1000)
-}
-
-// look writes the tester's frame to $AUDIT_OUT, when set, to be looked at.
-func look(t *testing.T, tt *ui.Tester, name string, w int) {
-	if dir := os.Getenv("AUDIT_OUT"); dir != "" {
-		shot(t, tt, filepath.Join(dir, name+"-"+strconv.Itoa(w)+".png"))
-	}
 }

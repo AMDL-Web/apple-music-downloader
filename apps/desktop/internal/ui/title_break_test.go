@@ -68,7 +68,14 @@ func TestBothQueueHeroesBreakALongTitleBeforeItsQualifiers(t *testing.T) {
 		a.Go(ScreenQueue)
 		j := a.heroJob()
 		j.Title = "First Love (Remastered 2014)"
-		tt := ui.NewTester(a.View, 1189, 838)
+		// The latest download's hero, whose title runs wider, at 1000, where
+		// the title wraps in any face: in the test's narrower one it fits a
+		// line at the maintainer's 1189.
+		w := 1189
+		if latest {
+			w = 1000
+		}
+		tt := ui.NewTester(a.View, w, 838)
 		for range 20 {
 			tt.Advance(50 * time.Millisecond)
 		}

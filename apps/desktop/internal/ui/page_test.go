@@ -91,8 +91,8 @@ func TestAFailedAlbumDownloadOpensOnItsAlbum(t *testing.T) {
 		t.Errorf("a failed download's page offers %q", tt.Texts())
 	}
 	// Its two failed tracks are not on disk: the tracks figure says 8 of 10,
-	// and the bar says only its share.
-	if !tt.HasText("8 / 10") || tt.HasText("8 / 10 finished · 2 failed") {
+	// and the bar says how many finished and failed.
+	if !tt.HasText("8 / 10") || !tt.HasText("8 / 10 finished · 2 failed") {
 		t.Errorf("a failed download's tracks figure says %q", tt.Texts())
 	}
 	if a.backLabel() != "Queue" {

@@ -39,8 +39,6 @@ func TestTheQueueLightFadesOverTheLibraryUncut(t *testing.T) {
 			tt := ui.NewTester(a.View, 1280, 800)
 			tt.SetScale(1)
 			for range 20 {
-				n := 0
-				run(func() bool { n++; return n > 3 })
 				tt.Advance(100 * time.Millisecond)
 			}
 			if err := tt.Click("Library"); err != nil {
