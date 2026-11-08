@@ -143,9 +143,10 @@ go run ./apps/amdl serve
 
 ## 从 1.x 升级
 
-2.0 改了 API、配置项和 wrapper。amdl 通过 HTTP 对接上游的 wrapper-manager v2 或 wrapper-lite，
-不再使用 1.x 的 wrapper-manager 分支；第一次启动会迁移数据库，迁移后 1.x 无法再读取。升级前请
-备份数据库，并阅读 [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md)（英文）。
+2.0 改了 API、配置项、wrapper 和镜像名。amdl 通过 HTTP 对接从 AMDL-Web fork 构建的 wrapper-manager v2
+或 wrapper-lite，不再通过 gRPC 使用 1.x 的 wrapper-manager 分支；镜像改名为
+`ghcr.io/amdl-web/apple-music-downloader`（1.x 仍留在 `apple-music-downloader-backend`）；第一次启动会迁移数据库，
+迁移后 1.x 无法再读取。升级前请备份数据库，并阅读 [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md)（英文）。
 
 ## 工作原理
 

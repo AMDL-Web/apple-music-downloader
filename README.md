@@ -164,10 +164,12 @@ Image tags, mounts, `PUID`/`PGID`, reverse proxies and the wrapper options in de
 
 ## Upgrading from 1.x
 
-2.0 changes the API, the config keys and the wrapper. amdl talks to an upstream
-wrapper-manager v2 or wrapper-lite over HTTP instead of the 1.x wrapper-manager fork, and
-the first start migrates the database in a way 1.x cannot read. Back up the database and
-read [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) before you upgrade.
+2.0 changes the API, the config keys, the wrapper and the image name. amdl talks to
+wrapper-manager v2 or wrapper-lite, built from AMDL-Web's fork, over HTTP instead of the
+1.x wrapper-manager fork over gRPC; the image is now `ghcr.io/amdl-web/apple-music-downloader`
+(1.x stays at `apple-music-downloader-backend`); and the first start migrates the database
+in a way 1.x cannot read. Back up the database and read
+[docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) before you upgrade.
 
 ## How it works
 
