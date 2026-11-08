@@ -22,7 +22,7 @@ services:
   amdl-backend:
     # Pulls the prebuilt image from GHCR by default (multi-arch linux/amd64 +
     # linux/arm64). To pin a version, replace latest with a specific tag, for
-    # example :1.1 or :1.1.0.
+    # example :2.0 or :2.0.0.
     image: ghcr.io/amdl-web/apple-music-downloader:latest
     # To build locally from source instead of pulling the image, run compose
     # from deploy/ in a clone of the repository and uncomment the build block
@@ -90,11 +90,12 @@ services:
 
   # Wrapper, option A (recommended): wrapper-manager v2, which supervises
   # wrapper-lite accounts behind one HTTP port and lets you log in from the
-  # console; amdl 2.0 supports one account in it. No image is published, so
-  # compose builds it from manager/ on the amdl branch of AMDL-Web's wrapper
-  # (Go and Docker are all it needs), which installs AMDL-Web's wrapper-lite
-  # instead of upstream's (docs/deployment.md, "The wrapper"); first start
-  # downloads the release asset of that payload it pins from GitHub.
+  # console; it holds up to 10 accounts and amdl serves them all. No image is
+  # published, so compose builds it from manager/ on the amdl branch of
+  # AMDL-Web's wrapper (Go and Docker are all it needs), which installs
+  # AMDL-Web's wrapper-lite instead of upstream's (docs/deployment.md, "The
+  # wrapper"); first start downloads the release asset of that payload it pins
+  # from GitHub.
   # wrapper-lite-rootless needs user namespaces and chroot, which Docker blocks
   # by default, hence privileged (a seccomp profile that allows unshare works
   # too). Linux amd64 only. arm64 hosts and hosts without user
