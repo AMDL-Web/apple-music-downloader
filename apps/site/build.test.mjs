@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { ansiToHtml } from './ansi.mjs';
 import { commands } from './blocks.mjs';
-import { LANGS, PRIVATE_ADDRESS, REF, REPO, UsageError, build, inline, loadContent, parseArgs, terminalFrame } from './build.mjs';
-import { SCENES } from './demo/bundle.mjs';
+import { LANGS, PRIVATE_ADDRESS, REF, REPO, UsageError, build, inline, loadContent, parseArgs } from './build.mjs';
+import { glassPath } from './mocks.mjs';
 import { OG_SIZE, findChrome, ogHtml, pngSize, renderOg } from './og.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -36,9 +36,8 @@ describe('arguments', () => {
     ['a non-http --base', ['--base', 'ftp://example.org/']],
     ['a --serve that is not a port', ['--serve', 'abc']],
     ['a --serve out of range', ['--serve', '70000']],
-    ['a --desktop without an index.html', ['--desktop', fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-desktop-'))]],
-    ['a --tui that is not a file', ['--tui', os.tmpdir()]],
-    ['a --tui-web without an index.html', ['--tui-web', fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-tui-web-'))]],
+    ['the retired --desktop', ['--desktop', 'x']],
+    ['the retired --tui', ['--tui', 'x']],
   ]) {
     test(`rejects ${name}`, () => assert.throws(() => parseArgs(argv), UsageError));
   }
@@ -53,18 +52,24 @@ describe('arguments', () => {
 
 describe('content', () => {
   // Both languages render from one template, so they need the same shape.
-  // A stat's unit is the one string that may be empty.
   const shape = (value, at) => {
     if (Array.isArray(value)) return value.map((v, i) => shape(v, `${at}[${i}]`));
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shape(v, `${at}.${k}`)]));
     assert.equal(typeof value, 'string', `${at} is not a string`);
-    if (!at.endsWith('.unit')) assert.notEqual(value.trim(), '', `${at} is empty`);
+    assert.notEqual(value.trim(), '', `${at} is empty`);
     return typeof value;
   };
 
   test('every language has the same keys and list lengths, and no empty strings', () => {
     const [first, ...rest] = LANGS.map((l) => shape(loadContent(l.code), l.code));
     for (const other of rest) assert.deepEqual(other, first);
+  });
+
+  test('a template placeholder survives translation', () => {
+    for (const lang of LANGS) {
+      const c = loadContent(lang.code);
+      assert.match(c.product.queue.track, /\{n\}.*\{total\}/, lang.code);
+    }
   });
 
   test('a copy button takes whole commands, continuation lines included', () => {
@@ -81,68 +86,29 @@ describe('content', () => {
     );
     assert.equal(inline('`**not bold**`'), '<code>**not bold**</code>');
   });
-});
 
-describe('terminal frame', () => {
-  const tmp = (text) => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-tui-')), 'tui.ansi');
-    fs.writeFileSync(file, text);
-    return file;
-  };
-
-  test('escapes become spans, wide characters take two cells and tabs line up', () => {
-    const frame = '\x1b[38;2;217;119;87m✻ \x1b[1;38;2;232;230;220mamdl\x1b[0m <b>\n\x1b]8;;https://x\x1b\\\x1b[4mlink\x1b[24m\x1b]8;;\x1b\\ 雾港\tx  \n\n';
-    assert.equal(
-      ansiToHtml(frame),
-      '<span style="color:#d97757">✻ </span><span class="b" style="color:#e8e6dc">amdl</span> &lt;b&gt;\n<span class="u">link</span> <span class="w">雾</span><span class="w">港</span>       x',
-    );
-  });
-
-  test('block glyphs and the vertical line reach the line edges', () => {
-    assert.equal(
-      ansiToHtml('\x1b[38;2;251;113;133m█▄\x1b[0m ▀ │x'),
-      '<span style="color:#fb7185"><span class="kf">█</span><span class="kl">▄</span></span> <span class="ku">▀</span> <span class="kv">│</span>x',
-    );
-  });
-
-  test('a frame given with --tui is on the page', () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-site-'));
-    try {
-      build({ out, tui: parseArgs(['--tui', tmp('\x1b[1mamdl\x1b[0m 2.0.0')]).tui });
-      assert.match(fs.readFileSync(path.join(out, 'en', 'index.html'), 'utf8'), /<pre role="img" aria-label="[^"]+"><span class="b">amdl<\/span> 2\.0\.0<\/pre>/);
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true });
-    }
-  });
-
-  test('a TUI web build given with --tui-web starts in place of the frame', () => {
-    const web = fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-tui-web-'));
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-site-'));
-    try {
-      fs.writeFileSync(path.join(web, 'index.html'), '<!doctype html><title>amdl</title>');
-      assert.throws(() => parseArgs(['--tui-web', web]), /--tui-web needs --tui/);
-      const opts = parseArgs(['--tui', tmp('amdl'), '--tui-web', web]);
-      build({ out, tui: opts.tui, tuiWeb: opts.tuiWeb });
-      assert.ok(fs.existsSync(path.join(out, 'demo', 'terminal', 'index.html')));
-      const html = fs.readFileSync(path.join(out, 'en', 'index.html'), 'utf8');
-      assert.match(html, /<pre role="img"[^>]*>amdl<\/pre><iframe data-src="\.\.\/demo\/terminal\/\?theme=dark"[^>]*><\/iframe><button class="term-start" type="button">/);
-    } finally {
-      fs.rmSync(web, { recursive: true, force: true });
-      fs.rmSync(out, { recursive: true, force: true });
-    }
-  });
-
-  test('a frame that shows a private address is refused', () => {
-    assert.throws(() => terminalFrame(tmp('nas (http://192.168.3.5:18570)')), /private address 192\.168\.3\.5/);
+  // The Library view and the specs show where a track lands; that is the
+  // default library_path_format, so the page cannot drift from the config.
+  test('the path the page shows follows the default library template', () => {
+    const config = fs.readFileSync(path.join(here, '..', '..', 'configs', 'config.example.yaml'), 'utf8');
+    const template = /^\s*library_path_format:\s*"([^"]+)"/m.exec(config)[1];
+    const want = `${template
+      .replace('{AlbumArtist}', 'Mira Solenne')
+      .replace('{AlbumName}', 'Glass Weather')
+      .replace('{SongNumber:02d}', '01')
+      .replace('{SongName}', 'Glass Weather')}.m4a`;
+    assert.equal(glassPath(0), want);
   });
 });
 
 describe('Open Graph card', () => {
-  test('the card carries the English hero', () => {
+  test('the card carries the English hero and the four stages', () => {
     const c = loadContent('en');
     const html = ogHtml(c);
     assert.doesNotMatch(html, /\{\{/);
-    assert.ok(html.includes(c.hero.subtitle));
+    for (const line of c.hero.title.split('\n')) assert.ok(html.includes(line), line);
+    for (const stage of c.hero.stages) assert.ok(html.includes(stage), stage);
+    assert.match(html, /<svg class="wave"/);
   });
 
   test('pngSize reads a PNG header and rejects other files', () => {
@@ -169,26 +135,6 @@ describe('Open Graph card', () => {
   });
 });
 
-describe('desktop demo', () => {
-  test('a desktop build given with --desktop is embedded', () => {
-    const web = fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-desktop-'));
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-site-'));
-    try {
-      fs.writeFileSync(path.join(web, 'index.html'), '<!doctype html><title>AMDL</title>');
-      fs.writeFileSync(path.join(web, 'icon.png'), '');
-      build({ out, desktop: parseArgs(['--desktop', web]).desktop });
-      assert.ok(fs.existsSync(path.join(out, 'demo', 'desktop', 'index.html')));
-      const html = fs.readFileSync(path.join(out, 'en', 'index.html'), 'utf8');
-      assert.match(html, /<iframe data-src="\.\.\/demo\/desktop\/"/);
-      assert.match(html, /<button class="win-start" type="button"><img src="\.\.\/demo\/desktop\/icon\.png"/);
-      assert.match(html, /id="tab-demo-desktop"/);
-    } finally {
-      fs.rmSync(web, { recursive: true, force: true });
-      fs.rmSync(out, { recursive: true, force: true });
-    }
-  });
-});
-
 describe('built site', () => {
   let out;
   let pages;
@@ -199,20 +145,33 @@ describe('built site', () => {
   });
   after(() => fs.rmSync(out, { recursive: true, force: true }));
 
-  test('without a desktop build or a terminal frame, the page has neither', () => {
+  test('the site is its pages and the favicon, with no app inside', () => {
+    assert.deepEqual(fs.readdirSync(out).sort(), ['en', 'favicon.svg', 'index.html', 'zh-CN']);
     for (const lang of LANGS) {
       const html = pages[`${lang.code}/index.html`];
-      assert.match(html, /<iframe data-demo data-src="\.\.\/demo\/console\/"/);
-      assert.doesNotMatch(html, /demo\/desktop|id="tab-demo-/);
-      assert.doesNotMatch(html, /class="term"/);
+      assert.doesNotMatch(html, /<iframe|<img |srcset=|demo\//);
     }
   });
 
-  test('the console views are the demo at their routes, with no screenshots', () => {
+  test('each page shows the three product views, each with its one button', () => {
     for (const lang of LANGS) {
       const html = pages[`${lang.code}/index.html`];
-      for (const v of Object.values(SCENES)) assert.ok(html.includes(`data-src="../demo/console/${v.route}"`), v.route);
-      assert.doesNotMatch(html, /<img |srcset=/);
+      const c = loadContent(lang.code);
+      for (const [view, button] of [
+        ['search', 'data-dl'],
+        ['queue', 'data-retry'],
+        ['library', 'data-fix'],
+      ]) {
+        const start = html.indexOf(`id="panel-${view}"`);
+        assert.ok(start > 0, `${lang.code}: no ${view} panel`);
+        const panel = html.slice(start, html.indexOf('</div></div></div>', start));
+        assert.match(panel, new RegExp(`role="group" aria-label="${c.product[view].label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`), `${lang.code} ${view}`);
+        assert.ok(html.includes(`<p class="app-title">${c.product[view].page}</p>`), `${lang.code}: ${view} title`);
+        assert.ok(html.slice(start).includes(button), `${lang.code}: ${view} has no ${button}`);
+        assert.match(html, new RegExp(`role="tab" id="tab-${view}" aria-controls="panel-${view}"`));
+      }
+      // The hero's waveform: four stages, one group each.
+      assert.equal([...html.matchAll(/<g class="st-\d">/g)].length, 4);
     }
   });
 
@@ -232,12 +191,10 @@ describe('built site', () => {
     for (const lang of LANGS) assert.match(pages['index.html'], new RegExp(`href="${lang.code}/"`));
   });
 
-  test('every local link, image and anchor resolves', () => {
+  test('every local link and anchor resolves', () => {
     for (const [page, html] of Object.entries(pages)) {
       const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
-      const refs = [...html.matchAll(/\s(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
-      for (const m of html.matchAll(/\ssrcset="([^"]+)"/g)) refs.push(...m[1].split(',').map((s) => s.trim().split(/\s+/)[0]));
-      for (const ref of refs) {
+      for (const [, ref] of html.matchAll(/\s(?:href|src)="([^"]+)"/g)) {
         if (/^https?:/.test(ref)) continue;
         if (ref.startsWith('#')) {
           assert.ok(ids.has(ref.slice(1)), `${page}: no element with id ${ref}`);
@@ -247,6 +204,7 @@ describe('built site', () => {
         const file = ref.endsWith('/') ? path.join(target, 'index.html') : target;
         assert.ok(fs.existsSync(file), `${page}: ${ref} does not exist`);
       }
+      for (const [, id] of html.matchAll(/aria-(?:controls|labelledby)="([^"]+)"/g)) assert.ok(ids.has(id), `${page}: no element with id ${id}`);
     }
   });
 
@@ -254,17 +212,27 @@ describe('built site', () => {
     for (const [page, html] of Object.entries(pages)) {
       assert.doesNotMatch(html, /<script[^>]+src=/, `${page} loads a script`);
       assert.doesNotMatch(html, /<link[^>]+rel="(?:stylesheet|preload|preconnect|dns-prefetch)"/, `${page} links a resource`);
-      assert.doesNotMatch(html, /<img[^>]+src="https?:/, `${page} loads a remote image`);
-      assert.doesNotMatch(html, /@import|url\(\s*["']?https?:/, `${page} pulls in remote CSS`);
+      assert.doesNotMatch(html, /@import|url\(/, `${page} pulls in CSS or images`);
     }
   });
 
-  test('every image has a size and alt text', () => {
-    for (const lang of LANGS) {
-      for (const [img] of pages[`${lang.code}/index.html`].matchAll(/<img [^>]+>/g)) {
-        assert.match(img, /\swidth="\d+" height="\d+"/, img);
-        assert.match(img, /\salt="[^"]*"/, img);
-      }
+  // The policy allows the page's own inline scripts and styles by hash, and
+  // nothing else: no style attributes, no handlers, no other host.
+  test('the Content-Security-Policy covers exactly the inline scripts and styles', () => {
+    const hash = (text) => `'sha256-${crypto.createHash('sha256').update(text, 'utf8').digest('base64')}'`;
+    for (const [page, html] of Object.entries(pages)) {
+      const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]+)">/.exec(html)?.[1];
+      assert.ok(policy, `${page} has no policy`);
+      const rules = Object.fromEntries(policy.split('; ').map((r) => [r.split(' ')[0], r.split(' ').slice(1)]));
+      assert.deepEqual(rules['default-src'], ["'none'"]);
+      assert.doesNotMatch(policy, /unsafe-|https?:|\*/);
+      const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => hash(m[1]));
+      const styles = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => hash(m[1]));
+      assert.ok(scripts.length && styles.length);
+      assert.deepEqual(rules['script-src'].sort(), scripts.sort(), `${page}: script hashes`);
+      assert.deepEqual(rules['style-src'].sort(), [...new Set(styles)].sort(), `${page}: style hashes`);
+      assert.doesNotMatch(html, /\sstyle="/, `${page} has a style attribute`);
+      assert.doesNotMatch(html, /\son[a-z]+="/, `${page} has an inline handler`);
     }
   });
 

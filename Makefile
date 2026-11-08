@@ -195,12 +195,10 @@ desktop-web: ## Build the desktop app's browser demo into apps/desktop/build/web
 	$(DESKTOP_MYGO) -platform web
 
 # The website as GitHub Pages publishes it (.github/workflows/pages.yml): the
-# desktop and terminal demos, a frame of the terminal interface (the golden
-# file its test keeps current), the pages, and the Open Graph card, which needs Chrome
-# (apps/site/og.mjs).
+# pages, and the Open Graph card, which needs Chrome (apps/site/og.mjs).
 SITE_OUT ?= apps/site/dist
 SITE_BASE ?= https://amdl.lyjw.me/
 
-site: desktop-web tui-web ## Build the website with its demos into SITE_OUT (default apps/site/dist/)
-	node apps/site/build.mjs --base $(SITE_BASE) --out $(SITE_OUT) --desktop apps/desktop/build/web --tui apps/amdl/internal/tui/testdata/frame-100.ansi --tui-web apps/amdl/build/web
+site: ## Build the website into SITE_OUT (default apps/site/dist/)
+	node apps/site/build.mjs --base $(SITE_BASE) --out $(SITE_OUT)
 	node apps/site/og.mjs --out $(SITE_OUT)

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Draws the Open Graph card into a built site: static/og.html with the English
-// hero's words, shot at 1200 x 630 by headless Chrome, as <out>/og.png. Social
+// hero's words and waveform, shot at 1200 x 630 by headless Chrome, as <out>/og.png. Social
 // sites show a picture, not the page, so this is the site's one image, and it
 // is drawn from the current text on every build. CHROME names the browser
 // binary; otherwise the usual names and install paths are tried.
@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { esc } from './blocks.mjs';
+import { waveform } from './mocks.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const OG_SIZE = { width: 1200, height: 630 };
@@ -19,8 +20,10 @@ export const OG_SIZE = { width: 1200, height: 630 };
 export function ogHtml(c) {
   const fill = {
     kicker: esc(c.hero.eyebrow),
-    title: esc(c.hero.title).replaceAll('\n', '<br>'),
-    subtitle: esc(c.hero.subtitle),
+    // The second line in the muted shade, as the hero sets it.
+    title: c.hero.title.split('\n').map((line, i) => (i ? `<span>${esc(line)}</span>` : esc(line))).join(''),
+    wave: waveform(),
+    stages: c.hero.stages.map((s, i) => `<div class="st-${i + 1}">${esc(s)}</div>`).join(''),
   };
   return fs.readFileSync(path.join(here, 'static', 'og.html'), 'utf8').replace(/\{\{(\w+)\}\}/g, (_, k) => {
     if (!(k in fill)) throw new Error(`static/og.html has an unknown field {{${k}}}`);
