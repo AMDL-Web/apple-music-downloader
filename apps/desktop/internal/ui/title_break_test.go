@@ -51,13 +51,27 @@ func TestALongTitleBreaksBeforeItsQualifiers(t *testing.T) {
 }
 
 // Each queue hero breaks a long title before its qualifiers at rest, the
-// latest download's too, which shows while nothing downloads.
+// latest download's too, which shows while nothing downloads: at every
+// window width where its names are narrower than the title but hold each
+// half, and at none where they hold the whole of it. The widths are the
+// hero's own and the halves are measured in the face the test lays out in,
+// the machine's, so the rule holds whatever fonts it has; the sweep
+// crosses both kinds of width in any of them.
 func TestBothQueueHeroesBreakALongTitleBeforeItsQualifiers(t *testing.T) {
+	const title, first, second = "First Love (Remastered 2014)", "First Love", "(Remastered 2014)"
+	const broken = first + "\n" + second
+	var whole, half float32
+	ui.NewTester(func(c *ui.Context) {
+		whole = titleWidth(c, title, heroTitle)
+		half = max(titleWidth(c, first, heroTitle), titleWidth(c, second, heroTitle))
+	}, 400, 300).Frame()
 	for _, latest := range []bool{false, true} {
 		a, run := demoApp(t)
 		s := a.Store
 		run(func() bool { return s.Loaded && s.Now() != nil })
+		hero := heroNow
 		if latest {
+			hero = heroLatest
 			for _, j := range s.Jobs {
 				if j.Status == domain.JobRunning || j.Status == domain.JobQueued {
 					s.Cancel(j.ID)
@@ -66,21 +80,35 @@ func TestBothQueueHeroesBreakALongTitleBeforeItsQualifiers(t *testing.T) {
 			run(func() bool { return s.Now() == nil && len(s.Finished()) > 0 })
 		}
 		a.Go(ScreenQueue)
-		j := a.heroJob()
-		j.Title = "First Love (Remastered 2014)"
-		// The latest download's hero, whose title runs wider, at 1000, where
-		// the title wraps in any face: in the test's narrower one it fits a
-		// line at the maintainer's 1189.
-		w := 1189
-		if latest {
-			w = 1000
+		a.heroJob().Title = title
+		tt := ui.NewTester(a.View, 900, 838)
+		var breaks, fits int
+		for w := 900; w <= 1800; w += 20 {
+			tt.SetSize(w, 838)
+			for range 4 {
+				tt.Advance(50 * time.Millisecond)
+			}
+			// A width within a pixel or two of the title or of a half is
+			// left out: the layout's rounding decides those.
+			names := a.heroNamesW[hero]
+			_, shown := tt.Find(broken)
+			switch {
+			case names <= 0:
+				t.Fatalf("latest %v at %d: the hero's names were not laid out", latest, w)
+			case names > whole+2:
+				fits++
+				if shown {
+					t.Errorf("latest %v at %d: a title that fits the hero's names (%.0f in %.0f) is broken", latest, w, whole, names)
+				}
+			case names < whole-2 && names > half+2:
+				breaks++
+				if !shown {
+					t.Errorf("latest %v at %d: the title (%.0f, its halves at most %.0f, in %.0f) is not broken before its qualifiers; the window shows %q", latest, w, whole, half, names, tt.Texts())
+				}
+			}
 		}
-		tt := ui.NewTester(a.View, w, 838)
-		for range 20 {
-			tt.Advance(50 * time.Millisecond)
-		}
-		if _, ok := tt.Find("First Love\n(Remastered 2014)"); !ok {
-			t.Errorf("latest %v: the hero's title is not broken before its qualifiers; the window shows %q", latest, tt.Texts())
+		if breaks == 0 || fits == 0 {
+			t.Errorf("latest %v: no window width from 900 to 1800 has the hero's names %s (title %.0f, halves at most %.0f)", latest, map[bool]string{true: "between the halves and the title", false: "wider than the title"}[breaks == 0], whole, half)
 		}
 	}
 }
