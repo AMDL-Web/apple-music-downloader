@@ -1,8 +1,8 @@
 {
   "artifact": "manager-qemu-guest",
-  "commit": "90a0be8ace2fbd0c30882740e77050f02832ad0f",
-  "sha256": "d28b3141f7a05d67fd9417a949bfa0ef8cf2f8fbb114ec1a8515d41b19fd835b",
-  "size": 21260294,
+  "commit": "fc15e315d619b088538da5b7506ee850f005e16d",
+  "sha256": "8dcc640c54fca7e6da5fd1f695f14d0e16ea734ad32305c06250819bcffd5ecf",
+  "size": 21331199,
   "lite": {
     "artifact": "wrapper-lite-linux-x86_64",
     "commit": "8885e67ac96b2b0c370f18e5b7c5a7edc5f19190",
