@@ -53,7 +53,7 @@ node --test apps/site/
 runs the tests; `make node-test` includes them.
 
 `make site` builds the page as published: the same build with `--base
-https://amdl.lyjw.me/`, then `og.mjs`, which draws `og.png` into the built site with
+https://amdl.dev/`, then `og.mjs`, which draws `og.png` into the built site with
 headless Chrome. `CHROME` names the browser binary when it is not in the usual places.
 It writes `apps/site/dist/` (`SITE_OUT` elsewhere).
 
@@ -151,11 +151,13 @@ gh api repos/AMDL-Web/apple-music-downloader/environments/github-pages/deploymen
   --jq '.branch_policies[].name'
 ```
 
-The domain is in the maintainer's Cloudflare zone: `amdl` is a CNAME to
-`amdl-web.github.io` with the proxy on, and the repository's Pages settings name
-`amdl.lyjw.me` as the custom domain. Cloudflare holds the certificate, redirects `http`
+The domain is the maintainer's Cloudflare zone `amdl.dev`: the apex is a CNAME to
+`amdl-web.github.io` with the proxy on (Cloudflare flattens it), and the repository's
+Pages settings name `amdl.dev` as the custom domain. `www.amdl.dev` and the old
+address `amdl.lyjw.me` answer with a `301` to the same path on `amdl.dev` (redirect
+rules in their zones). Cloudflare holds the certificate, redirects `http`
 to `https` (the zone's Always Use HTTPS) and sends the files Brotli-compressed: GitHub Pages answers with
-gzip, which Cloudflare would pass through, so a compression rule on `amdl.lyjw.me`
+gzip, which Cloudflare would pass through, so a compression rule on `amdl.dev`
 (Brotli first, then Auto) has it re-encode them. It reaches
 GitHub over HTTPS without checking GitHub's certificate (the zone's SSL mode Full):
 GitHub cannot issue a certificate for a proxied name, so Pages' own certificate and its
@@ -183,13 +185,13 @@ The site follows `dev` until a release and `main` from the release on.
 2. **Merge the release PR.** Its push to `main` runs the Pages workflow. Check:
    `gh run list --workflow pages.yml --branch main --limit 1`, then
    `timeout 900 gh run watch <run-id> --exit-status`; afterwards
-   `curl -sI https://amdl.lyjw.me/en/` answers `200`.
+   `curl -sI https://amdl.dev/en/` answers `200`.
 3. **Check the page's links.** Every link into the repository on the live page (the docs,
    the install scripts, the Compose file) answers `200` and points at `main`, and the
    install script finds the release:
 
    ```bash
-   curl -s https://amdl.lyjw.me/en/ \
+   curl -s https://amdl.dev/en/ \
      | grep -oE 'https://(raw\.githubusercontent\.com|github\.com)/AMDL-Web/[^"<# ]*' | sort -u \
      | xargs -n1 curl -so /dev/null -w '%{http_code} %{url_effective}\n'
    curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh | sh -s -- --dry-run
