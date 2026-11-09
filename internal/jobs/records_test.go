@@ -691,6 +691,25 @@ func TestAddAlbumsSkipsRemovedRecords(t *testing.T) {
 	}
 }
 
+// A picker pass whose list was read before a run did the record's work
+// queues nothing for it: the list is rechecked under the lock.
+func TestPickerSkipsRecordWhoseWorkIsDone(t *testing.T) {
+	p := &recordProcessor{dir: t.TempDir(), tracks: []string{"1", "2"}}
+	m, store := newRecordManager(t, p, config.Default())
+	ctx := context.Background()
+	startManager(t, m)
+
+	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
+	if done := waitTerminal(t, m, run.ID); done.Status != domain.JobCompleted {
+		t.Fatalf("run = %s, want completed", done.Status)
+	}
+	stale := []db.RecordRef{{Kind: domain.ResourceAlbum, ID: "100", Priority: domain.PriorityManual}}
+	m.pickRecords(ctx, stale, time.Now().UTC())
+	if runs := runsOf(t, store, domain.ResourceAlbum, "100"); len(runs) != 1 {
+		t.Fatalf("runs = %d, want only the first", len(runs))
+	}
+}
+
 // The picker queues one run per record with work, auto class after manual,
 // and a retry run for a record whose failed slot is due again.
 func TestPickerQueuesEligibleRecords(t *testing.T) {
