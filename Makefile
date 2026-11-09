@@ -197,7 +197,7 @@ desktop-web: ## Build the desktop app's browser demo into apps/desktop/build/web
 # The website as GitHub Pages publishes it (.github/workflows/pages.yml): the
 # pages, and the Open Graph card, which needs Chrome (apps/site/og.mjs).
 SITE_OUT ?= apps/site/dist
-SITE_BASE ?= https://amdl.lyjw.me/
+SITE_BASE ?= https://amdl.dev/
 
 site: ## Build the website into SITE_OUT (default apps/site/dist/)
 	node apps/site/build.mjs --base $(SITE_BASE) --out $(SITE_OUT)

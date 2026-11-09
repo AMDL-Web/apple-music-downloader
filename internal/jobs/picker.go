@@ -63,6 +63,12 @@ func (m *Manager) pickOnce(ctx context.Context) {
 	if len(refs) == 0 {
 		return
 	}
+	m.pickRecords(ctx, refs, now)
+}
+
+// pickRecords queues a run for each record of a list ListEligibleRecords
+// read before m.mu, rechecking each under it.
+func (m *Manager) pickRecords(ctx context.Context, refs []db.RecordRef, now time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, ref := range refs {
@@ -75,6 +81,11 @@ func (m *Manager) pickOnce(ctx context.Context) {
 		// The list was read before m.mu: a Pause since then has stopped the
 		// record's run, so without this check the record would get a new one.
 		if st, err := m.recordStatus(ctx, ref.Kind, ref.ID); err != nil || st.paused || st.catalog != domain.CatalogOK {
+			continue
+		}
+		// A run that ended since may have done the work the list saw, so
+		// without this check the record would get an empty run.
+		if needs, err := m.store.RecordNeedsRun(ctx, ref.Kind, ref.ID, now); err != nil || !needs {
 			continue
 		}
 		job, created, err := m.queueRecordRunLocked(ctx, ref.Kind, ref.ID, m.pickTrigger(ctx, ref), nil)
