@@ -282,7 +282,14 @@ var All = []Capability{
 }
 
 // NotExposed lists the operations no capability calls, with the reason.
-var NotExposed = map[string]string{}
+var NotExposed = map[string]string{
+	// A media-user-token is a credential: a command would leave it in shell
+	// history and a tool in the model's context. The console's account
+	// settings set it; accounts lists where each account's comes from.
+	"setAccountToken":   "takes a media-user-token, which belongs in the console, not shell history or a model's context",
+	"getAccountToken":   "accounts already says where each token comes from; this serves the console before any account is listed",
+	"clearAccountToken": "pairs with setAccountToken, which is console-only",
+}
 
 // Find returns the capability with a command or tool name.
 func Find(name string) (Capability, bool) {
