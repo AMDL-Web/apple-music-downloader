@@ -137,4 +137,9 @@ func TestAccountTokenRoutes(t *testing.T) {
 	if rec := requestJSON(t, handler, http.MethodPut, "/api/v1/accounts/wrapper/media-user-token", `{"token":"`+given+`"}`); rec.Code != http.StatusOK {
 		t.Fatalf("put wrapper = %d %s", rec.Code, rec.Body)
 	}
+	got = decodeBody(t, requestJSON(t, handler, http.MethodGet, "/api/v1/accounts/wrapper/media-user-token", "").Body.Bytes())
+	if got["source"] != "manual" || got["manual"].(map[string]any)["mode"] != "fallback" {
+		t.Fatalf("get wrapper = %v", got)
+	}
+	assertErrorCode(t, requestJSON(t, handler, http.MethodGet, "/api/v1/accounts/nope/media-user-token", ""), http.StatusNotFound, CodeAccountNotFound)
 }

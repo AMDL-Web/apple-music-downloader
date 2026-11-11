@@ -110,6 +110,21 @@ func (s *Server) setAccountToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.accountResponse(a))
 }
 
+// getAccountToken answers GET /accounts/{account_id}/media-user-token: where
+// the account's token comes from, without it. It serves the implicit account
+// before the wrapper lists any, which GET /accounts does not.
+func (s *Server) getAccountToken(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("account_id")
+	if _, ok, err := s.findAccount(r.Context(), id); err != nil {
+		writeStoreError(w, "list accounts", err)
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, CodeAccountNotFound, "no account has id "+id)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.accountToken(id))
+}
+
 // clearAccountToken answers DELETE /accounts/{account_id}/media-user-token:
 // the account goes back to the wrapper's token alone.
 func (s *Server) clearAccountToken(w http.ResponseWriter, r *http.Request) {

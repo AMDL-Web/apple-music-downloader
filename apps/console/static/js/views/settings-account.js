@@ -6,8 +6,8 @@
 // error, one that is stopped keeps its form disabled (a login needs it
 // running), and one whose guest disk may hold the last password says so.
 
-import { html, useState } from '../ui/preact.js';
-import { loginWrapper, submitWrapperTwoStep, logoutWrapper, setAccountToken, clearAccountToken } from '../api.js';
+import { html, useState, useEffect } from '../ui/preact.js';
+import { loginWrapper, submitWrapperTwoStep, logoutWrapper, setAccountToken, clearAccountToken, getAccountToken } from '../api.js';
 import { wrapperErrorText, wrapperUnreachable, managedMode, WRAPPER_LOGS } from '../lib/settings-account.js';
 import { useApp, Button, Notice, Icon, Badge } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -396,7 +396,19 @@ function TokenForm({ accounts }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const target = targets.find((a) => a.id === id) || targets[0];
-  const info = target.media_user_token || {};
+  // GET /accounts has no row for the wrapper's one account before it lists
+  // any, so its token's source is read on its own.
+  const implicit = !accounts.length;
+  const [implicitInfo, setImplicitInfo] = useState(null);
+  const loadImplicit = () =>
+    getAccountToken('wrapper').then(
+      (body) => setImplicitInfo(body || null),
+      () => setImplicitInfo(null),
+    );
+  useEffect(() => {
+    if (implicit) loadImplicit();
+  }, [implicit]);
+  const info = (implicit ? implicitInfo : target.media_user_token) || {};
   const manual = info.manual || null;
   const run = async (fn, message) => {
     setBusy(true);
@@ -406,6 +418,7 @@ function TokenForm({ accounts }) {
       app.toast({ message, role: 'success' });
       setToken('');
       refreshStatus('accounts');
+      if (implicit) loadImplicit();
     } catch (e) {
       setError(e);
     } finally {

@@ -190,6 +190,7 @@ func (s *Server) routes() []route {
 		{http.MethodGet, "/api/v1/accounts", h(s.listAccounts)},
 		{http.MethodPatch, "/api/v1/accounts/{account_id}", h(s.updateAccount)},
 		{http.MethodDelete, "/api/v1/accounts/{account_id}", h(s.deleteAccount)},
+		{http.MethodGet, "/api/v1/accounts/{account_id}/media-user-token", h(s.getAccountToken)},
 		{http.MethodPut, "/api/v1/accounts/{account_id}/media-user-token", h(s.setAccountToken)},
 		{http.MethodDelete, "/api/v1/accounts/{account_id}/media-user-token", h(s.clearAccountToken)},
 		{http.MethodGet, "/api/v1/library-sync", h(s.librarySyncStatus)},
