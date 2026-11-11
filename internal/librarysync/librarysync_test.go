@@ -32,6 +32,8 @@ type fakeLibrary struct {
 	// onResolve, when set, runs at the start of every LibraryAlbumCatalogURL
 	// call, i.e. in the middle of a pass.
 	onResolve func()
+	// pageErr, when set, fails every page request.
+	pageErr error
 }
 
 func (f *fakeLibrary) LibrarySongsNewestFirst(_ context.Context, token string, offset, limit int) ([]applemusic.LibrarySong, bool, error) {
@@ -40,6 +42,9 @@ func (f *fakeLibrary) LibrarySongsNewestFirst(_ context.Context, token string, o
 	}
 	f.pageCalls++
 	f.lastToken = token
+	if f.pageErr != nil {
+		return nil, false, f.pageErr
+	}
 	if offset >= len(f.songs) {
 		return nil, false, nil
 	}
@@ -551,4 +556,29 @@ func (w *Watcher) statusOf(t *testing.T) AccountStatus {
 		}
 	}
 	return AccountStatus{AccountID: testAccount}
+}
+
+// refusedToken is Apple refusing the media-user-token (applemusic.IsUserTokenRejected).
+type refusedToken struct{}
+
+func (refusedToken) Error() string           { return "401 Unauthorized" }
+func (refusedToken) UserTokenRejected() bool { return true }
+
+// A pass Apple refuses marks the given token it used as refused.
+func TestRefusedPassMarksTheGivenToken(t *testing.T) {
+	cfg := config.Default()
+	cfg.LibrarySync.Enabled = true
+	tokens := usertoken.NewReading(func(string) (string, error) { return "", nil })
+	if err := tokens.LoadManual(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tokens.SetManual(testAccount, strings.Repeat("G", 100), usertoken.ManualFallback); err != nil {
+		t.Fatal(err)
+	}
+	lib := &fakeLibrary{pageErr: refusedToken{}}
+	w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w.RunOnce(context.Background(), testAccount)
+	if m, _ := tokens.ManualFor(testAccount); !m.Rejected {
+		t.Fatal("the given token Apple refused is not marked")
+	}
 }

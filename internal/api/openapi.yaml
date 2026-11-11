@@ -858,7 +858,11 @@ paths:
       - name: account_id
         in: path
         required: true
-        description: Account.id. wrapper (the one account of a wrapper that does not list accounts) is always accepted, so a token can be given before the wrapper has any.
+        description: >-
+          Account.id. wrapper (the one account of a wrapper that does not list
+          accounts) is always accepted, so a token can be given before the
+          wrapper has any; a token given for wrapper also serves every account
+          that has none of its own.
         schema:
           type: string
     get:
