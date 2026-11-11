@@ -108,7 +108,10 @@ func (s tokenStore) load(address string) (string, error) {
 
 // save writes st to a temporary file in the store directory, mode 0600, and
 // renames it over the copy, so a reader sees the old copy or the new one.
-func (s tokenStore) save(st storedToken) error {
+func (s tokenStore) save(st storedToken) error { return s.saveJSON(st) }
+
+// saveJSON is save for any JSON value: a stored copy or a given token.
+func (s tokenStore) saveJSON(st any) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
