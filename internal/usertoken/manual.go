@@ -158,11 +158,16 @@ func (p *Provider) ClearManual(accountID string) error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	delete(p.manual, accountID)
 	if p.manual == nil {
 		return nil
 	}
-	return manualStore(p.manualDir, accountID).drop()
+	// The file first: a failed drop keeps the token in use, as it would be
+	// again after a restart.
+	if err := manualStore(p.manualDir, accountID).drop(); err != nil {
+		return err
+	}
+	delete(p.manual, accountID)
+	return nil
 }
 
 // ManualFor describes the account's given token, false when there is none.
