@@ -131,6 +131,10 @@ export const deleteHook = (name) => request('DELETE', `/api/v1/hooks/${encodeURI
 export const getLibrarySync = () => request('GET', '/api/v1/library-sync');
 /** {accounts: [{id, name, region, position, default, library_sync, apple_library, state, ...}]}, default first. */
 export const getAccounts = () => request('GET', '/api/v1/accounts');
+/** Give an account's media-user-token; mode 'fallback' (used while the wrapper has none) or 'override'. */
+export const setAccountToken = (id, token, mode) =>
+  request('PUT', `/api/v1/accounts/${encodeURIComponent(id)}/media-user-token`, undefined, { body: { token, mode } });
+export const clearAccountToken = (id) => request('DELETE', `/api/v1/accounts/${encodeURIComponent(id)}/media-user-token`);
 export const getWrapperStatus = () => request('GET', '/api/v1/wrapper/status');
 export const listDownloads = (query) => request('GET', '/api/v1/downloads', query);
 export const getDownload = (id) => request('GET', `/api/v1/downloads/${encodeURIComponent(id)}`);

@@ -1,7 +1,8 @@
 // Package usertoken decides which Apple Music media-user-token the backend
 // uses for which account. The wrapper keeps each account's token and
 // refreshes it on its own; amdl reads it over HTTP and never takes one from
-// its config.
+// its config. The user may give one per account as well (manual.go), kept
+// next to the wrapper's copies as manual-<file>, which amdl never refreshes.
 //
 // Accounts are the rows of the accounts table (internal/db), which the
 // account discovery (internal/accounts) passes in with SetAccounts: a
@@ -12,11 +13,14 @@
 //
 // Where an account's token comes from, first match wins:
 //
+//  0. A token the user gave for the account (SetManual, PUT
+//     /accounts/{id}/media-user-token) in override mode.
 //  1. The wrapper's GET /token (amdl's wrapper-lite fork; GET
 //     /token?instance=<id> on a wrapper-manager), held in memory from this
 //     run's last 200.
 //  2. amdl's stored copy of an earlier run's GET /token, until the wrapper
 //     answers in this run, so amdl keeps working while the wrapper restarts.
+//  3. A token the user gave in fallback mode, for a wrapper that has none.
 //
 // TokenFor picks by storefront: the active account of that region with the
 // lowest position, else the default account.
@@ -64,6 +68,8 @@ const (
 	// SourceWrapper is the wrapper's token: its GET /token, or amdl's stored
 	// copy of that.
 	SourceWrapper Source = "wrapper"
+	// SourceManual is a token the user gave (SetManual).
+	SourceManual Source = "manual"
 )
 
 // Token is an effective media-user-token, where it came from and the
@@ -111,6 +117,11 @@ type Provider struct {
 	run   context.Context
 	stops map[string]context.CancelFunc
 	loops sync.WaitGroup
+
+	// manualDir and manual are the tokens the user gave (manual.go); manual
+	// is nil until LoadManual.
+	manualDir string
+	manual    map[string]manualEntry
 
 	errMu   sync.Mutex
 	lastErr string
@@ -274,14 +285,19 @@ func (p *Provider) RefreshSoon() {
 	}
 }
 
-// Forget drops what amdl keeps of a deleted account: its stored copy and its
-// loop.
+// Forget drops what amdl keeps of a deleted account: its stored copy, the
+// token the user gave for it and its loop.
 func (p *Provider) Forget(accountID string) error {
 	if p == nil {
 		return nil
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	var manualErr error
+	if p.manual != nil {
+		delete(p.manual, accountID)
+		manualErr = manualStore(p.manualDir, accountID).drop()
+	}
 	if stop := p.stops[accountID]; stop != nil {
 		stop()
 		delete(p.stops, accountID)
@@ -292,12 +308,12 @@ func (p *Provider) Forget(accountID string) error {
 		r.mu.Lock()
 		r.live, r.stored = "", ""
 		r.mu.Unlock()
-		return r.store.drop()
+		return errors.Join(manualErr, r.store.drop())
 	}
 	if p.endpoint != nil {
-		return tokenStore{dir: p.endpoint.Dir, name: storeFileName(accountID)}.drop()
+		return errors.Join(manualErr, tokenStore{dir: p.endpoint.Dir, name: storeFileName(accountID)}.drop())
 	}
-	return nil
+	return manualErr
 }
 
 // DefaultAccount is the id of the default account: position 0, or the
@@ -373,14 +389,21 @@ func (p *Provider) TokenFor(cfg config.Config, storefront string) Token {
 	return p.Account(cfg, p.AccountFor(storefront))
 }
 
-// Account returns an account's effective token (Wrapper), none when amdl
-// has none for it. An invalid NewReading value is logged once per distinct
+// Account returns an account's effective token in the package comment's
+// order (a given token, then Wrapper), none when amdl has none for it. An invalid NewReading value is logged once per distinct
 // error.
 func (p *Provider) Account(cfg config.Config, accountID string) Token {
+	given, hasGiven := p.manualToken(accountID)
+	if hasGiven && given.Mode == ManualOverride {
+		return Token{Value: given.value, Source: SourceManual, Account: accountID}
+	}
 	v, err := p.Wrapper(cfg, accountID)
 	p.noteErr(err)
 	if err == nil && v != "" {
 		return Token{Value: v, Source: SourceWrapper, Account: accountID}
+	}
+	if hasGiven {
+		return Token{Value: given.value, Source: SourceManual, Account: accountID}
 	}
 	return Token{Account: accountID}
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AMDL Backend API
-  version: 2.0.0
+  version: 2.0.1
   description: |
     Apple Music download jobs and wrapper account management API. The URL prefix
     stays /api/v1; info.version is the version of this contract.
@@ -853,6 +853,64 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         '502':
           $ref: '#/components/responses/BadGateway'
+  /api/v1/accounts/{account_id}/media-user-token:
+    parameters:
+      - name: account_id
+        in: path
+        required: true
+        description: Account.id. wrapper (the one account of a wrapper that does not list accounts) is always accepted, so a token can be given before the wrapper has any.
+        schema:
+          type: string
+    put:
+      tags: [Accounts]
+      summary: Give an account's media-user-token
+      description: >-
+        Stores a media-user-token for the account, for a wrapper that has none
+        or to replace the one it gives. mode fallback (the default) uses it only
+        while the wrapper has no token for the account; override uses it ahead
+        of the wrapper's. amdl keeps it next to its copies of the wrapper's
+        tokens (mode 0600), never in config.yaml, never refreshes it and never
+        returns it. When Apple refuses it, the account's
+        media_user_token.manual.rejected turns true and amdl keeps using it
+        until it is replaced or deleted.
+      operationId: setAccountToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountTokenSet'
+      responses:
+        '200':
+          description: The account as it is now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
+        '413':
+          $ref: '#/components/responses/JSONBodyTooLarge'
+        '500':
+          $ref: '#/components/responses/StoreError'
+    delete:
+      tags: [Accounts]
+      summary: Delete an account's given media-user-token
+      description: The account goes back to the wrapper's token alone. Deleting none is not an error.
+      operationId: clearAccountToken
+      responses:
+        '200':
+          description: The account as it is now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
   /api/v1/wrapper/status:
     get:
       tags: [Wrapper]
@@ -3063,6 +3121,44 @@ components:
             wrapper at the last discovery: the wrapper-manager lists it but
             routes nothing to it, so its region's downloads fail until it
             logs in again.
+        media_user_token:
+          $ref: '#/components/schemas/AccountToken'
+    AccountToken:
+      type: object
+      description: Where the account's media-user-token comes from. It never carries the token.
+      required: [source]
+      properties:
+        source:
+          type: string
+          enum: [wrapper, manual, none]
+          description: >-
+            wrapper: the wrapper's GET /token (or amdl's copy of it); manual: the
+            token given with PUT /accounts/{account_id}/media-user-token; none:
+            amdl has no token for the account.
+        manual:
+          type: object
+          description: The given token, when there is one.
+          required: [mode, set_at, rejected]
+          properties:
+            mode:
+              type: string
+              enum: [fallback, override]
+            set_at: {type: string, format: date-time}
+            rejected:
+              type: boolean
+              description: Apple refused the given token since it was given or amdl started.
+    AccountTokenSet:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          description: The media-user-token, 16 to 4096 base64 or base64url characters; surrounding whitespace is trimmed.
+        mode:
+          type: string
+          enum: [fallback, override]
+          default: fallback
     AccountList:
       type: object
       required: [accounts]

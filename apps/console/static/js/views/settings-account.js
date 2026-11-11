@@ -7,7 +7,7 @@
 // running), and one whose guest disk may hold the last password says so.
 
 import { html, useState } from '../ui/preact.js';
-import { loginWrapper, submitWrapperTwoStep, logoutWrapper } from '../api.js';
+import { loginWrapper, submitWrapperTwoStep, logoutWrapper, setAccountToken, clearAccountToken } from '../api.js';
 import { wrapperErrorText, wrapperUnreachable, managedMode, WRAPPER_LOGS } from '../lib/settings-account.js';
 import { useApp, Button, Notice, Icon, Badge } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -43,11 +43,11 @@ export function AccountPanel() {
 
   // The section head says the service is unreachable, its note the error in
   // a line with the server's own words as its tooltip; the body has nothing
-  // more to add.
-  if (down) return null;
+  // more to add but the token form, which works without the wrapper.
+  const accounts = accountsRes && !accountsRes.error ? accountList(accountsRes.data) : [];
+  if (down) return html`<div class="account"><${TokenForm} accounts=${accounts} /></div>`;
 
   const w = res && !res.error ? res.data : null;
-  const accounts = accountsRes && !accountsRes.error ? accountList(accountsRes.data) : [];
   const canLogin = !w || w.login_supported !== false;
   const managed = w && w.managed ? w.managed : null;
   const mode = managedMode(w);
@@ -98,6 +98,7 @@ export function AccountPanel() {
         : w && w.logged_in
           ? null
           : html`<${CommandLineLogin} />`}
+    <${TokenForm} accounts=${accounts} />
     ${logout !== null
       ? html`<${LogoutDialog}
           account=${logout}
@@ -374,6 +375,80 @@ function LoginForm({ onDone, again, managed, off }) {
         disabled=${off}
         aria-disabled=${busy ? 'true' : undefined}
       >${busy ? 'Logging in…' : 'Log in'}</${Button}>
+    </div>
+  </form>`;
+}
+
+const TOKEN_SOURCE = { wrapper: 'from the wrapper', manual: 'given here', none: 'none' };
+
+/**
+ * A media-user-token given by hand, per account: for a wrapper that has none
+ * (fallback) or in place of the one it gives (override). The page never
+ * reads a token back; it shows where each account's comes from. With no
+ * account listed it targets the wrapper's one account, id wrapper.
+ */
+function TokenForm({ accounts }) {
+  const app = useApp();
+  const targets = accounts.length ? accounts : [{ id: 'wrapper' }];
+  const [id, setId] = useState('');
+  const [token, setToken] = useState('');
+  const [mode, setMode] = useState('fallback');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const target = targets.find((a) => a.id === id) || targets[0];
+  const info = target.media_user_token || {};
+  const manual = info.manual || null;
+  const run = async (fn, message) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      app.toast({ message, role: 'success' });
+      setToken('');
+      refreshStatus('accounts');
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = (e) => {
+    e.preventDefault();
+    if (busy || !token.trim()) return;
+    run(() => setAccountToken(target.id, token.trim(), mode), 'Media-user-token saved');
+  };
+  return html`<form class="account-block token-form" aria-labelledby="token-title" onSubmit=${save}>
+    <h3 class="section-title" id="token-title">Media-user-token</h3>
+    <p class="muted small">amdl reads each account's token from the wrapper. Give one here when the wrapper has none, or to use yours instead. It is kept on the server and never shown again.</p>
+    ${targets.length > 1
+      ? html`<div class="form-row">
+          <label class="field-label" for="token-account">Account</label>
+          <select id="token-account" class="field-input" value=${target.id} onChange=${(e) => setId(e.currentTarget.value)}>
+            ${targets.map((a) => html`<option key=${a.id} value=${a.id}>${accountLabel(a) || a.id}</option>`)}
+          </select>
+        </div>`
+      : null}
+    ${info.source
+      ? html`<p class="small token-source">
+          In use: ${TOKEN_SOURCE[info.source] || info.source}${manual ? ` · given token: ${manual.mode === 'override' ? 'overrides the wrapper' : 'used while the wrapper has none'}` : ''}
+          ${manual && manual.rejected ? html` <${Badge} view=${{ role: 'warning', icon: 'triangle-alert', label: 'Refused by Apple', title: 'Apple refused the given token. Replace or remove it.' }} />` : null}
+        </p>`
+      : null}
+    <div class="form-row">
+      <label class="field-label" for="token-value">Token</label>
+      <input id="token-value" class="field-input mono" type="password" autocomplete="off" spellcheck="false" value=${token} onInput=${(e) => setToken(e.currentTarget.value)} />
+    </div>
+    <div class="form-row">
+      <label class="field-label" for="token-mode">Use it</label>
+      <select id="token-mode" class="field-input" value=${mode} onChange=${(e) => setMode(e.currentTarget.value)}>
+        <option value="fallback">Only while the wrapper has none</option>
+        <option value="override">Instead of the wrapper's</option>
+      </select>
+    </div>
+    ${error ? html`<${Notice} role="danger" icon="circle-x"><span>${error.message || String(error)}</span></${Notice}>` : null}
+    <div class="form-actions">
+      <${Button} type="submit" variant="primary" icon="key" aria-disabled=${busy || !token.trim() ? 'true' : undefined}>Save token</${Button}>
+      ${manual ? html`<${Button} variant="secondary" disabled=${busy} onClick=${() => run(() => clearAccountToken(target.id), 'Given token removed')}>Remove given token</${Button}>` : null}
     </div>
   </form>`;
 }

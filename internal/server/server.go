@@ -147,6 +147,9 @@ func Run(ctx context.Context, opts Options) (err error) {
 	// One token provider serves downloads, lookups, wrapper status and library
 	// sync, so all of them pick the same account's media-user-token.
 	tokens := usertoken.New()
+	if err := tokens.LoadManual(usertoken.StoreDir(cfg.Database.Path)); err != nil {
+		logger.Warn("a media-user-token given in the console is unusable; ignoring it", "error", err.Error())
+	}
 
 	hooksCfg, err := hooks.LoadConfig(opts.HooksPath)
 	if err != nil {
