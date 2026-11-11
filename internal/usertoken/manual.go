@@ -36,6 +36,9 @@ const manualFilePrefix = "manual-"
 // Rejected is set when Apple refused it since it was given; it is not stored,
 // so a restart tries it again.
 type Manual struct {
+	// Account is the account the token was given for: the one asked about,
+	// or the implicit account's, which serves every account without its own.
+	Account  string
 	Mode     ManualMode
 	SetAt    time.Time
 	Rejected bool
@@ -88,7 +91,7 @@ func (p *Provider) LoadManual(dir string) error {
 			errs = append(errs, err)
 			continue
 		}
-		p.manual[st.Account] = manualEntry{value: st.MusicToken, Manual: Manual{Mode: st.Mode, SetAt: time.Unix(st.SetAt, 0).UTC()}}
+		p.manual[st.Account] = manualEntry{value: st.MusicToken, Manual: Manual{Account: st.Account, Mode: st.Mode, SetAt: time.Unix(st.SetAt, 0).UTC()}}
 	}
 	return errors.Join(errs...)
 }
@@ -142,7 +145,7 @@ func (p *Provider) SetManual(accountID, raw string, mode ManualMode) (Manual, er
 	if p.manual == nil {
 		return Manual{}, errors.New("given tokens are not loaded")
 	}
-	m := Manual{Mode: mode, SetAt: time.Now().UTC().Truncate(time.Second)}
+	m := Manual{Account: accountID, Mode: mode, SetAt: time.Now().UTC().Truncate(time.Second)}
 	st := storedManual{Account: accountID, Mode: mode, MusicToken: v, SetAt: m.SetAt.Unix()}
 	if err := manualStore(p.manualDir, accountID).saveJSON(st); err != nil {
 		return Manual{}, err
@@ -170,18 +173,16 @@ func (p *Provider) ClearManual(accountID string) error {
 	return nil
 }
 
-// ManualFor describes the account's given token, false when there is none.
+// ManualFor describes the given token the account uses (manualToken), false
+// when there is none.
 func (p *Provider) ManualFor(accountID string) (Manual, bool) {
-	if p == nil {
-		return Manual{}, false
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	e, ok := p.manual[accountID]
+	e, ok := p.manualToken(accountID)
 	return e.Manual, ok
 }
 
-// manualToken is the account's given token, false when there is none.
+// manualToken is the given token the account uses: its own, else the
+// implicit account's, which serves every account without one; false when
+// there is none.
 func (p *Provider) manualToken(accountID string) (manualEntry, bool) {
 	if p == nil {
 		return manualEntry{}, false
@@ -189,6 +190,9 @@ func (p *Provider) manualToken(accountID string) (manualEntry, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	e, ok := p.manual[accountID]
+	if !ok && accountID != implicitID {
+		e, ok = p.manual[implicitID]
+	}
 	return e, ok
 }
 

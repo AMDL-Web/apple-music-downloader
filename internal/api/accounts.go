@@ -38,6 +38,7 @@ type accountTokenResponse struct {
 }
 
 type manualTokenResponse struct {
+	Account  string               `json:"account"`
 	Mode     usertoken.ManualMode `json:"mode"`
 	SetAt    time.Time            `json:"set_at"`
 	Rejected bool                 `json:"rejected"`
@@ -53,7 +54,7 @@ func (s *Server) accountToken(id string) accountTokenResponse {
 		out.Source = "none"
 	}
 	if m, ok := s.tokens.ManualFor(id); ok {
-		out.Manual = &manualTokenResponse{Mode: m.Mode, SetAt: m.SetAt, Rejected: m.Rejected}
+		out.Manual = &manualTokenResponse{Account: m.Account, Mode: m.Mode, SetAt: m.SetAt, Rejected: m.Rejected}
 	}
 	return out
 }

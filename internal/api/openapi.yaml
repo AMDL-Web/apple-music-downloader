@@ -3160,9 +3160,14 @@ components:
             amdl has no token for the account.
         manual:
           type: object
-          description: The given token, when there is one.
-          required: [mode, set_at, rejected]
+          description: The given token the account uses, when there is one.
+          required: [account, mode, set_at, rejected]
           properties:
+            account:
+              type: string
+              description: >-
+                The account it was given for: this one, or wrapper, whose given
+                token serves every account without its own. Delete it there.
             mode:
               type: string
               enum: [fallback, override]
