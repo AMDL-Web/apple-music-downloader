@@ -321,7 +321,9 @@ curl -X PUT http://localhost:18080/api/v1/accounts/wrapper/media-user-token \
 
 `mode` `fallback` (the default) uses it only while the wrapper has none for the account;
 `override` uses it ahead of the wrapper's. The id `wrapper` is always accepted, so a token
-can be given before the wrapper lists any account. amdl keeps it in `usertoken/` next to the
+can be given before the wrapper lists any account. A token given for `wrapper` also serves every account
+that has none of its own, so one given before a wrapper-manager listed its accounts keeps working
+after. amdl keeps it in `usertoken/` next to the
 database (mode 0600), never in `config.yaml`, never refreshes it and never returns it. Each
 account's `media_user_token` says where its token comes from (`source` `wrapper`, `manual`
 or `none`) and, for a given one, its `mode`, `set_at` and `rejected` (Apple refused it).

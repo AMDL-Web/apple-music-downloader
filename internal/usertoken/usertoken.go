@@ -394,6 +394,11 @@ func (p *Provider) TokenFor(cfg config.Config, storefront string) Token {
 // error.
 func (p *Provider) Account(cfg config.Config, accountID string) Token {
 	given, hasGiven := p.manualToken(accountID)
+	if !hasGiven && accountID != implicitID {
+		// A token given for the implicit account, often before the wrapper
+		// listed any, serves every account that has none of its own.
+		given, hasGiven = p.manualToken(implicitID)
+	}
 	if hasGiven && given.Mode == ManualOverride {
 		return Token{Value: given.value, Source: SourceManual, Account: accountID}
 	}
