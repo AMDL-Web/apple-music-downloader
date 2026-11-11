@@ -134,6 +134,7 @@ export const getAccounts = () => request('GET', '/api/v1/accounts');
 /** Give an account's media-user-token; mode 'fallback' (used while the wrapper has none) or 'override'. */
 export const setAccountToken = (id, token, mode) =>
   request('PUT', `/api/v1/accounts/${encodeURIComponent(id)}/media-user-token`, undefined, { body: { token, mode } });
+export const getAccountToken = (id) => request('GET', `/api/v1/accounts/${encodeURIComponent(id)}/media-user-token`);
 export const clearAccountToken = (id) => request('DELETE', `/api/v1/accounts/${encodeURIComponent(id)}/media-user-token`);
 export const getWrapperStatus = () => request('GET', '/api/v1/wrapper/status');
 export const listDownloads = (query) => request('GET', '/api/v1/downloads', query);

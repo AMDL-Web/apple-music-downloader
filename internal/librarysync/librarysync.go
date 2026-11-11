@@ -276,6 +276,9 @@ func (w *Watcher) runOnce(ctx context.Context, st *accountState, region string) 
 		st.lastError = ""
 	}
 	st.mu.Unlock()
+	if applemusic.IsUserTokenRejected(err) {
+		w.tokens.NoteRejected(token)
+	}
 	if err != nil && !errors.Is(err, context.Canceled) {
 		st.logger.Warn("library sync pass failed", "error", err)
 	}

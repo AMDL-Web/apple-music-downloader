@@ -861,6 +861,25 @@ paths:
         description: Account.id. wrapper (the one account of a wrapper that does not list accounts) is always accepted, so a token can be given before the wrapper has any.
         schema:
           type: string
+    get:
+      tags: [Accounts]
+      summary: Say where an account's media-user-token comes from
+      description: >-
+        The account's media_user_token as GET /accounts gives it, without the
+        token. It also answers for wrapper before the wrapper lists any account,
+        which GET /accounts does not.
+      operationId: getAccountToken
+      responses:
+        '200':
+          description: Where the token comes from.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountToken'
+        '404':
+          $ref: '#/components/responses/AccountNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
     put:
       tags: [Accounts]
       summary: Give an account's media-user-token

@@ -325,7 +325,9 @@ can be given before the wrapper lists any account. amdl keeps it in `usertoken/`
 database (mode 0600), never in `config.yaml`, never refreshes it and never returns it. Each
 account's `media_user_token` says where its token comes from (`source` `wrapper`, `manual`
 or `none`) and, for a given one, its `mode`, `set_at` and `rejected` (Apple refused it).
-`DELETE /accounts/{account_id}/media-user-token` goes back to the wrapper's alone.
+`GET /accounts/{account_id}/media-user-token` answers that object on its own, `wrapper`
+included before the wrapper lists any account. `DELETE /accounts/{account_id}/media-user-token`
+goes back to the wrapper's alone.
 `position: 0` makes the account the default. The answer is the updated account;
 `404 account_not_found`.
 
