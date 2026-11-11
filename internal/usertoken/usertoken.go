@@ -393,12 +393,9 @@ func (p *Provider) TokenFor(cfg config.Config, storefront string) Token {
 // order (a given token, then Wrapper), none when amdl has none for it. An invalid NewReading value is logged once per distinct
 // error.
 func (p *Provider) Account(cfg config.Config, accountID string) Token {
+	// A token given for the implicit account, often before the wrapper
+	// listed any, serves every account that has none of its own.
 	given, hasGiven := p.manualToken(accountID)
-	if !hasGiven && accountID != implicitID {
-		// A token given for the implicit account, often before the wrapper
-		// listed any, serves every account that has none of its own.
-		given, hasGiven = p.manualToken(implicitID)
-	}
 	if hasGiven && given.Mode == ManualOverride {
 		return Token{Value: given.value, Source: SourceManual, Account: accountID}
 	}

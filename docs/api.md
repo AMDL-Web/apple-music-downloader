@@ -326,7 +326,8 @@ that has none of its own, so one given before a wrapper-manager listed its accou
 after. amdl keeps it in `usertoken/` next to the
 database (mode 0600), never in `config.yaml`, never refreshes it and never returns it. Each
 account's `media_user_token` says where its token comes from (`source` `wrapper`, `manual`
-or `none`) and, for a given one, its `mode`, `set_at` and `rejected` (Apple refused it).
+or `none`) and, for a given one, the `account` it was given for (this one or `wrapper`), its
+`mode`, `set_at` and `rejected` (Apple refused it).
 `GET /accounts/{account_id}/media-user-token` answers that object on its own, `wrapper`
 included before the wrapper lists any account. `DELETE /accounts/{account_id}/media-user-token`
 goes back to the wrapper's alone.

@@ -461,7 +461,7 @@ function TokenForm({ accounts }) {
     ${error ? html`<${Notice} role="danger" icon="circle-x"><span>${error.message || String(error)}</span></${Notice}>` : null}
     <div class="form-actions">
       <${Button} type="submit" variant="primary" icon="key" aria-disabled=${busy || !token.trim() ? 'true' : undefined}>Save token</${Button}>
-      ${manual ? html`<${Button} variant="secondary" disabled=${busy} onClick=${() => run(() => clearAccountToken(target.id), 'Given token removed')}>Remove given token</${Button}>` : null}
+      ${manual ? html`<${Button} variant="secondary" disabled=${busy} onClick=${() => run(() => clearAccountToken(manual.account || target.id), 'Given token removed')}>Remove given token</${Button}>` : null}
     </div>
   </form>`;
 }

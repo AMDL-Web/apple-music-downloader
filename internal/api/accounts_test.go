@@ -142,4 +142,9 @@ func TestAccountTokenRoutes(t *testing.T) {
 		t.Fatalf("get wrapper = %v", got)
 	}
 	assertErrorCode(t, requestJSON(t, handler, http.MethodGet, "/api/v1/accounts/nope/media-user-token", ""), http.StatusNotFound, CodeAccountNotFound)
+	// jp-id has none of its own, so it uses wrapper's and says so.
+	got = decodeBody(t, requestJSON(t, handler, http.MethodGet, "/api/v1/accounts/jp-id/media-user-token", "").Body.Bytes())
+	if got["source"] != "manual" || got["manual"].(map[string]any)["account"] != "wrapper" {
+		t.Fatalf("jp-id inheriting = %v", got)
+	}
 }
