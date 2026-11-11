@@ -308,6 +308,29 @@ curl -X PATCH http://localhost:18080/api/v1/accounts/6f1c… \
 ```
 
 Any of `library_sync`, `apple_library` and `position` (an integer from 0), at least one.
+
+### A media-user-token given by hand
+
+When the wrapper has no token for an account (logged out, an upstream wrapper-lite without
+`GET /token`), or you want amdl to use another one, give it yourself:
+
+```bash
+curl -X PUT http://localhost:18080/api/v1/accounts/wrapper/media-user-token \
+  -d '{"token":"<media-user-token>","mode":"fallback"}'
+```
+
+`mode` `fallback` (the default) uses it only while the wrapper has none for the account;
+`override` uses it ahead of the wrapper's. The id `wrapper` is always accepted, so a token
+can be given before the wrapper lists any account. A token given for `wrapper` also serves every account
+that has none of its own, so one given before a wrapper-manager listed its accounts keeps working
+after. amdl keeps it in `usertoken/` next to the
+database (mode 0600), never in `config.yaml`, never refreshes it and never returns it. Each
+account's `media_user_token` says where its token comes from (`source` `wrapper`, `manual`
+or `none`) and, for a given one, the `account` it was given for (this one or `wrapper`), its
+`mode`, `set_at` and `rejected` (Apple refused it).
+`GET /accounts/{account_id}/media-user-token` answers that object on its own, `wrapper`
+included before the wrapper lists any account. `DELETE /accounts/{account_id}/media-user-token`
+goes back to the wrapper's alone.
 `position: 0` makes the account the default. The answer is the updated account;
 `404 account_not_found`.
 

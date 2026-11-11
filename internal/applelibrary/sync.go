@@ -80,6 +80,7 @@ func (e *Engine) pass(ctx context.Context, token string) Run {
 	}
 	e.mu.Lock()
 	if applemusic.IsUserTokenRejected(err) {
+		e.tokens.NoteRejected(token)
 		e.refused = sha256.Sum256([]byte(token))
 		run.Error = UnavailableError{Reason: ReasonTokenRefused}.Error()
 	} else if e.refused == sha256.Sum256([]byte(token)) {

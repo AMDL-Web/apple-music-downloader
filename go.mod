@@ -3,7 +3,7 @@ module amdl
 // Keep this in step with the golang image in deploy/server/Dockerfile. CI resolves its Go
 // version from this line (go-version-file: go.mod), so letting the two drift
 // means the released binary is built by a toolchain CI never exercised.
-go 1.27.3
+go 1.27.4
 
 require (
 	charm.land/bubbles/v2 v2.2.1
