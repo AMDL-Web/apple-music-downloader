@@ -1,103 +1,84 @@
 {
-  $schema: "https://docs.renovatebot.com/renovate-schema.json",
-
-  // Renovate upgrades dependencies automatically. This config only describes
-  // "how to upgrade"; Renovate itself runs only once the
-  // https://github.com/apps/renovate GitHub App is installed on the repository.
-  //
-  // Three easy pitfalls:
-  //
-  // 1. Renovate always reads this config from the **default branch** (main). In
-  //    the official wording: "Renovate always uses the config from the
-  //    repository's default branch, even if that configuration specifies
-  //    baseBranchPatterns". So the file itself takes effect only once it is in
-  //    main, even though every PR it opens targets dev.
-  // 2. The :semanticPrefixFixDepsChoreOthers preset bundled in config:recommended
-  //    labels gomod require dependencies as fix(deps), and
-  //    .github/scripts/generate-changelog.js classifies by prefix, filing fix
-  //    under "修复 | Fix". A dependency upgrade is not a bug fix, so the type is
-  //    pinned explicitly below.
-  // 3. Every label listed in labels must already exist in the repository;
-  //    Renovate will not create it for you.
-
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
-    "config:recommended",
-    // The DCO app already skips bot commits, but having Renovate add
-    // Signed-off-by itself is less hassle.
-    ":gitSignOff",
+    'config:recommended',
+    ':gitSignOff',
   ],
-
-  // Changes land on dev first, and a PR merges dev into main at release time.
-  // Dependency upgrades reach main with the next release and do not bypass the
-  // release process. Security updates are the exception; see the end of the
-  // file.
-  baseBranchPatterns: ["dev"],
-
-  timezone: "Asia/Shanghai",
-  // Open PRs during the 9 a.m. hour every Monday. Five-field cron; the leading *
-  // is the minute field and is required.
-  schedule: ["* 9 * * 1"],
-
-  // Keep one standing issue listing every pending, ignored and rate-limited
-  // dependency update.
-  dependencyDashboard: true,
-  // When an option is renamed upstream (e.g. baseBranches → baseBranchPatterns),
-  // open a migration PR automatically.
+  baseBranchPatterns: [
+    'dev',
+  ],
+  timezone: 'Asia/Shanghai',
+  schedule: [
+    '* 9 * * 1',
+  ],
+  dependencyDashboard: {
+    enabled: true,
+  },
   configMigration: true,
-
-  // Upgrade only once a new version has been out for 3 days, to dodge releases
-  // pulled the same day and to give poisoned packages time to be discovered.
-  minimumReleaseAge: "3 days",
-
+  minimumReleaseAge: '3 days',
   prConcurrentLimit: 5,
-  labels: ["dependencies"],
-  // Run go mod tidy after upgrading go.mod so go.sum keeps no mismatched entries.
-  postUpdateOptions: ["gomodTidy"],
-
+  labels: [
+    'dependencies',
+  ],
+  postUpdateOptions: [
+    'gomodTidy',
+  ],
   packageRules: [
     {
       description: "Dependency upgrades are not bug fixes: turn config:recommended's default fix(deps) back into chore(deps)",
-      matchManagers: ["gomod", "dockerfile", "docker-compose"],
-      semanticCommitType: "chore",
+      matchManagers: [
+        'gomod',
+        'dockerfile',
+        'docker-compose',
+      ],
+      semanticCommitType: 'chore',
     },
     {
-      description: "Go dependencies: minor, patch and pseudo-version digest updates share one PR; major versions get their own PR so breaking changes are assessed one by one",
-      matchManagers: ["gomod"],
-      matchUpdateTypes: ["minor", "patch", "digest"],
-      groupName: "go dependencies",
+      description: 'Go dependencies: minor, patch and pseudo-version digest updates share one PR; major versions get their own PR so breaking changes are assessed one by one',
+      matchManagers: [
+        'gomod',
+      ],
+      matchUpdateTypes: [
+        'minor',
+        'patch',
+        'digest',
+      ],
+      groupName: 'go dependencies',
     },
     {
-      // Comes after the go dependencies rule so its groupName wins. The bump
-      // also needs internal/fairplay/rounds_gen.go regenerated when upstream's
-      // rounds_gen.rs changed; the parity job says so when it is stale.
-      description: "Temari, the upstream of internal/fairplay, gets a PR of its own so the Temari parity CI job judges that one upgrade: green means upstream changed speed or packaging only, red means internal/fairplay needs re-translating (tools/temaridiff/doc.go)",
-      matchPackageNames: ["github.com/WorldObservationLog/Temari/bindings/go"],
-      groupName: "temari",
+      description: 'Temari, the upstream of internal/fairplay, gets a PR of its own so the Temari parity CI job judges that one upgrade: green means upstream changed speed or packaging only, red means internal/fairplay needs re-translating (tools/temaridiff/doc.go)',
+      matchPackageNames: [
+        'github.com/WorldObservationLog/Temari/bindings/go',
+      ],
+      groupName: 'temari',
     },
     {
-      description: "Container base images: golang and alpine in the Dockerfile",
-      matchManagers: ["dockerfile", "docker-compose"],
-      groupName: "docker base images",
+      description: 'Container base images: golang and alpine in the Dockerfile',
+      matchManagers: [
+        'dockerfile',
+        'docker-compose',
+      ],
+      groupName: 'docker base images',
     },
     {
-      // Labeled github-actions, matching the CI category in .github/release.yml.
-      description: "Actions are mostly tagged by major version only (v6 → v7), so splitting by update type achieves nothing; group them all into one PR",
-      matchManagers: ["github-actions"],
-      groupName: "github actions",
-      semanticCommitType: "ci",
-      labels: ["github-actions"],
+      description: 'Actions are mostly tagged by major version only (v6 → v7), so splitting by update type achieves nothing; group them all into one PR',
+      matchManagers: [
+        'github-actions',
+      ],
+      groupName: 'github actions',
+      semanticCommitType: 'ci',
+      labels: [
+        'github-actions',
+      ],
     },
     {
       description: "This repository's own published image, pushed by docker-publish.yml; not an external dependency",
-      matchPackageNames: ["ghcr.io/amdl-web/apple-music-downloader"],
+      matchPackageNames: [
+        'ghcr.io/amdl-web/apple-music-downloader',
+      ],
       enabled: false,
     },
   ],
-
-  // Security updates ignore the schedule and minimumReleaseAge above; Renovate
-  // opens a PR as soon as it finds one. The data comes from GitHub's own
-  // Dependabot alerts, so Dependency graph + Dependabot alerts must be enabled
-  // in the repository settings, otherwise this setting does nothing.
   vulnerabilityAlerts: {
     enabled: true,
   },
